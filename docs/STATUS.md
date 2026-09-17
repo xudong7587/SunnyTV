@@ -1,5 +1,17 @@
 # SunnyTV 0.1.0-dev2 — 真实开发状态
 
+## 2026-09-17 BUILD-01 更新（优先于下方历史交付状态）
+
+现有 GitHub 仓库已接续，`codex/build-01` / PR #1 完成首次真实 Android 构建修复。
+代码提交 `709a56a`，Actions 合并验证提交 `94374f2`；run `35180031649` 的
+`testDebugUnitTest lintDebug assembleDebug` 全部成功。JUnit 5 个方法通过，其中包含
+114 项核心契约检查和 4 个 HTTP 传输测试；lint 为 0 错误、23 警告。
+APK 已生成并下载，本机 SHA-256 与 CI 一致。详见 [BUILD-01.md](BUILD-01.md)。
+
+尚未连接电视、安装或联调 Emby/CD2，也未测得实际 4K/144 Hz 能力。
+深浅主题、十组重点色、新轮播与媒体 Logo 等新需求尚待后续独立提交；要求见
+[LATEST_REQUIREMENTS.md](LATEST_REQUIREMENTS.md)。下方“未编译/无 APK/未建仓”描述属于原始交付历史。
+
 更新：2026-09-17。dev2 是在 dev1 上的增量开发，不是重命名演示壳。原始交付状态见 `history/STATUS-dev1.md`。
 
 ## 当前做到哪里
