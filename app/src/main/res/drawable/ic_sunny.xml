@@ -1,4 +1,3 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="72dp" android:height="72dp" android:viewportWidth="72" android:viewportHeight="72">
-    <path android:fillColor="#111B17" android:pathData="M0,0h72v72h-72z" />
-    <path android:fillColor="#D6E6A5" android:pathData="M50,18H29C19,18 16,29 23,35L40,44C44,46 42,50 38,50H20V59H40C55,59 59,43 47,37L30,28C28,27 29,26 31,26H50Z" />
-</vector>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="100dp" android:height="100dp" android:viewportWidth="100" android:viewportHeight="100"><path android:fillColor="#11171C" android:pathData="M22,0H78Q100,0 100,22V78Q100,100 78,100H22Q0,100 0,78V22Q0,0 22,0Z"/><group android:scaleX="0.70" android:scaleY="0.70" android:translateX="15" android:translateY="15"><path android:strokeColor="#FFCA61" android:strokeWidth="7" android:strokeLineCap="round" android:pathData="M50,7L50,17 M50,83L50,93 M7,50L17,50 M83,50L93,50 M19.6,19.6L26.7,26.7 M73.3,73.3L80.4,80.4 M19.6,80.4L26.7,73.3 M73.3,26.7L80.4,19.6"/>
+<path android:fillType="evenOdd" android:pathData="M50,25 A25,25 0,1 1,50,75 A25,25 0,1 1,50,25 Z M44,39 Q42,38 42,41 L42,60 Q42,63 45,61 L62,52 Q65,50 62,48 Z">
+<aapt:attr name="android:fillColor"><gradient android:startX="35" android:startY="25" android:endX="65" android:endY="75" android:startColor="#FFDC79" android:endColor="#F4A52D" android:type="linear"/></aapt:attr></path></group></vector>

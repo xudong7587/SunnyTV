@@ -17,6 +17,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -55,19 +56,21 @@ import kotlinx.coroutines.delay
             if(focused || active) SunnyColors.SurfaceRaised.copy(.94f) else SunnyColors.SurfaceRaised.copy(.72f),
             SunnyColors.Surface.copy(.70f))))
         .border(if(focused) 2.dp else 1.dp, if(focused) SunnyColors.Accent else if(active) SunnyColors.Border else Color.White.copy(alpha=.07f),shape)
+        .onPreviewKeyEvent {event->event.type==KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount>0 &&
+            event.key in listOf(Key.Enter,Key.NumPadEnter,Key.DirectionCenter)}
         .clickable(onClick=onClick), contentAlignment=Alignment.Center) { content(focused) }
 }
 
-@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,onClick:()->Unit) {
+@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,onClick:()->Unit) {
     val model=LocalAppModel.current
-    FocusTile(id=id,modifier=Modifier.semantics {contentDescription=text},autoFocus=autoFocus,
+    FocusTile(id=id,modifier=Modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=RoundedCornerShape(28.dp),onClick=onClick) { focused ->
         val ink=if(primary) SunnyColors.AccentInk else if(focused) SunnyColors.Accent else SunnyColors.Text
-        Row(Modifier.background(if(primary) SunnyColors.Accent else Color.Transparent).padding(horizontal=13.dp,vertical=11.dp),
-            verticalAlignment=Alignment.CenterVertically) {
+        Row(Modifier.background(if(primary) SunnyColors.Accent else Color.Transparent).height(48.dp).widthIn(min=48.dp)
+            .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             LineIcon(actionIcon(text),ink)
             val ms=if(model.settings.reduceMotion) 0 else 160
-            AnimatedVisibility(focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
+            AnimatedVisibility(focused || active,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
                 Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
                     modifier=Modifier.padding(start=8.dp),maxLines=1)
             }

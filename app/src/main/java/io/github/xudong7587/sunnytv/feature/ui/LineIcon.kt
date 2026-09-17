@@ -11,6 +11,11 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 
 fun actionIcon(text:String):String=when {
+    text.contains("确认") || text.contains("保存") || text.contains("知道了") || text.contains("完成") -> "check"
+    text.contains("收藏") -> "heart"
+    text.contains("已看") -> "check"
+    text.contains("升序") -> "ascending"
+    text.contains("降序") -> "descending"
     text.contains("首页") -> "home"
     text.contains("媒体库") || text.contains("文件夹") || text.contains("来源") -> "library"
     text.contains("云盘") || text.contains("CloudDrive") -> "cloud"
@@ -18,8 +23,6 @@ fun actionIcon(text:String):String=when {
     text.contains("设置") || text.contains("配置") -> "settings"
     text.contains("字幕") -> "subtitle"
     text.contains("音频") || text.contains("音轨") -> "audio"
-    text.contains("收藏") -> "heart"
-    text.contains("已看") -> "check"
     text.contains("排序") || text.contains("升序") || text.contains("降序") -> "sort"
     text.contains("版本") || text.contains("视图") || text.contains("展现") -> "layers"
     text.contains("返回") || text.contains("取消") || text.contains("关闭") -> "back"
@@ -46,6 +49,8 @@ fun actionIcon(text:String):String=when {
         "heart"->"M12 21 C9 18 2 13 2 7 C2 1 10 1 12 6 C14 1 22 1 22 7 C22 13 15 18 12 21 Z"
         "check"->"M4 12 L9 18 L21 5"
         "sort"->"M4 6 L16 6 M4 11 L12 11 M4 16 L8 16 M19 10 L19 21 M15 17 L19 21 L23 17"
+        "ascending"->"M12 21 L12 3 M5 10 L12 3 L19 10"
+        "descending"->"M12 3 L12 21 M5 14 L12 21 L19 14"
         "layers"->"M2 8 L12 2 L22 8 L12 14 Z M2 13 L12 19 L22 13 M2 18 L12 24 L22 18"
         "back"->"M14 4 L6 12 L14 20 M6 12 L22 12"
         "play"->"M6 3 L21 12 L6 21 Z"

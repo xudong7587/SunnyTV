@@ -60,6 +60,7 @@ import kotlinx.coroutines.*
 
 @Composable fun SettingsScreen() {
     val model=LocalAppModel.current; val coroutine=rememberCoroutineScope()
+    val compact=LocalCompact.current
     val context=LocalContext.current
     var directUrl by remember {mutableStateOf("")}
     var resetConfirm by remember {mutableStateOf(false)}
@@ -67,36 +68,29 @@ import kotlinx.coroutines.*
     var adding by remember {mutableStateOf<SourceKind?>(null)}
     var removing by remember {mutableStateOf<SourceConfig?>(null)}
     var chooser by remember {mutableStateOf("")}
-    Row(Modifier.fillMaxSize().padding(start=40.dp,end=40.dp,top=12.dp),horizontalArrangement=Arrangement.spacedBy(28.dp)) {
-        Column(Modifier.width(165.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))
-            listOf("媒体来源","首页与外观","播放","设备与诊断","关于").forEach {cat->
-                FocusTile("settings:$cat",Modifier.fillMaxWidth(),active=category==cat,onClick={category=cat}) { focused->
-                    Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=15.sp,modifier=Modifier.fillMaxWidth().padding(15.dp))
-                }
-            }
-        }
-        LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
+    SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
+        LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
             when(category) {
                 "媒体来源" -> {
                     item {Text("来源独立保存 · 凭据本地加密 · 不修改 NAS 媒体文件",color=SunnyColors.Secondary,fontSize=13.sp)}
-                    model.sources.forEach {source -> item {
+                    model.sources.filter {it.kind==SourceKind.EMBY}.forEach {source -> item {
                         Row(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(12.dp)).padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {Text(source.name,color=SunnyColors.Text,fontSize=18.sp); Text(if(source.kind==SourceKind.EMBY) "Emby · ${source.username}" else "CloudDrive2 · WebDAV",color=SunnyColors.Secondary,fontSize=12.sp)}
                             Action("移除此来源",id="remove:${source.id}") {removing=source}
                         }
                     } }
-                    item {Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Action("＋ Emby",primary=true) {adding=SourceKind.EMBY}; Action("＋ CloudDrive2") {adding=SourceKind.CLOUDDRIVE}}}
+                    item {Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Action("＋ Emby",primary=true) {adding=SourceKind.EMBY}}}
                     item {Action("重置损坏的来源配置") {resetConfirm=true}}
                 }
                 "首页与外观" -> {
                     item {ToggleRow("深色主题","浅色与重点色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
                     item {SectionTitle("重点色", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
-                    Presentation.accents.chunked(5).forEachIndexed { row, pairs -> item {
+                    val columns=if(compact) 3 else 5
+                    Presentation.accents.chunked(columns).forEachIndexed { row, pairs -> item {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             pairs.forEachIndexed { col, pair ->
-                                val index=row*5+col
+                                val index=row*columns+col
                                 FocusTile("accent:$index",Modifier.weight(1f),active=model.settings.accentIndex==index,
                                     onClick={model.saveSettings(model.settings.copy(accentIndex=index))}) {
                                     Column(Modifier.padding(9.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -114,16 +108,22 @@ import kotlinx.coroutines.*
                     item {ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
                         model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
                     }}
-                    if(!model.settings.heroAllLibraries) {
-                        val libraries=model.feeds.values.flatMap {it.libraries}
-                        if(libraries.isEmpty()) item {Text("添加 Emby 来源后可选择媒体库",color=SunnyColors.Secondary,fontSize=13.sp)}
-                        libraries.forEach {library->item(key="hero-library:${library.key}") {
-                            val chosen=library.key in model.settings.heroLibraryKeys
-                            ToggleRow(library.title,model.sources.firstOrNull {it.id==library.sourceId}?.name.orEmpty(),chosen) {
-                                model.saveSettings(model.settings.copy(heroLibraryKeys=if(chosen) model.settings.heroLibraryKeys-library.key else model.settings.heroLibraryKeys+library.key))
+                    item {
+                        androidx.compose.animation.AnimatedVisibility(!model.settings.heroAllLibraries) {
+                            Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
+                                .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
+                                val libraries=model.feeds.values.flatMap {it.libraries}
+                                if(libraries.isEmpty()) Text("连接 Emby 后可选择媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
+                                libraries.forEach {library->
+                                    val chosen=library.key in model.settings.heroLibraryKeys
+                                    ToggleRow(library.title,model.sources.firstOrNull {it.id==library.sourceId}?.name.orEmpty(),chosen) {
+                                        model.saveSettings(model.settings.copy(heroLibraryKeys=if(chosen) model.settings.heroLibraryKeys-library.key else model.settings.heroLibraryKeys+library.key))
+                                    }
+                                }
+                                if(model.settings.heroLibraryKeys.isEmpty()) Text("请选择至少一个媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
                             }
-                        }}
-                        if(model.settings.heroLibraryKeys.isEmpty()) item {Text("尚未选择媒体库；首页将显示空态，不会扩大到全部库。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                        }
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
@@ -147,7 +147,7 @@ import kotlinx.coroutines.*
                 }
                 "关于" -> {
                     item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
-                    item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · CloudDrive2 WebDAV · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n原创实现；本轮没有复制 Moonfin 源码或 LumiPlayer 品牌资产。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
+                    item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n原创实现；本轮没有复制 Moonfin 源码或 LumiPlayer 品牌资产。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                 }
             }
         }
@@ -173,7 +173,7 @@ import kotlinx.coroutines.*
             }
         }
     }
-    adding?.let {kind->AddSourceDialog(kind) {adding=null}}
+    adding?.let {kind->AddSourceDialog(kind,onClose={adding=null})}
     removing?.let {source ->
         Dialog(onDismissRequest={removing=null}) {
             Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(16.dp)).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
@@ -182,6 +182,30 @@ import kotlinx.coroutines.*
                 Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {Action("取消",id="dialog:remove-cancel",autoFocus=true) {removing=null}; Action("确认移除") {model.removeSource(source.id); removing=null}}
             }
         }
+    }
+}
+
+@Composable private fun SettingsLayout(navigation:@Composable ()->Unit,content:@Composable ()->Unit) {
+    val modifier=Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)
+    if(LocalCompact.current) Column(modifier,verticalArrangement=Arrangement.spacedBy(14.dp)) {
+        navigation();Box(Modifier.weight(1f)) {content()}
+    } else Row(modifier,horizontalArrangement=Arrangement.spacedBy(28.dp)) {
+        Box(Modifier.width(165.dp)) {navigation()};Box(Modifier.weight(1f)) {content()}
+    }
+}
+
+@Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
+    val categories=listOf("媒体来源","首页与外观","播放","设备与诊断","关于")
+    @Composable fun Category(cat:String) {
+        FocusTile("settings:$cat",active=category==cat,onClick={onSelect(cat)}) {focused->
+            Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
+        }
+    }
+    if(LocalCompact.current) androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        items(categories.size) {Category(categories[it])}
+    } else Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))
+        categories.forEach {Category(it)}
     }
 }
 
@@ -194,14 +218,14 @@ import kotlinx.coroutines.*
     }
 }
 
-@Composable private fun AddSourceDialog(kind:SourceKind,onClose:()->Unit) {
+@Composable fun AddSourceDialog(kind:SourceKind,onClose:()->Unit,onConnected:()->Unit=onClose,firstConnection:Boolean=false) {
     val model=LocalAppModel.current
     var name by remember {mutableStateOf(if(kind==SourceKind.EMBY) "家庭 Emby" else "CloudDrive2")}
     var base by remember {mutableStateOf("")}; var user by remember {mutableStateOf("")}; var password by remember {mutableStateOf("")}
-    Dialog(onDismissRequest={if(!model.busy) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.widthIn(max=700.dp).background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
+    Dialog(onDismissRequest={if(!model.busy && !firstConnection) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
+        Column(Modifier.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
             .verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(13.dp)) {
-            Text(if(kind==SourceKind.EMBY) "添加 Emby" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
+            Text(if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
             Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
             Field("来源名称",name,{name=it},autoFocus=true)
             Field("服务地址（完整 http:// 或 https:// 地址）",base,{base=it})
@@ -211,8 +235,8 @@ import kotlinx.coroutines.*
             }
             Text("HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp)
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Action(if(model.busy) "连接中…" else "验证并保存",primary=true) {if(!model.busy) model.addSource(kind,name,base,user,password,onClose)}
-                Action("取消") {if(!model.busy) onClose()}
+                Action(if(model.busy) "连接中…" else "验证并保存",primary=true) {if(!model.busy) model.addSource(kind,name,base,user,password,onConnected)}
+                if(!firstConnection) Action("取消") {if(!model.busy) onClose()}
             }
         }
     }

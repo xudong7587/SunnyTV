@@ -25,6 +25,24 @@ import kotlinx.coroutines.delay
 @Composable fun Hero(item:MediaEntry?,eyebrow:String,tall:Boolean=false,candidates:List<MediaEntry> = emptyList(),
     onSelect:(MediaEntry)->Unit={},onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current
+    if(LocalCompact.current) {
+        Column(Modifier.fillMaxWidth().padding(vertical=14.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text(eyebrow,color=SunnyColors.Accent,fontSize=11.sp)
+            if(item!=null) {
+                MediaTitle(item,28.sp)
+                Text(item.subtitle,color=SunnyColors.Secondary,fontSize=12.sp)
+                Text(item.overview,color=SunnyColors.Secondary,fontSize=13.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    if(item.isPlayable) Action("播放",id="hero-play",primary=true) {onPlay(item,false)}
+                    Action("查看详情",id="hero-detail") {model.navigate(Route.Detail(item))}
+                }
+            }
+            if(tall) LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
+                items(candidates.take(12),key={it.key}) {entry->MediaCard(entry,onFocus={onSelect(entry)},onClick={model.navigate(Route.Detail(entry))},focusId="hero:${entry.key}")}
+            }
+        }
+        return
+    }
     Box(Modifier.fillMaxWidth().height(if(tall) 336.dp else 270.dp)) {
         Row(Modifier.fillMaxSize(),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(if(tall) .40f else .70f).padding(end=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -84,51 +102,16 @@ import kotlinx.coroutines.delay
         val viewport=maxHeight
         LazyColumn(state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
             if(embySources.isEmpty()) item {
-                Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n也可以从 CloudDrive2 的文件开始。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
+                Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
                 item(key="home-hero") {
                     val darkPalette=remember(model.settings.accentIndex) {palette(model.settings.copy(darkTheme=true))}
                     CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(viewport).onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
+                        Box(Modifier.fillMaxWidth().height(viewport.coerceAtLeast(if(LocalCompact.current) 630.dp else 400.dp)).onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
                             CinemaBackdrop(hero)
-                            Row(Modifier.fillMaxSize().padding(start=30.dp,end=30.dp,top=92.dp,bottom=28.dp),
-                                horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.Bottom) {
-                                Column(Modifier.weight(.40f),verticalArrangement=Arrangement.spacedBy(13.dp)) {
-                                    Text(if(model.settings.heroMode=="resume") "为你继续" else "首映推荐",color=SunnyColors.Accent,fontSize=11.sp)
-                                    if(hero!=null) {
-                                        MediaTitle(hero,40.sp)
-                                        Text(hero.subtitle,color=SunnyColors.Secondary,fontSize=12.sp)
-                                        Text(hero.overview.ifBlank {"来自你的媒体库"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,maxLines=3,overflow=TextOverflow.Ellipsis)
-                                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                            if(hero.isPlayable) Action(if(hero.positionMs>0) "▶  继续播放" else "▶  立即播放",id="home-play",primary=true) {onPlay(hero,false)}
-                                            else Action("查看详情",id="home-play",primary=true) {model.navigate(Route.Detail(hero))}
-                                            Action(if(paused) "自动轮播" else "暂停轮播",id="home-pause") {paused=!paused}
-                                        }
-                                    } else Text(if(model.settings.heroMode=="resume") "暂无继续观看记录" else "暂无推荐",color=SunnyColors.Text,fontSize=30.sp)
-                                    if(resume.isNotEmpty()) {
-                                        Text("继续播放",color=SunnyColors.Secondary,fontSize=10.sp,modifier=Modifier.padding(top=10.dp))
-                                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                            resume.take(2).forEach {entry ->
-                                                FocusTile("quick-resume:${entry.key}",Modifier.weight(1f),shape=androidx.compose.foundation.shape.RoundedCornerShape(28.dp),onClick={onPlay(entry,false)}) {
-                                                    Row(Modifier.fillMaxWidth().cinemaGlass().padding(8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                                        ArtworkView(entry,entry.primary,Modifier.size(30.dp),100)
-                                                        Column(Modifier.weight(1f)) {Text(entry.title,color=SunnyColors.Text,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                                            Text("剩余 ${MediaLogic.remainingMinutes(entry.positionMs,entry.durationMs)} 分钟",color=SunnyColors.Secondary,fontSize=8.sp)
-                                                            Box(Modifier.fillMaxWidth().padding(top=4.dp).height(2.dp).background(Color.White.copy(.15f))) {
-                                                                Box(Modifier.fillMaxWidth(MediaLogic.progress(entry.positionMs,entry.durationMs)).height(2.dp).background(SunnyColors.Accent))
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Column(Modifier.weight(.60f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                                    Text("最新影视",color=SunnyColors.Text,fontWeight=FontWeight.Bold,fontSize=14.sp)
-                                    AccordionCards(candidates,selected,{selected=it},hero=true,id="home-carousel")
-                                }
-                            }
+                            HomeHeroContent(hero,candidates,selected,{selected=it},
+                                if(model.settings.showResume) resume else emptyList(),paused,{paused=!paused},onPlay)
+
                         }
                     }
                 }
@@ -156,10 +139,10 @@ import kotlinx.coroutines.delay
 @Composable fun LibrariesScreen() {
     val model=LocalAppModel.current
     val libs=model.sources.filter {it.kind==SourceKind.EMBY}.flatMap {model.feeds[it.id]?.libraries ?: emptyList()}
-    Column(Modifier.fillMaxSize().padding(horizontal=40.dp)) {
-        SectionTitle("所有媒体库","使用 Emby 原生媒体库图片")
+    Column(Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)) {
+        SectionTitle("所有媒体库")
         if(libs.isEmpty()) EmptyState("这里还没有媒体库","添加 Emby 后，这里会显示你的原生媒体库封面。","管理来源") {model.navigate(Route.Settings)}
-        LazyVerticalGrid(columns=GridCells.Adaptive(235.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),
+        LazyVerticalGrid(columns=GridCells.Adaptive(if(LocalCompact.current) 145.dp else 235.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),
             verticalArrangement=Arrangement.spacedBy(20.dp),contentPadding=PaddingValues(vertical=10.dp)) {
             items(libs,key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
         }
@@ -181,19 +164,19 @@ import kotlinx.coroutines.delay
     LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
     Box(Modifier.fillMaxSize()) {
         Backdrop(hero ?: library)
-        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(mode=="Poster") 132.dp else 230.dp),
+        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
             horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
-            contentPadding=PaddingValues(start=30.dp,end=30.dp,bottom=40.dp)) {
+            contentPadding=PaddingValues(start=pageSidePadding,end=pageSidePadding,top=pageTopPadding,bottom=40.dp)) {
             item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}
             item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
                         item {Action("排序：${Presentation.sorts.firstOrNull {it.first==sort}?.second}") {chooser="sort"}}
-                        item {Action(if(ascending) "↑ 升序" else "↓ 降序") {ascending=!ascending;model.loadLibrary(library,sort,ascending=ascending)}}
+                        item {Action(if(ascending) "升序排列" else "降序排列",id="library-order",active=ascending) {ascending=!ascending;model.loadLibrary(library,sort,ascending=ascending)}}
                         item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
                         item {Action("视图：$mode") {chooser="view"}}
-                        item {Action(if(folderMode) "✓ 按文件夹" else "按文件夹") {folderMode=!folderMode}}
+                        if(library.collectionType in setOf("tvshows","mixed","homevideos") || library.type=="Folder") item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
                     }
                 }
             }
@@ -250,7 +233,7 @@ import kotlinx.coroutines.delay
 
 @Composable fun FolderScreen(route:Route.Folder,onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current; val entries=model.folders["${route.sourceId}:${route.path}"]
-    Column(Modifier.fillMaxSize().padding(horizontal=40.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)) {
         SectionTitle(route.title,"重新读取") {model.loadFolder(route.sourceId,route.path)}
         Text("CloudDrive2 · 只读模式；不移动、不重命名、不删除文件",color=SunnyColors.Secondary,fontSize=12.sp)
         model.errors["folder:${route.sourceId}:${route.path}"]?.let {e->EmptyState("读取目录失败",e)}
@@ -272,7 +255,7 @@ import kotlinx.coroutines.delay
 
 @Composable fun SearchScreen(onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current; var text by rememberSaveable {mutableStateOf("")}
-    Column(Modifier.fillMaxSize().padding(horizontal=40.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)) {
         SectionTitle("搜索你的媒体库")
         Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
             Field("片名或关键词",text,{text=it},Modifier.weight(1f))

@@ -76,9 +76,9 @@ import kotlinx.coroutines.withContext
                         ArtworkView(item,item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
                         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.55f),Color.Transparent))))
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,tint.copy(.3f),tint))))
-                        Column(Modifier.align(Alignment.BottomStart).padding(start=38.dp,end=38.dp,bottom=4.dp).widthIn(max=680.dp),
+                        Column(Modifier.align(Alignment.BottomStart).padding(start=pageSidePadding,end=pageSidePadding,bottom=4.dp).widthIn(max=680.dp),
                             verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                            MediaTitle(item,38.sp)
+                            MediaTitle(item,if(LocalCompact.current) 29.sp else 38.sp)
                             Text(listOfNotNull(item.year.takeIf {it>0}?.toString(),item.rating.takeIf {it>0}?.let {"★ %.1f".format(it)},
                                 item.durationMs.takeIf {it>0}?.let {"${it/60000} 分钟"},item.officialRating.takeIf {it.isNotBlank()}).joinToString("  ·  "),
                                 color=SunnyColors.Text,fontSize=15.sp)
@@ -87,7 +87,7 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    LazyRow(contentPadding=PaddingValues(horizontal=38.dp,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    LazyRow(contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放") {onPlay(item,true)}}
@@ -96,15 +96,15 @@ import kotlinx.coroutines.withContext
                             item {Action("CC  字幕") {panel="subtitle"}}
                         }
                         item {Action("ⓘ  媒体信息") {panel="info"}}
-                        item {Action(if(item.played) "✓  已看" else "✓  标记已看") {model.played(item)}}
-                        item {Action(if(item.favorite) "♥  已收藏" else "♡  收藏",autoFocus=!item.isPlayable) {model.favorite(item)}}
+                        if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played) {panel="played"}}
+                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable) {model.favorite(item)}}
                         item {Action("返回") {model.back()}}
                     }
                 }
                 item {Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=23.sp,
-                    modifier=Modifier.padding(horizontal=38.dp),maxLines=8,overflow=TextOverflow.Ellipsis)}
+                    modifier=Modifier.padding(horizontal=pageSidePadding),maxLines=8,overflow=TextOverflow.Ellipsis)}
                 if(item.versions.isNotEmpty()) item {
-                    Column(Modifier.padding(horizontal=38.dp)) {
+                    Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("播放资源", "${item.versions.size} 个版本")
                         LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(3.dp)) {
                             items(item.versions,key={it.id}) {v->
@@ -121,16 +121,16 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 val children=model.children[item.key] ?: emptyList()
-                if(children.isNotEmpty()) item {Box(Modifier.padding(horizontal=38.dp)) {MediaShelf(if(item.type=="Series") "选择季" else "剧集",children,item.type=="Season",onClick={model.navigate(Route.Detail(it))})}}
+                if(children.isNotEmpty()) item {Box(Modifier.padding(horizontal=pageSidePadding)) {MediaShelf(if(item.type=="Series") "选择季" else "剧集",children,item.type=="Season",onClick={model.navigate(Route.Detail(it))})}}
                 if(item.externalLinks.isNotEmpty()) item {
-                    LazyRow(contentPadding=PaddingValues(horizontal=38.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    LazyRow(contentPadding=PaddingValues(horizontal=pageSidePadding),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         items(item.externalLinks,key={it.url}) {link->Action(link.name) {
                             try {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(link.url)))} catch(_:Exception) {model.message="此设备没有可打开链接的浏览器"}
                         }}
                     }
                 }
                 if(item.people.isNotEmpty()) item {
-                    Column(Modifier.padding(horizontal=38.dp)) {
+                    Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("演员表")
                         LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                             items(item.people,key={"${it.id}:${it.name}:${it.role}"}) {person ->
@@ -144,12 +144,16 @@ import kotlinx.coroutines.withContext
                         }
                     }
                 }
-                item {Box(Modifier.padding(horizontal=38.dp)) {MediaShelf("相似推荐",model.similar[item.key] ?: emptyList(),onClick={model.navigate(Route.Detail(it))})}}
-                model.errors["detail:${item.key}"]?.let {error->item {Box(Modifier.padding(horizontal=38.dp)) {EmptyState("详情暂不可用",error,"重试") {model.loadDetail(item)}}}}
-                listOf("played","favorite").forEach {operation->model.errors["$operation:${item.key}"]?.let {error->item {Text(error,color=SunnyColors.Secondary,modifier=Modifier.padding(horizontal=38.dp))}}}
+                item {Box(Modifier.padding(horizontal=pageSidePadding)) {MediaShelf("相似推荐",model.similar[item.key] ?: emptyList(),onClick={model.navigate(Route.Detail(it))})}}
+                model.errors["detail:${item.key}"]?.let {error->item {Box(Modifier.padding(horizontal=pageSidePadding)) {EmptyState("详情暂不可用",error,"重试") {model.loadDetail(item)}}}}
+                listOf("played","favorite").forEach {operation->model.errors["$operation:${item.key}"]?.let {error->item {Text(error,color=SunnyColors.Secondary,modifier=Modifier.padding(horizontal=pageSidePadding))}}}
             }
         }
         when(panel) {
+            "played" -> ChoiceDialog(if(item.played) "取消这部影片/单集的已看状态？" else "将这部影片/单集标记为已看？",
+                listOf("cancel" to "取消","confirm" to "确认"),"cancel",{panel=""}) {choice->
+                panel="";if(choice=="confirm") model.played(item)
+            }
             "audio" -> ChoiceDialog("音频",listOf("default" to "默认音轨")+tracks.filter {it.type=="Audio"}.map {it.index.toString() to it.title},
                 model.selectedAudio[item.key]?.index?.toString() ?: "default",{panel=""}) {id->
                 val track=tracks.firstOrNull {it.type=="Audio" && it.index.toString()==id}

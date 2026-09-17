@@ -14,6 +14,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.AnimatedVisibility
@@ -33,6 +41,11 @@ import io.github.xudong7587.sunnytv.core.model.*
 
 class MainActivity: ComponentActivity() {
     private val model:AppModel by viewModels()
+    private var keyboardFallback:((Int)->Boolean)?=null
+    override fun onKeyDown(keyCode:Int,event:android.view.KeyEvent):Boolean {
+        if(keyboardFallback?.invoke(keyCode)==true) return true
+        return super.onKeyDown(keyCode,event)
+    }
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window,false)
@@ -41,6 +54,21 @@ class MainActivity: ComponentActivity() {
             systemBarsBehavior=WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         setContent {
+            val input=LocalInputModeManager.current
+            val focus=LocalFocusManager.current
+            DisposableEffect(input,focus) {
+                keyboardFallback={code->
+                    val direction=when(code) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP->FocusDirection.Up
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN->FocusDirection.Down
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT->FocusDirection.Left
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT->FocusDirection.Right
+                        else->null
+                    }
+                    if(direction==null) false else {input.requestInputMode(InputMode.Keyboard);focus.moveFocus(direction)}
+                }
+                onDispose {keyboardFallback=null}
+            }
             CompositionLocalProvider(LocalAppModel provides model) {
                 SunnyTheme(model.settings) { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
                     startActivity(PlayerActivity.intent(this,request))
@@ -62,13 +90,15 @@ class MainActivity: ComponentActivity() {
     }
 }
 
-@Composable private fun SunnyRoot(onPlay:(MediaEntry,Boolean)->Unit) {
+@Composable internal fun SunnyRoot(onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current; val stateHolder=rememberSaveableStateHolder()
     val route=model.route
     BackHandler(enabled=route!=Route.Home || model.busy) { model.back() }
-    CompositionLocalProvider(LocalPageKey provides route.key()) {
-        Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
-            Box(Modifier.fillMaxSize().padding(top=if(route==Route.Home || route is Route.Detail) 0.dp else 72.dp)) {
+    val compact=LocalConfiguration.current.screenWidthDp<600
+    val contentEntry=remember(route) {FocusRequester()}
+    CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact) {
+        Box(Modifier.fillMaxSize().background(SunnyColors.Background).safeDrawingPadding()) {
+            Box(Modifier.fillMaxSize().focusRequester(contentEntry).focusGroup()) {
                     stateHolder.SaveableStateProvider(route.key()) {
                         when(route) {
                             Route.Home -> HomeScreen(onPlay)
@@ -82,7 +112,10 @@ class MainActivity: ComponentActivity() {
                         }
                     }
             }
-            TopNav()
+            TopNav(contentEntry)
+            if(model.sourcesReady && model.sources.none {it.kind==SourceKind.EMBY}) {
+                AddSourceDialog(SourceKind.EMBY,onClose={},onConnected={model.navigate(Route.Home,root=true)},firstConnection=true)
+            }
             if(model.busy) Text("正在连接媒体…  返回可取消",color=SunnyColors.Accent,fontSize=14.sp,
                 modifier=Modifier.align(Alignment.BottomCenter).padding(18.dp).background(SunnyColors.Surface).padding(15.dp))
             if(model.message.isNotEmpty()) MessageDialog(model.message) { model.message="" }
@@ -90,24 +123,27 @@ class MainActivity: ComponentActivity() {
     }
 }
 
-@Composable private fun TopNav() {
+@Composable private fun TopNav(contentEntry:FocusRequester) {
     val model=LocalAppModel.current
     val activeRoot = when(model.route) {
         is Route.Library, is Route.Detail -> Route.Libraries
         is Route.Folder -> Route.Cloud
         else -> model.route
     }
-    Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal=28.dp),
+    val compact=LocalCompact.current
+    Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Row(Modifier.cinemaGlass().padding(horizontal=14.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            Text("S",color=SunnyColors.Accent,fontSize=21.sp,fontWeight=FontWeight.Black)
-            Text("  SunnyTV",color=SunnyColors.Text,fontSize=16.sp,fontWeight=FontWeight.Bold)
+        Row(Modifier.padding(horizontal=if(compact) 0.dp else 8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+            Image(painterResource(if(model.settings.darkTheme) R.drawable.ic_sun_brand else R.drawable.ic_sun_brand_light),"SunnyTV",Modifier.size(if(compact) 30.dp else 36.dp))
+            if(!compact) Text("  SunnyTV",color=SunnyColors.Text,fontSize=19.sp,fontWeight=FontWeight.Bold)
         }
-        Row(Modifier.cinemaGlass().padding(4.dp).focusGroup(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-            listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"云盘" to Route.Cloud,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
+        Row(Modifier.cinemaGlass().padding(4.dp).focusProperties {down=contentEntry}.onPreviewKeyEvent {
+            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {contentEntry.requestFocus();true} else false
+        }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
+            listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
                 FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),
                     onClick={model.navigate(target,root=true)}) { focused ->
-                    Row(Modifier.padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Row(Modifier.height(44.dp).widthIn(min=44.dp).padding(horizontal=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
                         val ink=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary
                         LineIcon(actionIcon(label),ink)
                         val ms=if(model.settings.reduceMotion) 0 else 160
@@ -119,6 +155,6 @@ class MainActivity: ComponentActivity() {
                 }
             }
         }
-        Spacer(Modifier.width(100.dp))
+        if(!compact) Spacer(Modifier.width(100.dp))
     }
 }
