@@ -69,6 +69,13 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         "Season" -> parsePage(get("Shows/${item.seriesId}/Episodes", mapOf("UserId" to config.userId, "SeasonId" to item.id, "Fields" to fields))).items
         else -> emptyList()
     }
+    suspend fun playableEpisode(item:MediaEntry,fromStart:Boolean):MediaEntry {
+        require(item.type in setOf("Series","Season"))
+        val episodes=parsePage(get("Shows/${if(item.type=="Series") item.id else item.seriesId}/Episodes",
+            mapOf("UserId" to config.userId,"Fields" to fields)+(if(item.type=="Season") mapOf("SeasonId" to item.id) else emptyMap()))).items.filter {it.isPlayable}
+        return (if(fromStart) episodes.firstOrNull() else episodes.firstOrNull {it.positionMs>0 && !it.played} ?: episodes.firstOrNull {!it.played} ?: episodes.firstOrNull())
+            ?: error("此剧集没有可播放的单集")
+    }
     suspend fun setFavorite(item: MediaEntry, value: Boolean):MediaEntry {
         val request = Request.Builder().url(url("Users/${config.userId}/FavoriteItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()

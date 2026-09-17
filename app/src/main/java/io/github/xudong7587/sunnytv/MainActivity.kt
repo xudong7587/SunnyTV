@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv
 
 import android.os.Bundle
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -95,10 +96,18 @@ class MainActivity: ComponentActivity() {
     val route=model.route
     BackHandler(enabled=route!=Route.Home || model.busy) { model.back() }
     val compact=LocalConfiguration.current.screenWidthDp<600
-    val contentEntry=remember(route) {FocusRequester()}
-    CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact) {
-        Box(Modifier.fillMaxSize().background(SunnyColors.Background).safeDrawingPadding()) {
-            Box(Modifier.fillMaxSize().focusRequester(contentEntry).focusGroup()) {
+    val bridge=remember(route) {NavigationBridge()}
+    val navVisible=route !is Route.Library && route !is Route.Detail
+    val scope=rememberCoroutineScope()
+    val focus=LocalFocusManager.current
+    CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,LocalNavVisible provides navVisible) {
+        Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
+            Box(Modifier.fillMaxSize().onKeyEvent {event->
+                if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp) {
+                    if(!focus.moveFocus(FocusDirection.Up) && navVisible) scope.launch {bridge.revealTop?.invoke();bridge.enterNavigation()}
+                    true
+                } else false
+            }) {
                     stateHolder.SaveableStateProvider(route.key()) {
                         when(route) {
                             Route.Home -> HomeScreen(onPlay)
@@ -112,7 +121,7 @@ class MainActivity: ComponentActivity() {
                         }
                     }
             }
-            TopNav(contentEntry)
+            if(navVisible) TopNav(bridge)
             if(model.sourcesReady && model.sources.none {it.kind==SourceKind.EMBY}) {
                 AddSourceDialog(SourceKind.EMBY,onClose={},onConnected={model.navigate(Route.Home,root=true)},firstConnection=true)
             }
@@ -123,7 +132,7 @@ class MainActivity: ComponentActivity() {
     }
 }
 
-@Composable private fun TopNav(contentEntry:FocusRequester) {
+@Composable private fun TopNav(bridge:NavigationBridge) {
     val model=LocalAppModel.current
     val activeRoot = when(model.route) {
         is Route.Library, is Route.Detail -> Route.Libraries
@@ -131,14 +140,15 @@ class MainActivity: ComponentActivity() {
         else -> model.route
     }
     val compact=LocalCompact.current
-    Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
+    val scope=rememberCoroutineScope()
+    Row(Modifier.fillMaxWidth().statusBarsPadding().height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
         Row(Modifier.padding(horizontal=if(compact) 0.dp else 8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
             Image(painterResource(if(model.settings.darkTheme) R.drawable.ic_sun_brand else R.drawable.ic_sun_brand_light),"SunnyTV",Modifier.size(if(compact) 30.dp else 36.dp))
             if(!compact) Text("  SunnyTV",color=SunnyColors.Text,fontSize=19.sp,fontWeight=FontWeight.Bold)
         }
-        Row(Modifier.cinemaGlass().padding(4.dp).focusProperties {down=contentEntry}.onPreviewKeyEvent {
-            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {contentEntry.requestFocus();true} else false
+        Row(Modifier.cinemaGlass().padding(4.dp).onFocusChanged {if(it.hasFocus) scope.launch {bridge.revealTop?.invoke()}}.onPreviewKeyEvent {
+            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent()};true} else false
         }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
                 FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),
@@ -147,7 +157,7 @@ class MainActivity: ComponentActivity() {
                         val ink=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary
                         LineIcon(actionIcon(label),ink)
                         val ms=if(model.settings.reduceMotion) 0 else 160
-                        AnimatedVisibility(activeRoot==target || focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),
+                        AnimatedVisibility(focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),
                             exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
                             Text(label,color=ink,fontSize=12.sp,fontWeight=FontWeight.Medium,modifier=Modifier.padding(start=7.dp))
                         }

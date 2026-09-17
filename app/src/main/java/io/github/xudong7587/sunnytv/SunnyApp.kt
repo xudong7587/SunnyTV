@@ -17,7 +17,7 @@ class SunnyApp : Application() {
     private val loaders = mutableMapOf<String,ImageLoader>()
     // One global cache budget; adding sources must not multiply the memory budget.
     // Every request's key includes source id, media id, image tag and requested size.
-    private val artworkMemory by lazy { MemoryCache.Builder(this).maxSizePercent(0.10).build() }
+    private val artworkMemory by lazy { MemoryCache.Builder(this).maxSizeBytes(minOf(64L*1024*1024,Runtime.getRuntime().maxMemory()/10).toInt()).build() }
     private val artworkDisk by lazy { DiskCache.Builder().directory(File(cacheDir,"artwork"))
         .maxSizeBytes(200L*1024*1024).build() }
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)

@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,9 +70,12 @@ import kotlinx.coroutines.withContext
     var panel by remember(item.key) {mutableStateOf("")}
     val version=item.versions.firstOrNull {it.id==model.selectedVersion[item.key]} ?: item.versions.firstOrNull()
     val tracks=version?.tracks ?: emptyList()
+    val list=rememberLazyListState()
+    val scope=rememberCoroutineScope()
+    var childSelected by remember(item.key) {mutableIntStateOf(0)}
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
         Box(Modifier.fillMaxSize().background(tint)) {
-            LazyColumn(contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            LazyColumn(state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 item(key="detail-header") {
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
                         ArtworkView(item,item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
@@ -87,7 +92,7 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    LazyRow(contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    LazyRow(modifier=Modifier.onFocusChanged {if(it.hasFocus) scope.launch {list.scrollToItem(0)}}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放") {onPlay(item,true)}}
@@ -95,7 +100,6 @@ import kotlinx.coroutines.withContext
                             item {Action("▱  版本") {panel="version"}}
                             item {Action("CC  字幕") {panel="subtitle"}}
                         }
-                        item {Action("ⓘ  媒体信息") {panel="info"}}
                         if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played) {panel="played"}}
                         item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable) {model.favorite(item)}}
                         item {Action("返回") {model.back()}}
@@ -110,7 +114,7 @@ import kotlinx.coroutines.withContext
                             items(item.versions,key={it.id}) {v->
                                 FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {
-                                    Column(Modifier.fillMaxWidth().cinemaGlass(18.dp).padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                         Text(v.name.ifBlank {"媒体版本"},color=SunnyColors.Text,fontSize=16.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                                         Text(listOfNotNull(if(v.width>0) "${v.width}×${v.height}" else null,v.range.takeIf {it.isNotBlank()},v.container.uppercase().takeIf {it.isNotBlank()}).joinToString(" · "),color=SunnyColors.Text,fontSize=12.sp)
                                         Text(listOfNotNull(v.size.takeIf {it>0}?.let {"%.2f GB".format(it/1_000_000_000.0)},v.bitrate.takeIf {it>0}?.let {"%.1f Mbps".format(it/1_000_000.0)}).joinToString(" · "),color=SunnyColors.Secondary,fontSize=12.sp)
@@ -121,14 +125,10 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 val children=model.children[item.key] ?: emptyList()
-                if(children.isNotEmpty()) item {Box(Modifier.padding(horizontal=pageSidePadding)) {MediaShelf(if(item.type=="Series") "选择季" else "剧集",children,item.type=="Season",onClick={model.navigate(Route.Detail(it))})}}
-                if(item.externalLinks.isNotEmpty()) item {
-                    LazyRow(contentPadding=PaddingValues(horizontal=pageSidePadding),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        items(item.externalLinks,key={it.url}) {link->Action(link.name) {
-                            try {context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(link.url)))} catch(_:Exception) {model.message="此设备没有可打开链接的浏览器"}
-                        }}
-                    }
-                }
+                if(children.isNotEmpty()) item {Column(Modifier.padding(horizontal=pageSidePadding)) {
+                    SectionTitle(if(item.type=="Series") "选择季" else "剧集","查看全部") {model.navigate(Route.Library(item))}
+                    AccordionCards(children,childSelected,{childSelected=it},id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
+                }}
                 if(item.people.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("演员表")

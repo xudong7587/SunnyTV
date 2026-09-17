@@ -67,5 +67,5 @@ data class AppSettings(
     val artworkMode:String = "Poster", val subtitlePreference:String = "default",
     val heroMode:String = "random", val heroLibraryKeys:Set<String> = emptySet(),
     val heroAllLibraries:Boolean = true, val heroIntervalSeconds:Int = 8,
-    val uiScaleLevel:Int = 2
+    val uiScaleLevel:Int = 2, val libraryArtworkModes:Map<String,String> = emptyMap()
 )

@@ -7,7 +7,7 @@ import androidx.compose.ui.platform.LocalDensity
 import io.github.xudong7587.sunnytv.core.model.*
 
 val LocalCompact=staticCompositionLocalOf {false}
-val pageTopPadding get()=82.dp
+val pageTopPadding @Composable get()=if(LocalNavVisible.current) 82.dp else 18.dp
 val pageSidePadding @Composable get()=if(LocalCompact.current) 18.dp else 30.dp
 
 @Composable fun ScaledUi(settings:AppSettings,content:@Composable ()->Unit) {

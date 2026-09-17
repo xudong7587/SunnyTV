@@ -40,7 +40,14 @@ import kotlinx.coroutines.delay
     shape:Shape=RoundedCornerShape(12.dp), onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
-    val requester=remember(page,id) { FocusRequester() }; var focused by remember { mutableStateOf(false) }
+    val requester=remember(page,id) { FocusRequester() }
+    val bridge=LocalNavigationBridge.current
+    DisposableEffect(bridge,id,requester) {
+        val targets=if(id.startsWith("nav:")) bridge?.navigation else if(!id.startsWith("dialog:")) bridge?.content else null
+        targets?.put(id,requester)
+        onDispose {targets?.remove(id)}
+    }
+    var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if(focused && !model.settings.reduceMotion) 1.025f else 1f,
         tween(if(model.settings.reduceMotion) 0 else 130),label="focus-scale")
     LaunchedEffect(page,id) {
@@ -52,7 +59,7 @@ import kotlinx.coroutines.delay
         .focusRequester(requester).onFocusChanged {
             focused=it.isFocused
             if(it.isFocused) { model.focusMemory[page]=id; onFocus() }
-        }.shadow(if(focused) 10.dp else 4.dp,shape,clip=false).clip(shape)
+        }.clip(shape)
         .background(Brush.verticalGradient(listOf(
             if(focused || active) SunnyColors.SurfaceRaised.copy(.94f) else SunnyColors.SurfaceRaised.copy(.72f),
             SunnyColors.Surface.copy(.70f))))
@@ -62,14 +69,14 @@ import kotlinx.coroutines.delay
         .clickable(onClick=onClick), contentAlignment=Alignment.Center) { content(focused) }
 }
 
-@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,onClick:()->Unit) {
+@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=Modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=RoundedCornerShape(28.dp),onClick=onClick) { focused ->
-        val ink=if(primary) SunnyColors.AccentInk else if(focused) SunnyColors.Accent else SunnyColors.Text
-        Row(Modifier.background(if(primary) SunnyColors.Accent else Color.Transparent).height(48.dp).widthIn(min=48.dp)
+        val ink=if(primary || focused) SunnyColors.Accent else SunnyColors.Text
+        Row(Modifier.height(48.dp).widthIn(min=48.dp)
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
-            LineIcon(actionIcon(text),ink)
+            LineIcon(icon,ink)
             val ms=if(model.settings.reduceMotion) 0 else 160
             AnimatedVisibility(focused || active,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
                 Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
@@ -90,12 +97,16 @@ import kotlinx.coroutines.delay
         if(art!=null && source?.kind==SourceKind.EMBY) {
             val service=remember(source) { model.app.emby(source) }
             val view=LocalView.current
-            val actualWidth=(if(model.settings.highQualityArtwork) widthPx*2 else widthPx)
-                .coerceAtMost(maxOf(view.width,view.height,1280)).coerceAtLeast(64)
+            val density=LocalDensity.current.density
+            val lowRam=(LocalContext.current.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+            val densityScale=(density/2f).coerceAtLeast(1f)
+            val maxPixels=if(lowRam) 1920 else 3840
+            val actualWidth=(widthPx*densityScale*(if(model.settings.highQualityArtwork) 1.25f else 1f)).toInt()
+                .coerceAtMost(minOf(maxPixels,maxOf(view.width,view.height,1280))).coerceAtLeast(64)
             val context=LocalContext.current
             val request=remember(art,actualWidth,source.id) {
                 ImageRequest.Builder(context).data(service.imageUrl(art,actualWidth))
-                    .size(actualWidth,if(art.type=="Primary" && !fit) actualWidth*3/2 else actualWidth*9/16).precision(coil.size.Precision.INEXACT)
+                    .size(actualWidth,if(art.type=="Primary" && !fit && item.type!="Episode") actualWidth*3/2 else actualWidth*9/16).precision(coil.size.Precision.INEXACT)
                     .memoryCacheKey("${source.id}:${art.itemId}:${art.type}:${art.tag}:$actualWidth")
                     .diskCacheKey("${source.id}:${art.itemId}:${art.type}:${art.tag}:$actualWidth")
                     .crossfade(false).build()
@@ -193,11 +204,12 @@ import kotlinx.coroutines.delay
             maxLines = 2, overflow = TextOverflow.Ellipsis)
         return
     }
-    val request = remember(source.id, logo) {
-        ImageRequest.Builder(context).data(model.app.emby(source).imageUrl(logo, 720))
-            .size(720, 240)
-            .memoryCacheKey("${source.id}:${logo.itemId}:Logo:${logo.tag}:720")
-            .diskCacheKey("${source.id}:${logo.itemId}:Logo:${logo.tag}:720")
+    val logoWidth=(720*(LocalDensity.current.density/2f).coerceAtLeast(1f)).toInt().coerceAtMost(1440)
+    val request = remember(source.id, logo,logoWidth) {
+        ImageRequest.Builder(context).data(model.app.emby(source).imageUrl(logo, logoWidth))
+            .size(logoWidth, logoWidth/3)
+            .memoryCacheKey("${source.id}:${logo.itemId}:Logo:${logo.tag}:$logoWidth")
+            .diskCacheKey("${source.id}:${logo.itemId}:Logo:${logo.tag}:$logoWidth")
             .crossfade(false).build()
     }
     val titleHeight=with(LocalDensity.current) {(fontSize * 2.4f).toDp()}.coerceAtLeast(75.dp)

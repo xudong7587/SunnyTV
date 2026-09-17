@@ -115,4 +115,29 @@ class LibraryApiTest {
             assertFalse(removed.favorite);assertTrue(removed.played)
         }
     }
+    @Test fun episodeArtUsesItsOwnPrimaryBeforeInheritedBackdrop() {
+        MockWebServer().use {server->
+            val episode=source(server).parseItem(JSONObject("""{"Id":"ep","Type":"Episode","SeriesId":"series",
+                "ImageTags":{"Primary":"own"},"ParentBackdropItemId":"series","ParentBackdropImageTags":["shared"]}"""))
+            assertEquals("ep",MediaLogic.wideArtwork(episode)?.itemId)
+            assertEquals("own",MediaLogic.wideArtwork(episode)?.tag)
+        }
+    }
+    @Test fun seriesPlaySelectsUnfinishedEpisodeWithReadOnlyRequest()=runBlocking {
+        MockWebServer().use {server->
+            val body="""{"Items":[{"Id":"first","Type":"Episode","UserData":{"Played":true}},
+                {"Id":"next","Type":"Episode","UserData":{"Played":false}},
+                {"Id":"resume","Type":"Episode","UserData":{"Played":false,"PlaybackPositionTicks":10000000}}]}"""
+            server.enqueue(MockResponse().setBody(body))
+            val api=source(server)
+            assertEquals("resume",api.playableEpisode(MediaEntry("series","s","Show","Series"),false).id)
+            val request=server.takeRequest();assertEquals("GET",request.method)
+            assertEquals("/Shows/series/Episodes",request.requestUrl!!.encodedPath)
+            server.enqueue(MockResponse().setBody(body))
+            assertEquals("first",api.playableEpisode(MediaEntry("season","s","Season","Season",seriesId="series"),true).id)
+            assertEquals("season",server.takeRequest().requestUrl!!.queryParameter("SeasonId"))
+            assertEquals(2,server.requestCount)
+        }
+    }
+
 }

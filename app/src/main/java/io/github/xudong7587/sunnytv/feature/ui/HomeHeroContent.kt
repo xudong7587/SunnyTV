@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.focusProperties
@@ -33,6 +35,7 @@ import io.github.xudong7587.sunnytv.feature.Route
     val change:(Int)->Unit={delta->choose(Presentation.next(currentIndex,delta,items.size,true))}
     var direction by remember {mutableIntStateOf(1)}
     BoxWithConstraints(modifier.fillMaxWidth()) {
+        val containerWidth=maxWidth
         val side=(maxWidth*.55f).coerceAtMost(260.dp)
         Row(horizontalArrangement=Arrangement.spacedBy(9.dp),verticalAlignment=Alignment.Top) {
             Column(Modifier.width(side)) {
@@ -54,7 +57,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                         Box(Modifier.fillMaxSize()) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),700)
                             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Transparent,Color.Black.copy(.85f)))))
-                            Text(media.title,color=Color.White,fontSize=18.sp,fontWeight=FontWeight.SemiBold,maxLines=2,
+                            Text(media.title,color=Color.White,fontSize=18.sp,lineHeight=23.sp,fontWeight=FontWeight.SemiBold,maxLines=2,
                                 overflow=TextOverflow.Ellipsis,modifier=Modifier.align(Alignment.BottomStart).padding(13.dp))
                         }
                     }
@@ -62,9 +65,10 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Text(entry.year.takeIf {it>0}?.toString().orEmpty(),color=SunnyColors.Secondary,fontSize=11.sp,modifier=Modifier.padding(top=8.dp))
             }
             val following=(1 until items.size).map {items[(index+it)%items.size]}
+            val stripWidth=((containerWidth-side-9.dp-7.dp*(following.size-1).coerceAtLeast(0))/following.size.coerceAtLeast(1)).coerceAtLeast(20.dp)
             LazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                 items(following,key={it.key}) {media->
-                    Column(Modifier.width(if(LocalCompact.current) 48.dp else 55.dp).animateItem()) {
+                    Column(Modifier.width(stripWidth).animateItem()) {
                         FocusTile("$id:strip:${media.key}",Modifier.fillMaxWidth().height(side).focusProperties {canFocus=false},
                             shape=RoundedCornerShape(13.dp),onClick={direction=1;choose(items.indexOf(media))}) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),320)
@@ -90,8 +94,8 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Text(hero.overview.ifBlank {"来自你的媒体库"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,
                     maxLines=if(compact) 2 else 3,overflow=TextOverflow.Ellipsis)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    if(hero.isPlayable) Action(if(hero.positionMs>0) "继续播放" else "立即播放",id="home-play",primary=true) {onPlay(hero,false)}
-                    else Action("查看详情",id="home-play",primary=true) {model.navigate(Route.Detail(hero))}
+                    if(hero.isPlayable || hero.type in setOf("Series","Season")) Action(if(hero.positionMs>0) "继续播放" else "立即播放",id="home-play",primary=true) {onPlay(hero,false)}
+                    Action("查看详情",id="home-detail") {model.navigate(Route.Detail(hero))}
                     Action(if(paused) "自动轮播" else "暂停轮播",id="home-pause",active=paused,onClick=onPause)
                 }
             } else Text("暂无推荐",color=SunnyColors.Text,fontSize=28.sp)
@@ -100,11 +104,11 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     resume.take(2).forEach {media->
                         FocusTile("quick-resume:${media.key}",Modifier.weight(1f),shape=RoundedCornerShape(24.dp),onClick={onPlay(media,false)}) {
-                            Row(Modifier.fillMaxWidth().padding(8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                ArtworkView(media,media.primary,Modifier.size(32.dp),100)
+                            Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                ArtworkView(media,media.primary,Modifier.size(32.dp).clip(CircleShape),128)
                                 Column(Modifier.weight(1f)) {
-                                    Text(media.title,color=SunnyColors.Text,fontSize=11.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                    Text("剩余 ${MediaLogic.remainingMinutes(media.positionMs,media.durationMs)} 分钟",color=SunnyColors.Secondary,fontSize=9.sp)
+                                    Text(media.title,color=SunnyColors.Text,fontSize=11.sp,lineHeight=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                    Text("剩余 ${MediaLogic.remainingMinutes(media.positionMs,media.durationMs)} 分钟",color=SunnyColors.Secondary,fontSize=9.sp,lineHeight=12.sp,maxLines=1)
                                 }
                             }
                         }

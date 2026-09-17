@@ -69,9 +69,16 @@ class ConfigStore(context: Context) {
         prefs.getInt("seek",10), prefs.getBoolean("dark",true), prefs.getInt("accent",2).coerceIn(0,9),
         prefs.getString("artworkMode","Poster") ?: "Poster", prefs.getString("subtitle","default") ?: "default",
         prefs.getString("heroMode","random") ?: "random", prefs.getStringSet("heroLibraries",emptySet())?.toSet() ?: emptySet(),
-        prefs.getBoolean("heroAll",true),prefs.getInt("heroInterval",8).coerceIn(3,60),prefs.getInt("uiScale",2).coerceIn(0,4)
+        prefs.getBoolean("heroAll",true),prefs.getInt("heroInterval",8).coerceIn(3,60),prefs.getInt("uiScale",2).coerceIn(0,4),
+        prefs.all.filterKeys {it.startsWith("libraryArtwork:")}.mapNotNull {(key,value)->
+            (value as? String)?.takeIf {it in setOf("Poster","Thumb","Banner")}?.let {key.removePrefix("libraryArtwork:") to it}
+        }.toMap()
     )
-    fun saveSettings(s: AppSettings) { prefs.edit().putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
+    fun saveSettings(s: AppSettings) {
+        val libraryEditor=prefs.edit()
+        s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
+        libraryEditor.apply()
+        prefs.edit().putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
         .putBoolean("backdrop",s.backdropEnabled).putBoolean("resume",s.showResume).putBoolean("next",s.showNextUp)
         .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds)
         .putBoolean("dark",s.darkTheme).putInt("accent",s.accentIndex).putString("artworkMode",s.artworkMode)

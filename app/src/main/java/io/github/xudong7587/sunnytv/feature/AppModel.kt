@@ -138,7 +138,7 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
             // Sample at most six libraries and six items each; never enumerate an entire library.
             val sampled=coroutineScope {libraries.shuffled().take(6).map {library->async {
                 artworkFeedSlots.withPermit {
-                    try {app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=6,
+                    try {app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
                         mixed=library.collectionType in setOf("","mixed","homevideos")).items}
                     catch(e:CancellationException) {throw e}
                     catch(_:Exception) {emptyList()}
@@ -146,7 +146,7 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
             }}.awaitAll()}
             val rows=sampled.map {it.shuffled()}
             // Round-robin selection keeps small libraries represented in the six visible choices.
-            heroCandidates=(0 until 6).flatMap {index->rows.mapNotNull {it.getOrNull(index)}}.distinctBy {it.key}.take(6)
+            heroCandidates=(0 until 7).flatMap {index->rows.mapNotNull {it.getOrNull(index)}}.distinctBy {it.key}.take(7)
             if(heroCandidates.isEmpty()) errors["hero"]="所选媒体库暂时没有可用推荐"
         }
     }
@@ -225,7 +225,8 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
             busy = true
             try {
                 val config = source(item.sourceId)
-                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(item, fromStart,selectedVersion[item.key].orEmpty())
+                val playable=if(config.kind==SourceKind.EMBY && item.type in setOf("Series","Season")) app.emby(config).playableEpisode(item,fromStart) else item
+                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(playable, fromStart,selectedVersion[playable.key].orEmpty())
                 else app.dav(config).playback(item, if (fromStart) 0 else app.store.position(item.key))
                 ensureActive()
                 ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),

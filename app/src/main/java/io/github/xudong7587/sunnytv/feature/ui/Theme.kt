@@ -19,9 +19,9 @@ fun palette(settings:AppSettings):SunnyPalette {
     var darker=colors[0]
     while((colors[1].luminance()+.05f)/(darker.luminance()+.05f)<4.5f) darker=lerp(darker,Color.Black,.04f)
     val dark=settings.darkTheme
-    return SunnyPalette(if(dark) Color(0xFF08090B) else Color(0xFFF9F9F7),
-        if(dark) Color(0xFF181A1D) else Color(0xFFEEEEEB),
-        if(dark) Color(0xFF2A2D32) else Color(0xFFE1E3DF),
+    return SunnyPalette(if(dark) Color(0xFF08090B) else lerp(colors[1],Color.White,.90f),
+        if(dark) Color(0xFF181A1D) else lerp(colors[1],Color.White,.82f),
+        if(dark) Color(0xFF2A2D32) else lerp(colors[1],Color.White,.70f),
         if(dark) colors[1] else darker, if(dark) darker else colors[1],
         if(dark) Color(0xFFF5F5F2) else Color(0xFF17191C),
         if(dark) Color(0xFFB9BDBE) else Color(0xFF535A5D),

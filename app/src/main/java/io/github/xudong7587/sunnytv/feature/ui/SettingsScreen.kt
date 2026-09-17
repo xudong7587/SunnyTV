@@ -68,6 +68,7 @@ import kotlinx.coroutines.*
     var adding by remember {mutableStateOf<SourceKind?>(null)}
     var removing by remember {mutableStateOf<SourceConfig?>(null)}
     var chooser by remember {mutableStateOf("")}
+    var librariesExpanded by remember {mutableStateOf(false)}
     SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
         LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
@@ -115,14 +116,14 @@ import kotlinx.coroutines.*
                             }
                         }
                     } }
-                    item {Action("展现方式：${model.settings.artworkMode}") {chooser="artwork"}}
-                    item {Action("首页轮播：${when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"}}") {chooser="hero"}}
-                    item {Action("自动切换：${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
-                    item {ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
+                    item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"}) {chooser="hero"}}
+                    item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
+                    item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup()) {
+                    ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
                         model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
-                    }}
-                    item {
-                        androidx.compose.animation.AnimatedVisibility(!model.settings.heroAllLibraries) {
+                    }
+                    SettingChoiceRow("参与轮播的媒体库",if(librariesExpanded) "收起  ⌃" else "展开  ⌄") {librariesExpanded=!librariesExpanded}
+                        androidx.compose.animation.AnimatedVisibility(librariesExpanded) {
                             Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
                                 .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
@@ -137,6 +138,7 @@ import kotlinx.coroutines.*
                                 if(model.settings.heroLibraryKeys.isEmpty()) Text("请选择至少一个媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
                             }
                         }
+                    }
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
@@ -210,7 +212,7 @@ import kotlinx.coroutines.*
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
     val categories=listOf("媒体来源","首页与外观","播放","设备与诊断","关于")
     @Composable fun Category(cat:String) {
-        FocusTile("settings:$cat",active=category==cat,onClick={onSelect(cat)}) {focused->
+        FocusTile("settings:$cat",Modifier.width(if(LocalCompact.current) 140.dp else 165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
         }
     }
@@ -251,6 +253,15 @@ import kotlinx.coroutines.*
                 Action(if(model.busy) "连接中…" else "验证并保存",primary=true) {if(!model.busy) model.addSource(kind,name,base,user,password,onConnected)}
                 if(!firstConnection) Action("取消") {if(!model.busy) onClose()}
             }
+        }
+    }
+}
+
+@Composable private fun SettingChoiceRow(title:String,value:String,onClick:()->Unit) {
+    FocusTile("setting:$title",Modifier.fillMaxWidth(),onClick=onClick) {
+        Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(title,color=SunnyColors.Text,fontSize=16.sp,modifier=Modifier.weight(1f))
+            Text(value,color=SunnyColors.Secondary,fontSize=13.sp)
         }
     }
 }

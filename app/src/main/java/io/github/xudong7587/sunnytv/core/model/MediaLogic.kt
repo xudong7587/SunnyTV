@@ -21,7 +21,7 @@ object MediaLogic {
     }
 
     fun libraryArtwork(item: MediaEntry): Artwork? = item.primary ?: item.thumb ?: item.backdrop
-    fun wideArtwork(item: MediaEntry): Artwork? = item.thumb ?: item.backdrop ?: item.primary
+    fun wideArtwork(item: MediaEntry): Artwork? = if(item.type=="Episode") item.primary ?: item.thumb ?: item.backdrop else item.thumb ?: item.backdrop ?: item.primary
 
     fun mime(container: String): String? = when (container.lowercase().trimStart('.')) {
         "mp4", "m4v", "mov" -> "video/mp4"

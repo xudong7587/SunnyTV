@@ -1,4 +1,4 @@
-param([string]$Serial = '')
+﻿param([string]$Serial = '')
 $ErrorActionPreference = 'Stop'
 $previewRoot = Split-Path $PSScriptRoot -Parent
 $toolRoot = Join-Path $previewRoot '.sunny-tools/scrcpy-win64-v4.1'
@@ -18,9 +18,9 @@ try {
     $existing = Get-Process scrcpy -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $previewExe }
     if ($existing) { throw '电视预览已经运行。请先关闭旧窗口再启动，避免同时创建多个显示器。' }
     & (Join-Path $toolRoot 'adb.exe') -s $deviceSerial shell input keyevent KEYCODE_WAKEUP
-    $previewArgs = @('-s', $deviceSerial, '--new-display=1920x1080/320',
+    $previewArgs = @('-s', $deviceSerial, '--new-display=3840x2160/640',
         '--no-vd-system-decorations', '--no-audio', '--stay-awake', '--keep-active',
-        '--start-app=io.github.xudong7587.sunnytv.debug', '--window-title=SunnyTV-TV-Preview-1080p',
+        '--start-app=io.github.xudong7587.sunnytv.debug', '--window-title=SunnyTV-TV-Preview-4K',
         '--window-width=1280', '--window-height=720')
     # The SDL preview is intentionally visible. No global wm size/density override is used.
     $previewProcess = Start-Process -FilePath $previewExe -ArgumentList $previewArgs -WorkingDirectory $toolRoot `

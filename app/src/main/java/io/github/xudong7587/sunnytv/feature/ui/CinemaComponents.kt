@@ -5,6 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,13 +34,14 @@ import io.github.xudong7587.sunnytv.feature.Route
 @Composable fun CinemaBackdrop(item:MediaEntry?,modifier:Modifier=Modifier) {
     val model=LocalAppModel.current
     val base=SunnyColors.Background
+    val lowRam=(androidx.compose.ui.platform.LocalContext.current.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
     Box(modifier.fillMaxSize().background(base)) {
         if(item!=null && model.settings.backdropEnabled) {
-            Crossfade(item,animationSpec=tween(if(model.settings.reduceMotion) 0 else 220),label="backdrop") {media->
+            Crossfade(item,animationSpec=tween(if(model.settings.reduceMotion || lowRam) 0 else 220),label="backdrop") {media->
                 ArtworkView(media,media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
             }
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.65f),Color.Black.copy(.1f)))))
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(.20f),Color.Transparent,base.copy(.85f),base))))
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(base.copy(.65f),base.copy(.04f)))))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(*listOf(0f to base.copy(.3f),.25f to Color.Transparent,.72f to Color.Transparent,1f to base).toTypedArray())))
         }
     }
 }
@@ -52,7 +54,10 @@ import io.github.xudong7587.sunnytv.feature.Route
     val count=entries.size+(if(onMore!=null) 1 else 0)
     val requesters=remember(entries.map {it.key},onMore!=null) {List(count) {FocusRequester()}}
     if(count==0) return
-    BoxWithConstraints(modifier.focusGroup()) {
+    val rowState=rememberLazyListState()
+    var rowFocused by remember {mutableStateOf(false)}
+    LaunchedEffect(rowFocused) {if(!rowFocused && !hero) {onSelect(0);rowState.scrollToItem(0)}}
+    BoxWithConstraints(modifier.onFocusChanged {rowFocused=it.hasFocus}.focusGroup()) {
         val gap=if(hero) 7.dp else 8.dp
         val height=if(hero) (maxWidth*.45f).coerceIn(180.dp,255.dp) else 165.dp
         val available=maxWidth-gap*(count-1)
@@ -60,7 +65,7 @@ import io.github.xudong7587.sunnytv.feature.Route
         val smallWidth=if(count==1) available else ((available-selectedWidth)/(count-1)).coerceAtLeast(26.dp)
         @Composable fun Card(index:Int) {
                 val active=selected.coerceIn(0,count-1)==index
-                val target=if(!hero) {if(active) selectedWidth else height*2/3}
+                val target=if(!hero) {if(active && index<entries.size) selectedWidth else height*2/3}
                     else if(count==1) available else if(active) (available-smallWidth*(count-1)).coerceAtLeast(smallWidth) else smallWidth
                 val width by animateDpAsState(target,
                     if(model.settings.reduceMotion) snap() else spring(dampingRatio=1f,stiffness=500f),label="accordion-width")
@@ -76,7 +81,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                     },active=active,shape=RoundedCornerShape(if(hero) 20.dp else 15.dp),
                     onFocus={onSelect(index)},onClick={if(entry==null) onMore?.invoke() else model.navigate(Route.Detail(entry))}) {focused ->
                     if(entry==null) {
-                        Column(Modifier.fillMaxSize().cinemaGlass(15.dp).padding(10.dp),verticalArrangement=Arrangement.Center,
+                        Column(Modifier.fillMaxSize().padding(10.dp),verticalArrangement=Arrangement.Center,
                             horizontalAlignment=Alignment.CenterHorizontally) {
                             Text("→",color=SunnyColors.Accent,fontSize=30.sp)
                             if(active) { Text("查看全部",color=SunnyColors.Text,fontSize=17.sp,fontWeight=FontWeight.Bold)
@@ -89,7 +94,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                         if(entry.rating>0) Text("★ %.1f".format(entry.rating),color=Color.White,fontSize=9.sp,
                             modifier=Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(.6f)).padding(4.dp))
                         Column(Modifier.align(Alignment.BottomStart).padding(if(active) 13.dp else 6.dp)) {
-                            Text(entry.title,color=Color.White,fontSize=if(active) 19.sp else 10.sp,fontWeight=FontWeight.SemiBold,
+                            Text(entry.title,color=Color.White,fontSize=if(active) 19.sp else 10.sp,lineHeight=if(active) 24.sp else 14.sp,fontWeight=FontWeight.SemiBold,
                                 maxLines=if(active) 2 else 3,overflow=TextOverflow.Ellipsis)
                             if(active) Text(entry.subtitle,color=Color.White.copy(.8f),fontSize=10.sp,modifier=Modifier.padding(top=5.dp),maxLines=1)
                         }
@@ -99,7 +104,7 @@ import io.github.xudong7587.sunnytv.feature.Route
         }
         if(hero) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(gap),verticalAlignment=Alignment.CenterVertically) {
             repeat(count) {index->key(entries.getOrNull(index)?.key ?: "all") {Card(index)}}
-        } else LazyRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
+        } else LazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
             items(count,key={entries.getOrNull(it)?.key ?: "all"}) {Card(it)}
         }
     }
@@ -111,7 +116,7 @@ import io.github.xudong7587.sunnytv.feature.Route
     val entries=(if(folder) model.folderPreviews[library.key] else model.libraryLatest[library.key])
     var selected by rememberSaveable(library.key,folder) {mutableIntStateOf(0)}
     Column {
-        SectionTitle(library.title,if(folder) "文件夹" else "最新入库")
+        SectionTitle(library.title,"进入媒体库") {model.navigate(Route.Library(library))}
         if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})
         else if(model.errors["${if(folder) "folder-preview" else "latest"}:${library.key}"]!=null) {

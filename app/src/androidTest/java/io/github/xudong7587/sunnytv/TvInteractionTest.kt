@@ -150,6 +150,37 @@ class TvInteractionTest {
         rule.onNodeWithText("连接你的媒体库").assertIsDisplayed()
         rule.onNodeWithTag("验证并保存").assertExists()
     }
+
+    @Test fun rowRestoresFirstCardWhenFocusLeaves() {
+        var selected=-1
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            activity.setContentForTest {
+                var index by remember {mutableIntStateOf(0)}
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    Column {
+                        AccordionCards(entries,index,{index=it;selected=it},Modifier.fillMaxWidth(),id="reset-row")
+                        Action("离开",id="outside-row") {}
+                    }
+                }}
+            }
+        }
+        focus("reset-row:fixture:1")
+        rule.runOnIdle {assertEquals(1,selected)}
+        focus("outside-row")
+        rule.runOnIdle {assertEquals(0,selected)}
+    }
+    @Test fun detailHidesPinnedNavigation() {
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.navigate(Route.Detail(entries.first()))
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {SunnyRoot {_,_->}}}
+            }
+        }
+        rule.onNodeWithTag("nav:首页").assertDoesNotExist()
+        rule.onNodeWithTag("detail-play").assertExists()
+    }
     private fun saveScreenshot(name:String) {
         val bitmap=rule.onRoot().captureToImage().asAndroidBitmap()
         java.io.File(rule.activity.cacheDir,name).outputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}

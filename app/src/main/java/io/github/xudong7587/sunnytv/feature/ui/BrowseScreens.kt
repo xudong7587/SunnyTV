@@ -11,6 +11,8 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.*
+import kotlinx.coroutines.launch
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -33,7 +35,7 @@ import kotlinx.coroutines.delay
                 Text(item.subtitle,color=SunnyColors.Secondary,fontSize=12.sp)
                 Text(item.overview,color=SunnyColors.Secondary,fontSize=13.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    if(item.isPlayable) Action("播放",id="hero-play",primary=true) {onPlay(item,false)}
+                    if(item.isPlayable || item.type in setOf("Series","Season")) Action("播放",id="hero-play",primary=true) {onPlay(item,false)}
                     Action("查看详情",id="hero-detail") {model.navigate(Route.Detail(item))}
                 }
             }
@@ -55,7 +57,7 @@ import kotlinx.coroutines.delay
                     Text(item.subtitle + if(item.rating>0) "    ★ %.1f".format(item.rating) else "",color=SunnyColors.Secondary,fontSize=13.sp)
                     Text(item.overview.ifBlank { "来自你的 Emby 媒体库" },color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,maxLines=3,overflow=TextOverflow.Ellipsis)
                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        if(item.isPlayable) Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="hero-play",primary=true,
+                        if(item.isPlayable || item.type in setOf("Series","Season")) Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="hero-play",primary=true,
                             onClick={onPlay(item,false)})
                         Action("查看详情",id="hero-detail",onClick={model.navigate(Route.Detail(item))})
                     }
@@ -78,11 +80,14 @@ import kotlinx.coroutines.delay
     val feeds=embySources.mapNotNull { model.feeds[it.id] }
     val resume=feeds.flatMap { it.resume }
     val latest=feeds.flatMap { it.latest }
-    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates;else->latest}.distinctBy {it.key}.take(6)
+    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates;else->latest}.distinctBy {it.key}.take(7)
     var candidates by remember {mutableStateOf(incoming)}
     var selected by rememberSaveable {mutableIntStateOf(0)}
     val hero=candidates.getOrNull(selected.coerceIn(0,(candidates.size-1).coerceAtLeast(0)))
     val list=rememberLazyListState()
+    val bridge=LocalNavigationBridge.current
+    val scope=rememberCoroutineScope()
+    DisposableEffect(bridge,list) {bridge?.revealTop={list.scrollToItem(0)};onDispose {bridge?.revealTop=null}}
     var heroFocused by remember {mutableStateOf(false)}
     LaunchedEffect(incoming,heroFocused,model.busy) {if(!heroFocused && !model.busy) {candidates=incoming;selected=selected.coerceIn(0,(incoming.size-1).coerceAtLeast(0))}}
     var paused by rememberSaveable {mutableStateOf(false)}
@@ -105,9 +110,13 @@ import kotlinx.coroutines.delay
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
                 item(key="home-hero") {
-                    val darkPalette=remember(model.settings.accentIndex) {palette(model.settings.copy(darkTheme=true))}
+                    val darkPalette=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
                     CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(viewport.coerceAtLeast(if(LocalCompact.current) 630.dp else 400.dp)).onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
+                        Box(Modifier.fillMaxWidth().height(viewport.coerceAtLeast(if(LocalCompact.current) 630.dp else 400.dp)).onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
+                            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
+                                scope.launch {list.scrollToItem(0);bridge?.enterNavigation()};true
+                            } else false
+                        }.focusGroup()) {
                             CinemaBackdrop(hero)
                             HomeHeroContent(hero,candidates,selected,{selected=it},
                                 if(model.settings.showResume) resume else emptyList(),paused,{paused=!paused},onPlay)
@@ -160,19 +169,20 @@ import kotlinx.coroutines.delay
     LaunchedEffect(candidate) {delay(240); displayed=candidate}
     val hero=displayed ?: page?.items?.firstOrNull()
     val gridState=rememberLazyGridState()
-    val mode=model.settings.artworkMode
+    val scope=rememberCoroutineScope()
+    val mode=model.settings.libraryArtworkModes[library.key] ?: model.settings.artworkMode
     LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
     Box(Modifier.fillMaxSize()) {
         Backdrop(hero ?: library)
         LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
             horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
             contentPadding=PaddingValues(start=pageSidePadding,end=pageSidePadding,top=pageTopPadding,bottom=40.dp)) {
-            item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}
+            item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Box(Modifier.onFocusChanged {if(it.hasFocus) scope.launch {gridState.scrollToItem(0)}}.focusGroup()) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}}
             item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
-                        item {Action("排序：${Presentation.sorts.firstOrNull {it.first==sort}?.second} · ${if(ascending) "升序" else "降序"}",id="library-sort",active=true) {chooser="sort"}}
+                        item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
                         item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
                         item {Action("视图：$mode") {chooser="view"}}
                         if(Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
@@ -204,7 +214,7 @@ import kotlinx.coroutines.delay
         when(chooser) {"sort"->sort;"subtitle"->model.settings.subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
         when(chooser) {"sort"->{ascending=if(sort==value) !ascending else value=="SortName";sort=value;model.loadLibrary(library,sort,ascending=ascending)}
             "subtitle"->model.saveSettings(model.settings.copy(subtitlePreference=value))
-            else->model.saveSettings(model.settings.copy(artworkMode=value))}
+            else->model.saveSettings(model.settings.copy(libraryArtworkModes=model.settings.libraryArtworkModes+(library.key to value)))}
         chooser=""
     }
 }
