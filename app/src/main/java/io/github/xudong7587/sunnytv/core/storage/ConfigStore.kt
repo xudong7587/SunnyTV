@@ -66,11 +66,18 @@ class ConfigStore(context: Context) {
     fun settings(): AppSettings = AppSettings(
         prefs.getBoolean("motion",false), prefs.getBoolean("hq",false), prefs.getBoolean("backdrop",true),
         prefs.getBoolean("resume",true), prefs.getBoolean("next",true), prefs.getBoolean("diag",false),
-        prefs.getInt("seek",10)
+        prefs.getInt("seek",10), prefs.getBoolean("dark",true), prefs.getInt("accent",2).coerceIn(0,9),
+        prefs.getString("artworkMode","Poster") ?: "Poster", prefs.getString("subtitle","default") ?: "default",
+        prefs.getString("heroMode","random") ?: "random", prefs.getStringSet("heroLibraries",emptySet())?.toSet() ?: emptySet(),
+        prefs.getBoolean("heroAll",true),prefs.getInt("heroInterval",8).coerceIn(3,60)
     )
     fun saveSettings(s: AppSettings) { prefs.edit().putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
         .putBoolean("backdrop",s.backdropEnabled).putBoolean("resume",s.showResume).putBoolean("next",s.showNextUp)
-        .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds).apply() }
+        .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds)
+        .putBoolean("dark",s.darkTheme).putInt("accent",s.accentIndex).putString("artworkMode",s.artworkMode)
+        .putString("subtitle",s.subtitlePreference).putString("heroMode",s.heroMode)
+        .putStringSet("heroLibraries",s.heroLibraryKeys).putBoolean("heroAll",s.heroAllLibraries)
+        .putInt("heroInterval",s.heroIntervalSeconds.coerceIn(3,60)).apply() }
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }
 }
