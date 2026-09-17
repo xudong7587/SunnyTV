@@ -9,6 +9,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -55,27 +60,91 @@ import kotlinx.coroutines.delay
     val feeds=embySources.mapNotNull { model.feeds[it.id] }
     val resume=feeds.flatMap { it.resume }
     val latest=feeds.flatMap { it.latest }
-    val hero=resume.firstOrNull() ?: latest.firstOrNull()
-    Box(Modifier.fillMaxSize()) {
-        Backdrop(hero)
-        LazyColumn(contentPadding=PaddingValues(start=40.dp,end=40.dp,bottom=36.dp)) {
+    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates;else->latest}.distinctBy {it.key}.take(6)
+    var candidates by remember {mutableStateOf(incoming)}
+    var selected by rememberSaveable {mutableIntStateOf(0)}
+    val hero=candidates.getOrNull(selected.coerceIn(0,(candidates.size-1).coerceAtLeast(0)))
+    val list=rememberLazyListState()
+    var heroFocused by remember {mutableStateOf(false)}
+    LaunchedEffect(incoming,heroFocused,model.busy) {if(!heroFocused && !model.busy) {candidates=incoming;selected=selected.coerceIn(0,(incoming.size-1).coerceAtLeast(0))}}
+    var paused by rememberSaveable {mutableStateOf(false)}
+    val lifecycle=LocalLifecycleOwner.current.lifecycle
+    var resumed by remember {mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
+    DisposableEffect(lifecycle) {
+        val observer=LifecycleEventObserver {_,_->resumed=lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)}
+        lifecycle.addObserver(observer);onDispose {lifecycle.removeObserver(observer)}
+    }
+    val visible by remember {derivedStateOf {list.firstVisibleItemIndex==0 && list.firstVisibleItemScrollOffset==0}}
+    LaunchedEffect(heroFocused,paused,resumed,visible,model.busy,model.message,model.settings.reduceMotion,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
+        if(Presentation.canRotate(heroFocused,paused,resumed,visible,model.busy,model.message.isNotEmpty(),model.settings.reduceMotion,candidates.size)) {
+            delay(model.settings.heroIntervalSeconds*1000L);selected=Presentation.next(selected,1,candidates.size,true)
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val viewport=maxHeight
+        LazyColumn(state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
             if(embySources.isEmpty()) item {
-                EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n也可以从 CloudDrive2 的文件开始。","添加媒体来源") { model.navigate(Route.Settings,root=true) }
+                Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n也可以从 CloudDrive2 的文件开始。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
-                item { Hero(hero,"WELCOME HOME · 为你继续",onPlay=onPlay) }
+                item(key="home-hero") {
+                    val darkPalette=remember(model.settings.accentIndex) {palette(model.settings.copy(darkTheme=true))}
+                    CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
+                        Box(Modifier.fillMaxWidth().height(viewport).onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
+                            CinemaBackdrop(hero)
+                            Row(Modifier.fillMaxSize().padding(start=30.dp,end=30.dp,top=92.dp,bottom=28.dp),
+                                horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.Bottom) {
+                                Column(Modifier.weight(.40f),verticalArrangement=Arrangement.spacedBy(13.dp)) {
+                                    Text(if(model.settings.heroMode=="resume") "为你继续" else "首映推荐",color=SunnyColors.Accent,fontSize=11.sp)
+                                    if(hero!=null) {
+                                        MediaTitle(hero,40.sp)
+                                        Text(hero.subtitle,color=SunnyColors.Secondary,fontSize=12.sp)
+                                        Text(hero.overview.ifBlank {"来自你的媒体库"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,maxLines=3,overflow=TextOverflow.Ellipsis)
+                                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                            if(hero.isPlayable) Action(if(hero.positionMs>0) "▶  继续播放" else "▶  立即播放",id="home-play",primary=true) {onPlay(hero,false)}
+                                            else Action("查看详情",id="home-play",primary=true) {model.navigate(Route.Detail(hero))}
+                                            Action(if(paused) "自动轮播" else "暂停轮播",id="home-pause") {paused=!paused}
+                                        }
+                                    } else Text(if(model.settings.heroMode=="resume") "暂无继续观看记录" else "暂无推荐",color=SunnyColors.Text,fontSize=30.sp)
+                                    if(resume.isNotEmpty()) {
+                                        Text("继续播放",color=SunnyColors.Secondary,fontSize=10.sp,modifier=Modifier.padding(top=10.dp))
+                                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                            resume.take(2).forEach {entry ->
+                                                FocusTile("quick-resume:${entry.key}",Modifier.weight(1f),shape=androidx.compose.foundation.shape.RoundedCornerShape(28.dp),onClick={onPlay(entry,false)}) {
+                                                    Row(Modifier.fillMaxWidth().cinemaGlass().padding(8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                                        ArtworkView(entry,entry.primary,Modifier.size(30.dp),100)
+                                                        Column(Modifier.weight(1f)) {Text(entry.title,color=SunnyColors.Text,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                                            Text("剩余 ${MediaLogic.remainingMinutes(entry.positionMs,entry.durationMs)} 分钟",color=SunnyColors.Secondary,fontSize=8.sp)
+                                                            Box(Modifier.fillMaxWidth().padding(top=4.dp).height(2.dp).background(Color.White.copy(.15f))) {
+                                                                Box(Modifier.fillMaxWidth(MediaLogic.progress(entry.positionMs,entry.durationMs)).height(2.dp).background(SunnyColors.Accent))
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Column(Modifier.weight(.60f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                                    Text("最新影视",color=SunnyColors.Text,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                                    AccordionCards(candidates,selected,{selected=it},hero=true,id="home-carousel")
+                                }
+                            }
+                        }
+                    }
+                }
                 item {
+                    Column(Modifier.padding(horizontal=30.dp)) {
                     SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp)) {
                         items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
                     }
-                }
-                if(model.settings.showResume) item { MediaShelf("继续观看",resume,true,onClick={model.navigate(Route.Detail(it))}) }
-                if(model.settings.showNextUp) item { MediaShelf("接着看下一集",feeds.flatMap { it.nextUp },true,onClick={model.navigate(Route.Detail(it))}) }
-                embySources.forEach { source ->
-                    item(key="latest:${source.id}") {
-                        MediaShelf(if(embySources.size>1) "${source.name} · 最新入库" else "最新入库",
-                            model.feeds[source.id]?.latest ?: emptyList(),onClick={model.navigate(Route.Detail(it))})
                     }
+                }
+                if(model.settings.showNextUp) item { Box(Modifier.padding(horizontal=30.dp)) {MediaShelf("接着看下一集",feeds.flatMap { it.nextUp },true,onClick={model.navigate(Route.Detail(it))})} }
+                items(feeds.flatMap {it.libraries}.distinctBy {it.key},key={"library-latest:${it.key}"}) {library ->
+                    Box(Modifier.padding(horizontal=30.dp)) {LibraryLatestRow(library)}
+                }
+                embySources.forEach { source ->
                     model.errors["feed:${source.id}"]?.let { error -> item { EmptyState(source.name,error,"重试") {model.refresh()} } }
                     model.feeds[source.id]?.warnings?.forEach { warning -> item {Text(warning,color=SunnyColors.Secondary,fontSize=12.sp)} }
                 }
@@ -101,75 +170,65 @@ import kotlinx.coroutines.delay
     val model=LocalAppModel.current; val page=model.pages[library.key]
     var candidate by remember(library.key) {mutableStateOf<MediaEntry?>(null)}
     var displayed by remember(library.key) {mutableStateOf<MediaEntry?>(null)}
-    var grid by rememberSaveable(library.key) {mutableStateOf(false)}
+    var folderMode by rememberSaveable(library.key) {mutableStateOf(false)}
     var sort by rememberSaveable(library.key) {mutableStateOf("DateCreated")}
+    var ascending by rememberSaveable(library.key) {mutableStateOf(false)}
+    var chooser by remember {mutableStateOf("")}
     LaunchedEffect(candidate) {delay(240); displayed=candidate}
     val hero=displayed ?: page?.items?.firstOrNull()
-    val listState=rememberLazyListState()
-    BackHandler(enabled=grid) {grid=false;model.focusMemory[model.route.key()]="hero:${hero?.key}"}
+    val gridState=rememberLazyGridState()
+    val mode=model.settings.artworkMode
+    LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
     Box(Modifier.fillMaxSize()) {
         Backdrop(hero ?: library)
-        if(!grid) {
-            LazyColumn(state=listState,contentPadding=PaddingValues(start=40.dp,end=40.dp,bottom=40.dp)) {
-                item {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}
-                item {
-                    SectionTitle("${library.title} · 全部内容", "海报墙  ›") {model.focusMemory[model.route.key()]="grid:${page?.items?.firstOrNull()?.key}";grid=true}
-                    Text("${page?.total ?: 0} 个条目  ·  沿用服务端元数据",color=SunnyColors.Secondary,fontSize=12.sp)
-                }
-                if(model.settings.showResume) item {MediaShelf("继续观看",model.libraryResume[library.key] ?: emptyList(),true,onClick={model.navigate(Route.Detail(it))})}
-                item {MediaShelf("最新入库",page?.items ?: emptyList(),onClick={model.navigate(Route.Detail(it))})}
-                model.errors["library:${library.key}"]?.let {e -> item {EmptyState("媒体库暂不可用",e,"重新加载") {model.loadLibrary(library)}}}
-            }
-        } else {
-            Column(Modifier.fillMaxSize().padding(horizontal=40.dp)) {
-                Row(Modifier.fillMaxWidth().padding(vertical=16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(library.title,color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                    Action(if(sort=="DateCreated") "排序：最新入库" else "排序：名称") {
-                        sort=if(sort=="DateCreated") "SortName" else "DateCreated"; model.loadLibrary(library,sort)
-                    }
-                    Action("沉浸首页") {grid=false}
-                }
-                LazyVerticalGrid(columns=GridCells.Adaptive(132.dp),horizontalArrangement=Arrangement.spacedBy(17.dp),
-                    verticalArrangement=Arrangement.spacedBy(22.dp),contentPadding=PaddingValues(4.dp)) {
-                    items(page?.items ?: emptyList(),key={it.key}) {entry -> MediaCard(entry,onClick={model.navigate(Route.Detail(entry))},focusId="grid:${entry.key}")}
-                    if(page!=null && page.items.size<page.total) item(span={GridItemSpan(maxLineSpan)}) {
-                        Action("加载更多 · ${page.items.size}/${page.total}") {model.loadLibrary(library,sort,true)}
+        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(mode=="Poster") 132.dp else 230.dp),
+            horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
+            contentPadding=PaddingValues(start=30.dp,end=30.dp,bottom=40.dp)) {
+            item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}
+            item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
+                Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
+                    LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
+                        item {Action("排序：${Presentation.sorts.firstOrNull {it.first==sort}?.second}") {chooser="sort"}}
+                        item {Action(if(ascending) "↑ 升序" else "↓ 降序") {ascending=!ascending;model.loadLibrary(library,sort,ascending=ascending)}}
+                        item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
+                        item {Action("视图：$mode") {chooser="view"}}
+                        item {Action(if(folderMode) "✓ 按文件夹" else "按文件夹") {folderMode=!folderMode}}
                     }
                 }
             }
+            if(folderMode) {
+                val folders=model.folderPages[library.key]
+                items(folders?.items ?: emptyList(),key={"folder:${it.key}"},span={GridItemSpan(maxLineSpan)}) {folder->LibraryLatestRow(folder,true)}
+                if(folders!=null && folders.items.size<folders.total) item(span={GridItemSpan(maxLineSpan)}) {
+                    Action("更多文件夹") {model.loadLibraryFolders(library,true)}
+                }
+                if(folders?.items?.isEmpty()==true) item(span={GridItemSpan(maxLineSpan)}) {Text("此目录没有可浏览的子文件夹",color=SunnyColors.Secondary)}
+                model.errors["folders:${library.key}"]?.let {error->item(span={GridItemSpan(maxLineSpan)}) {EmptyState("目录读取失败",error,"重试") {model.loadLibraryFolders(library)}}}
+            } else {
+                items(page?.items ?: emptyList(),key={it.key}) {entry->
+                    PosterWallCard(entry,mode) {model.navigate(Route.Detail(entry))}
+                }
+                if(page!=null && page.items.size<page.total) item(span={GridItemSpan(maxLineSpan)}) {
+                    Action("加载更多 · ${page.items.size}/${page.total}") {model.loadLibrary(library,sort,true,ascending)}
+                }
+            }
+            model.errors["library:${library.key}"]?.let {error->item(span={GridItemSpan(maxLineSpan)}) {EmptyState("读取失败",error,"重试") {model.loadLibrary(library,sort,ascending=ascending)}}}
         }
+    }
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"默认字幕";else->"展现方式"},
+        when(chooser) {"sort"->Presentation.sorts;"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
+            else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
+        when(chooser) {"sort"->sort;"subtitle"->model.settings.subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
+        when(chooser) {"sort"->{sort=value;ascending=value=="SortName";model.loadLibrary(library,sort,ascending=ascending)}
+            "subtitle"->model.saveSettings(model.settings.copy(subtitlePreference=value))
+            else->model.saveSettings(model.settings.copy(artworkMode=value))}
+        chooser=""
     }
 }
 
 @Composable fun DetailScreen(initial:MediaEntry,onPlay:(MediaEntry,Boolean)->Unit) {
-    val model=LocalAppModel.current
-    val item=model.details[initial.key] ?: initial
-    val children=model.children[item.key] ?: emptyList()
-    Box(Modifier.fillMaxSize()) {
-        Backdrop(item)
-        LazyColumn(contentPadding=PaddingValues(start=40.dp,end=40.dp,bottom=40.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(top=25.dp),horizontalArrangement=Arrangement.spacedBy(30.dp)) {
-                    ArtworkView(item,item.primary,Modifier.width(165.dp).aspectRatio(2f/3),500)
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                        MediaTitle(item,38.sp)
-                        Text(item.subtitle + if(item.rating>0) "    ★ %.1f".format(item.rating) else "",color=SunnyColors.Accent,fontSize=14.sp)
-                        Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp,maxLines=6,overflow=TextOverflow.Ellipsis)
-                        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            if(item.isPlayable) {
-                                Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}
-                                if(item.positionMs>0) Action("从头播放") {onPlay(item,true)}
-                            }
-                            Action(if(item.favorite) "♥  已收藏" else "♡  收藏",autoFocus=!item.isPlayable) {model.favorite(item)}
-                            Action("返回") {model.back()}
-                        }
-                    }
-                }
-            }
-            if(children.isNotEmpty()) item {MediaShelf(if(item.type=="Series") "选择季" else "剧集",children,item.type=="Season",onClick={model.navigate(Route.Detail(it))})}
-            model.errors["detail:${item.key}"]?.let {e -> item {EmptyState("详情暂不可用",e,"重试") {model.loadDetail(item)}}}
-        }
-    }
+    MediaDetailContent(initial,onPlay)
 }
 
 @Composable fun CloudScreen(onPlay:(MediaEntry,Boolean)->Unit) {

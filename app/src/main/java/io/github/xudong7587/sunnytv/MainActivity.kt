@@ -14,6 +14,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -34,13 +42,24 @@ class MainActivity: ComponentActivity() {
         }
         setContent {
             CompositionLocalProvider(LocalAppModel provides model) {
-                SunnyTheme { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
+                SunnyTheme(model.settings) { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
                     startActivity(PlayerActivity.intent(this,request))
                 } }) }
             }
         }
     }
     override fun onRestart() { super.onRestart(); model.afterPlayback() }
+    override fun onResume() {
+        super.onResume()
+        window.decorView.post {
+            val screen=window.decorView.display ?: return@post
+            val current=screen.mode
+            val fastest=screen.supportedModes.filter {it.physicalWidth==current.physicalWidth && it.physicalHeight==current.physicalHeight}
+                .maxByOrNull {it.refreshRate} ?: current
+            // A window preference within advertised modes, never a global display override.
+            window.attributes=window.attributes.apply {preferredRefreshRate=fastest.refreshRate}
+        }
+    }
 }
 
 @Composable private fun SunnyRoot(onPlay:(MediaEntry,Boolean)->Unit) {
@@ -49,9 +68,7 @@ class MainActivity: ComponentActivity() {
     BackHandler(enabled=route!=Route.Home || model.busy) { model.back() }
     CompositionLocalProvider(LocalPageKey provides route.key()) {
         Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
-            Column {
-                TopNav()
-                Box(Modifier.weight(1f)) {
+            Box(Modifier.fillMaxSize().padding(top=if(route==Route.Home || route is Route.Detail) 0.dp else 72.dp)) {
                     stateHolder.SaveableStateProvider(route.key()) {
                         when(route) {
                             Route.Home -> HomeScreen(onPlay)
@@ -64,8 +81,8 @@ class MainActivity: ComponentActivity() {
                             Route.Search -> SearchScreen(onPlay)
                         }
                     }
-                }
             }
+            TopNav()
             if(model.busy) Text("正在连接媒体…  返回可取消",color=SunnyColors.Accent,fontSize=14.sp,
                 modifier=Modifier.align(Alignment.BottomCenter).padding(18.dp).background(SunnyColors.Surface).padding(15.dp))
             if(model.message.isNotEmpty()) MessageDialog(model.message) { model.message="" }
@@ -80,24 +97,28 @@ class MainActivity: ComponentActivity() {
         is Route.Folder -> Route.Cloud
         else -> model.route
     }
-    Row(Modifier.fillMaxWidth().height(78.dp).background(SunnyColors.Background).padding(horizontal=40.dp),
+    Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal=28.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Row(verticalAlignment=Alignment.CenterVertically) {
-            Text("S",color=SunnyColors.Accent,fontSize=28.sp,fontWeight=FontWeight.Black)
-            Text("  SunnyTV",color=SunnyColors.Text,fontSize=22.sp,fontWeight=FontWeight.Bold)
+        Row(Modifier.cinemaGlass().padding(horizontal=14.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text("S",color=SunnyColors.Accent,fontSize=21.sp,fontWeight=FontWeight.Black)
+            Text("  SunnyTV",color=SunnyColors.Text,fontSize=16.sp,fontWeight=FontWeight.Bold)
         }
-        Row(Modifier.clip(RoundedCornerShape(50.dp))
-            .background(SunnyColors.Surface.copy(alpha=.78f))
-            .border(1.dp,SunnyColors.Border.copy(alpha=.65f),RoundedCornerShape(50.dp))
-            .padding(5.dp).focusGroup(),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.cinemaGlass().padding(4.dp).focusGroup(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"云盘" to Route.Cloud,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
-                FocusTile("nav:$label",active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),
+                FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),
                     onClick={model.navigate(target,root=true)}) { focused ->
-                    Text(label,color=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary,
-                        fontSize=14.sp,fontWeight=FontWeight.Medium,modifier=Modifier.padding(horizontal=16.dp,vertical=11.dp))
+                    Row(Modifier.padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                        val ink=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary
+                        LineIcon(actionIcon(label),ink)
+                        val ms=if(model.settings.reduceMotion) 0 else 160
+                        AnimatedVisibility(activeRoot==target || focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),
+                            exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
+                            Text(label,color=ink,fontSize=12.sp,fontWeight=FontWeight.Medium,modifier=Modifier.padding(start=7.dp))
+                        }
+                    }
                 }
             }
         }
-        Text("PRIVATE CINEMA",color=SunnyColors.Secondary,fontSize=9.sp,letterSpacing=1.2.sp)
+        Spacer(Modifier.width(100.dp))
     }
 }

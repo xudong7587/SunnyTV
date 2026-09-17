@@ -21,6 +21,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.*
 import androidx.lifecycle.lifecycleScope
@@ -41,6 +42,8 @@ import io.github.xudong7587.sunnytv.core.playback.PlaybackReporter
 import io.github.xudong7587.sunnytv.core.playback.StartupTiming
 import okhttp3.Interceptor
 import java.util.concurrent.atomic.AtomicLong
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerActivity: ComponentActivity() {
@@ -67,6 +70,7 @@ class PlayerActivity: ComponentActivity() {
     private var reporter: PlaybackReporter? = null
     private var resumePlayWhenReady = true
     private var reportFailures by mutableIntStateOf(0)
+    private var selectionNotice by mutableStateOf("")
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +91,7 @@ class PlayerActivity: ComponentActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {panel.isNotBlank()->panel=""; controls->controls=false; else->finish()}
         }
-        setContent {SunnyTheme {PlayerContent()}}
+        setContent {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}
     }
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) createPlayer()}
     override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);super.onSaveInstanceState(outState)}
@@ -126,6 +130,12 @@ class PlayerActivity: ComponentActivity() {
         p.setAudioAttributes(AudioAttributes.DEFAULT,true)
         p.setHandleAudioBecomingNoisy(true)
         player=p
+        selectionNotice=""
+        var audioPreferenceApplied=false
+        var subtitlePreferenceApplied=false
+        p.trackSelectionParameters=p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT,request.subtitlePreference!="default")
+            .build()
         val media=androidx.media3.common.MediaItem.Builder().setUri(request.stableUrl)
             .setMediaId(request.localKey.ifBlank {"session"})
             .setMediaMetadata(MediaMetadata.Builder().setTitle(request.title).build())
@@ -135,6 +145,35 @@ class PlayerActivity: ComponentActivity() {
                 .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).build()
         })
         p.addListener(object:Player.Listener {
+            override fun onTracksChanged(tracks:Tracks) {
+                fun choose(type:Int,title:String,language:String):Boolean {
+                    val options=tracks.groups.filter {it.type==type}.flatMap {group->
+                        (0 until group.length).filter {group.isTrackSupported(it)}.map {group to it}
+                    }
+                    if(options.isEmpty()) return false
+                    val match=options.firstOrNull {(g,i)->title.isNotBlank() && g.getTrackFormat(i).label.equals(title,true)}
+                        ?: options.firstOrNull {(g,i)->
+                            val f=g.getTrackFormat(i)
+                            if(type==C.TRACK_TYPE_TEXT) Presentation.languageMatches(language,f.language.orEmpty(),f.label.orEmpty()) ||
+                                (language !in setOf("zh-Hans","zh","en") && language.isNotBlank() && f.language.equals(language,true))
+                            else language.isNotBlank() && f.language.equals(language,true)
+                        }
+                    if(match!=null) {
+                        p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,false)
+                            .setOverrideForType(TrackSelectionOverride(match.first.mediaTrackGroup,match.second)).build()
+                    } else {
+                        if(type==C.TRACK_TYPE_TEXT) p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()
+                        selectionNotice=if(type==C.TRACK_TYPE_TEXT) "未找到所选字幕，可在字幕面板重新选择" else "未找到所选音轨，已使用默认音轨"
+                    }
+                    return true
+                }
+                if(!audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
+                    audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
+                }
+                if(!subtitlePreferenceApplied && request.subtitlePreference !in setOf("default","none")) {
+                    subtitlePreferenceApplied=choose(C.TRACK_TYPE_TEXT,request.subtitleTitle,request.subtitlePreference)
+                }
+            }
             override fun onIsPlayingChanged(isPlaying:Boolean) {
                 playing=isPlaying
                 if(rendered) reporter?.progress(p.currentPosition, !isPlaying)
@@ -231,6 +270,7 @@ class PlayerActivity: ComponentActivity() {
             if(settings.diagnostics) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3 · 恢复或重试仅统计本次引擎，未取得的指标显示 —",
                 color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopStart).padding(25.dp).background(Color.Black.copy(.7f)).padding(12.dp))
             if(controls && panel.isBlank()) {
+                Box(Modifier.align(Alignment.TopStart).padding(start=36.dp,top=26.dp).width(250.dp).height(70.dp)) {PlayerMediaTitle()}
                 LaunchedEffect(controls,playing,panel,error) {
                     if(playing && panel.isEmpty() && error.isEmpty()) {delay(6000);controls=false}
                 }
@@ -238,6 +278,7 @@ class PlayerActivity: ComponentActivity() {
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.95f))))
                     .padding(start=40.dp,end=40.dp,top=45.dp,bottom=27.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                     Text(request.title,color=SunnyColors.Text,fontSize=25.sp,fontWeight=FontWeight.Bold)
+                    if(selectionNotice.isNotBlank()) Text(selectionNotice,color=SunnyColors.Secondary,fontSize=12.sp)
                     Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(.22f))) {
                         Box(Modifier.fillMaxWidth(MediaLogic.progress(position,duration)).fillMaxHeight().background(SunnyColors.Accent))
                     }
@@ -260,6 +301,22 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
             if(panel.isNotBlank()) TrackPanel()
+        }
+    }
+    @Composable private fun PlayerMediaTitle() {
+        val logo=request.mediaLogo
+        val source by produceState<SourceConfig?>(null,request.sourceId) {
+            value=withContext(Dispatchers.IO) {runCatching {app.store.sources().firstOrNull {it.id==request.sourceId}}.getOrNull()}
+        }
+        var failed by remember(logo) {mutableStateOf(false)}
+        var loaded by remember(logo) {mutableStateOf(false)}
+        if(!loaded || failed || logo==null || source==null) Text(request.title,color=SunnyColors.Text,fontSize=22.sp,maxLines=2)
+        val config=source
+        if(logo!=null && config!=null && !failed) {
+            val image=remember(logo,config.id) {ImageRequest.Builder(this).data(app.emby(config).imageUrl(logo,720))
+                .size(720,240).crossfade(false).build()}
+            AsyncImage(image,contentDescription=request.title,imageLoader=app.images(config),contentScale=ContentScale.Fit,
+                alignment=Alignment.CenterStart,modifier=Modifier.fillMaxSize(),onSuccess={loaded=true},onError={failed=true})
         }
     }
     @Composable private fun TrackPanel() {

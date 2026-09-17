@@ -2,6 +2,11 @@ package io.github.xudong7587.sunnytv.feature.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -10,13 +15,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -36,21 +46,31 @@ import kotlinx.coroutines.delay
             delay(45); runCatching { requester.requestFocus() }
         }
     }
-    Box(modifier.graphicsLayer { scaleX=scale; scaleY=scale }
+    Box(modifier.testTag(id).graphicsLayer { scaleX=scale; scaleY=scale }
         .focusRequester(requester).onFocusChanged {
             focused=it.isFocused
             if(it.isFocused) { model.focusMemory[page]=id; onFocus() }
-        }.clip(shape)
-        .background(if(focused || active) SunnyColors.SurfaceRaised else SunnyColors.Surface.copy(alpha=0.7f))
+        }.shadow(if(focused) 10.dp else 4.dp,shape,clip=false).clip(shape)
+        .background(Brush.verticalGradient(listOf(
+            if(focused || active) SunnyColors.SurfaceRaised.copy(.94f) else SunnyColors.SurfaceRaised.copy(.72f),
+            SunnyColors.Surface.copy(.70f))))
         .border(if(focused) 2.dp else 1.dp, if(focused) SunnyColors.Accent else if(active) SunnyColors.Border else Color.White.copy(alpha=.07f),shape)
         .clickable(onClick=onClick), contentAlignment=Alignment.Center) { content(focused) }
 }
 
 @Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,onClick:()->Unit) {
-    FocusTile(id=id,autoFocus=autoFocus,onClick=onClick) { focused ->
-        Box(Modifier.background(if(primary) SunnyColors.Accent else Color.Transparent).padding(horizontal=19.dp,vertical=12.dp)) {
-            Text(text,color=if(primary) SunnyColors.Background else if(focused) SunnyColors.Accent else SunnyColors.Text,
-                fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+    val model=LocalAppModel.current
+    FocusTile(id=id,modifier=Modifier.semantics {contentDescription=text},autoFocus=autoFocus,
+        shape=RoundedCornerShape(28.dp),onClick=onClick) { focused ->
+        val ink=if(primary) SunnyColors.AccentInk else if(focused) SunnyColors.Accent else SunnyColors.Text
+        Row(Modifier.background(if(primary) SunnyColors.Accent else Color.Transparent).padding(horizontal=13.dp,vertical=11.dp),
+            verticalAlignment=Alignment.CenterVertically) {
+            LineIcon(actionIcon(text),ink)
+            val ms=if(model.settings.reduceMotion) 0 else 160
+            AnimatedVisibility(focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
+                Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
+                    modifier=Modifier.padding(start=8.dp),maxLines=1)
+            }
         }
     }
 }
@@ -65,7 +85,9 @@ import kotlinx.coroutines.delay
     Box(modifier.background(SunnyColors.Surface),contentAlignment=Alignment.Center) {
         if(art!=null && source?.kind==SourceKind.EMBY) {
             val service=remember(source) { model.app.emby(source) }
-            val actualWidth=if(model.settings.highQualityArtwork) widthPx*2 else widthPx
+            val view=LocalView.current
+            val actualWidth=(if(model.settings.highQualityArtwork) widthPx*2 else widthPx)
+                .coerceAtMost(maxOf(view.width,view.height,1280)).coerceAtLeast(64)
             val context=LocalContext.current
             val request=remember(art,actualWidth,source.id) {
                 ImageRequest.Builder(context).data(service.imageUrl(art,actualWidth))

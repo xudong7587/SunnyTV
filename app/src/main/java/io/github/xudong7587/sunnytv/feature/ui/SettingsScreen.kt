@@ -66,6 +66,7 @@ import kotlinx.coroutines.*
     var category by rememberSaveable {mutableStateOf("媒体来源")}
     var adding by remember {mutableStateOf<SourceKind?>(null)}
     var removing by remember {mutableStateOf<SourceConfig?>(null)}
+    var chooser by remember {mutableStateOf("")}
     Row(Modifier.fillMaxSize().padding(start=40.dp,end=40.dp,top=12.dp),horizontalArrangement=Arrangement.spacedBy(28.dp)) {
         Column(Modifier.width(165.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))
@@ -90,6 +91,40 @@ import kotlinx.coroutines.*
                     item {Action("重置损坏的来源配置") {resetConfirm=true}}
                 }
                 "首页与外观" -> {
+                    item {ToggleRow("深色主题","浅色与重点色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
+                    item {SectionTitle("重点色", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
+                    Presentation.accents.chunked(5).forEachIndexed { row, pairs -> item {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            pairs.forEachIndexed { col, pair ->
+                                val index=row*5+col
+                                FocusTile("accent:$index",Modifier.weight(1f),active=model.settings.accentIndex==index,
+                                    onClick={model.saveSettings(model.settings.copy(accentIndex=index))}) {
+                                    Column(Modifier.padding(9.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                        Row { Box(Modifier.weight(1f).height(22.dp).background(androidx.compose.ui.graphics.Color(pair.second)))
+                                            Box(Modifier.weight(1f).height(22.dp).background(androidx.compose.ui.graphics.Color(pair.third))) }
+                                        Text((if(model.settings.accentIndex==index) "✓ " else "")+pair.first,color=SunnyColors.Text,fontSize=11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    } }
+                    item {Action("展现方式：${model.settings.artworkMode}") {chooser="artwork"}}
+                    item {Action("首页轮播：${when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"}}") {chooser="hero"}}
+                    item {Action("自动切换：${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
+                    item {ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
+                        model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
+                    }}
+                    if(!model.settings.heroAllLibraries) {
+                        val libraries=model.feeds.values.flatMap {it.libraries}
+                        if(libraries.isEmpty()) item {Text("添加 Emby 来源后可选择媒体库",color=SunnyColors.Secondary,fontSize=13.sp)}
+                        libraries.forEach {library->item(key="hero-library:${library.key}") {
+                            val chosen=library.key in model.settings.heroLibraryKeys
+                            ToggleRow(library.title,model.sources.firstOrNull {it.id==library.sourceId}?.name.orEmpty(),chosen) {
+                                model.saveSettings(model.settings.copy(heroLibraryKeys=if(chosen) model.settings.heroLibraryKeys-library.key else model.settings.heroLibraryKeys+library.key))
+                            }
+                        }}
+                        if(model.settings.heroLibraryKeys.isEmpty()) item {Text("尚未选择媒体库；首页将显示空态，不会扩大到全部库。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
                     item {ToggleRow("减少动画","关闭焦点缩放，保留即时描边",model.settings.reduceMotion) {model.saveSettings(model.settings.copy(reduceMotion=!model.settings.reduceMotion))}}
@@ -98,6 +133,7 @@ import kotlinx.coroutines.*
                     item {Action("清理海报缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="海报缓存已清理"}}}
                 }
                 "播放" -> {
+                    item {Action("默认字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "跟随媒体默认"}") {chooser="subtitle"}}
                     item {Field("直接播放测试 · HTTP 媒体或 MediaIndex /api/play 入口",directUrl,{directUrl=it})}
                     item {Action("打开媒体地址") {try {HttpPolicy.validate(directUrl.trim());context.startActivity(PlayerActivity.intent(context,PlaybackRequest("",directUrl.trim(),"手动媒体地址",requestedAtMs=SystemClock.elapsedRealtime(),sourceReadyAtMs=SystemClock.elapsedRealtime())))} catch(_: Exception) {model.message="地址无效，仅支持完整 HTTP / HTTPS 媒体地址"}}}
                     item {Text("Media3 · 原画直放优先\n首版不自动申请服务端转码；不能解码时明确提示。\n左右方向键快进/快退；音轨与字幕在播放面板中选择。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
@@ -105,6 +141,7 @@ import kotlinx.coroutines.*
                     item {Text("HDR、杜比视界、音频直通、字幕延迟和自动跨季续播需要后续真机验证；未提供假开关。",color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=22.sp)}
                 }
                 "设备与诊断" -> {
+                    item {DisplayDiagnostics()}
                     item {ToggleRow("显示播放诊断","首帧耗时以真实渲染事件记录；不是 prepare() 耗时",model.settings.diagnostics) {model.saveSettings(model.settings.copy(diagnostics=!model.settings.diagnostics))}}
                     item {Text("设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\nABI：${Build.SUPPORTED_ABIS.joinToString()}\n应用：${BuildConfig.VERSION_NAME}\n网络日志不包含 Token、Cookie 或完整媒体地址。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=25.sp)}
                 }
@@ -114,6 +151,17 @@ import kotlinx.coroutines.*
                 }
             }
         }
+    }
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";else->"默认字幕"},
+        when(chooser) {"artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
+            "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
+            "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
+            else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
+        when(chooser) {"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();else->model.settings.subtitlePreference},
+        onDismiss={chooser=""}) {value ->
+        model.saveSettings(when(chooser) {"artwork"->model.settings.copy(artworkMode=value)
+            "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
+        chooser=""
     }
     if(resetConfirm) Dialog(onDismissRequest={resetConfirm=false}) {
         Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(16.dp)).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
