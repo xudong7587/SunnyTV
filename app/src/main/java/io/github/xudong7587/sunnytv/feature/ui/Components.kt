@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.graphics.*
@@ -38,9 +40,15 @@ import coil.request.ImageRequest
 import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.delay
 
+fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else drawWithCache {
+    val outline=shape.createOutline(size,layoutDirection,this)
+    val offset=2.dp.toPx()
+    onDrawBehind {translate(offset,offset) {drawOutline(outline,Color(0x26333333))}}
+}
+
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
-    shape:Shape=RoundedCornerShape(12.dp), restoreFocus:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
+    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
     val pageActive=LocalPageActive.current
@@ -55,39 +63,41 @@ import kotlinx.coroutines.delay
     val motion=LocalMotion.current
     val selected=focused || active
     val base=LocalSunnyPalette.current
-    val fill by animateColorAsState(if(selected) base.focusBackground else base.raised.copy(.72f),motion.fade(240),label="focus-fill")
-    val bottom by animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(.70f),motion.fade(240),label="focus-gradient")
-    val elevation by animateDpAsState(if(focused) 7.dp else 0.dp,motion.spring(),label="focus-elevation")
-    val ink by animateColorAsState(if(selected) base.focusContent else base.text,motion.fade(200),label="focus-ink")
-    val secondary by animateColorAsState(if(selected) base.focusContent.copy(.88f) else base.secondary,motion.fade(200),label="focus-secondary")
-    val accent by animateColorAsState(if(selected) base.focusContent else base.accent,motion.fade(200),label="focus-accent")
-    val sheen by animateFloatAsState(if(focused) 1f else 0f,motion.fade(240),label="focus-sheen")
-    val contentPalette=base.copy(text=ink,secondary=secondary,accent=accent)
+    // Read transition values only during draw; media and text stay out of per-frame recomposition.
+    val fill=animateColorAsState(if(selected) base.focusBackground else base.raised.copy(.72f),motion.fade(240),label="focus-fill")
+    val bottom=animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(.70f),motion.fade(240),label="focus-gradient")
+    val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
+    val outline=if(model.settings.darkTheme) base.focusContent else base.focusBackground
+    val showShadow=model.settings.shadowsEnabled && (!model.settings.darkTheme || button) && focused
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45); runCatching { requester.requestFocus() }
         }
     }
-    Box(modifier.testTag(id).shadow(elevation,shape,clip=false)
+    Box(modifier.testTag(id).flatShadow(shape,showShadow)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
             if(it.isFocused && pageActive) { model.focusMemory[page]=id; onFocus() }
         }.clip(shape)
-        .background(Brush.verticalGradient(listOf(fill,bottom)))
-        .border(.75.dp,if(selected) Color.White.copy(.10f) else Color.White.copy(.07f),shape)
+        .drawWithCache {
+            val edge=shape.createOutline(size,layoutDirection,this)
+            onDrawWithContent {
+                drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
+                drawContent()
+                if(focused && focusOutline) drawOutline(edge,outline,style=Stroke(2.dp.toPx()))
+            }
+        }
         .onPreviewKeyEvent {event->event.type==KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount>0 &&
             event.key in listOf(Key.Enter,Key.NumPadEnter,Key.DirectionCenter)}
         .clickable(enabled=pageActive,onClick=onClick), contentAlignment=Alignment.Center) {
         CompositionLocalProvider(LocalSunnyPalette provides contentPalette) {content(focused)}
-        if(sheen>0f) Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
-            Color.White.copy(alpha=.055f*sheen),Color.Transparent,base.focusBackground.copy(alpha=.08f*sheen)))))
     }
 }
 
 @Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),modifier:Modifier=Modifier,onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
-        shape=RoundedCornerShape(28.dp),onClick=onClick) { focused ->
+        shape=RoundedCornerShape(28.dp),button=true,onClick=onClick) { focused ->
         val ink=if(primary || focused) SunnyColors.Accent else SunnyColors.Text
         Row(Modifier.height(48.dp).widthIn(min=48.dp)
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {

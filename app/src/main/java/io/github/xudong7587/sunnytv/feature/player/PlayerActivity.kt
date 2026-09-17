@@ -42,6 +42,7 @@ import io.github.xudong7587.sunnytv.feature.ui.*
 import kotlinx.coroutines.*
 import io.github.xudong7587.sunnytv.core.playback.PlaybackReporter
 import io.github.xudong7587.sunnytv.core.playback.StartupTiming
+import io.github.xudong7587.sunnytv.core.playback.PlaybackFailure
 import okhttp3.Interceptor
 import java.util.concurrent.atomic.AtomicLong
 import coil.compose.AsyncImage
@@ -211,13 +212,8 @@ class PlayerActivity: ComponentActivity() {
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
             }
             override fun onPlayerError(e:PlaybackException) {
-                error=when(e.errorCode) {
-                    PlaybackException.ERROR_CODE_DECODING_FAILED,PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-                    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "电视当前解码器无法播放此媒体。首版不会自动转码或切换高负载软解。"
-                    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "媒体服务返回错误状态。请检查 Emby/CD2 权限或 MediaIndex 令牌。"
-                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "媒体连接失败或超时，请检查网络。"
-                    else->"播放失败（错误码 ${e.errorCode}），请使用另一份样本检查兼容性。"
-                }
+                error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint)
+                app.store.savePlaybackDiagnostic(error)
                 controls=true
             }
         })
@@ -365,16 +361,16 @@ class PlayerActivity: ComponentActivity() {
                         Box(Modifier.fillMaxWidth(MediaLogic.progress(position,duration)).fillMaxHeight().background(SunnyColors.Accent))
                     }
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        PlayerButton(if(playing) "暂停" else "播放",true) {player?.let {if(it.isPlaying) it.pause() else it.play()}}
-                        PlayerButton("−${settings.seekStepSeconds}秒") {seek(-settings.seekStepSeconds*1000L)}
-                        PlayerButton("+${settings.seekStepSeconds}秒") {seek(settings.seekStepSeconds*1000L)}
+                        PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
+                        PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=true) {player?.let {if(it.isPlaying) it.pause() else it.play()}}
+                        PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
                         Text("${clock(position)} / ${clock(duration)}",color=SunnyColors.Secondary,fontSize=13.sp,modifier=Modifier.weight(1f))
-                        PlayerButton("音轨") {panel="audio"}
-                        PlayerButton("字幕") {panel="subtitles"}
-                        PlayerButton("画面") {resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}}
-                        PlayerButton("退出") {finish()}
+                        PlayerControl("音轨","audio") {panel="audio"}
+                        PlayerControl("字幕","subtitle") {panel="subtitles"}
+                        PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}}
+                        PlayerControl("退出播放","close") {finish()}
                     }
-                    if(error.isNotBlank() && !retryUsed) PlayerButton("重试此播放入口一次") {
+                    if(error.isNotBlank() && !retryUsed) PlayerControl("重试此播放入口一次","repeat") {
                         retryUsed=true;lastPosition=player?.currentPosition ?: lastPosition
                         player?.release();player=null;progressJob?.cancel()
                         reporter?.close(lastPosition, rendered)
@@ -407,8 +403,8 @@ class PlayerActivity: ComponentActivity() {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(.5f)),contentAlignment=Alignment.CenterEnd) {
             LazyColumn(Modifier.width(360.dp).fillMaxHeight().background(SunnyColors.Surface).padding(25.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {Text(if(type==C.TRACK_TYPE_AUDIO) "选择音轨" else "选择字幕",color=SunnyColors.Text,fontSize=24.sp,fontWeight=FontWeight.Bold)}
-                item {PlayerButton("关闭面板",true) {panel=""}}
-                if(type==C.TRACK_TYPE_TEXT) item {PlayerButton("关闭字幕") {
+                item {PlayerControl("关闭面板","close",initial=true) {panel=""}}
+                if(type==C.TRACK_TYPE_TEXT) item {PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                     subtitleManuallySelected=true
                     player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()};panel=""
                 }}
@@ -417,8 +413,8 @@ class PlayerActivity: ComponentActivity() {
                     for(i in 0 until group.length) {
                         val format=group.getTrackFormat(i)
                         if(group.isTrackSupported(i)) item {
-                            PlayerButton((if(group.isTrackSelected(i) && player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)!=true) "✓ " else "")+
-                                listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"}) {
+                            PlayerOption(listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"},
+                                selected=group.isTrackSelected(i) && player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)!=true) {
                                 if(type==C.TRACK_TYPE_TEXT) subtitleManuallySelected=true
                                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon()
                                     .setTrackTypeDisabled(type,false).setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,i)).build()}
@@ -428,15 +424,6 @@ class PlayerActivity: ComponentActivity() {
                     }
                 }
             }
-        }
-    }
-    @Composable private fun PlayerButton(text:String,initial:Boolean=false,onClick:()->Unit) {
-        val requester=remember {FocusRequester()};var focused by remember {mutableStateOf(false)}
-        LaunchedEffect(Unit) {if(initial) {delay(80);runCatching {requester.requestFocus()}}}
-        Box(Modifier.focusRequester(requester).onFocusChanged {focused=it.isFocused}
-            .background(if(focused) SunnyColors.Accent else SunnyColors.SurfaceRaised,RoundedCornerShape(9.dp))
-            .clickable(onClick=onClick).padding(horizontal=14.dp,vertical=11.dp)) {
-            Text(text,color=if(focused) SunnyColors.Background else SunnyColors.Text,fontSize=13.sp)
         }
     }
     companion object {

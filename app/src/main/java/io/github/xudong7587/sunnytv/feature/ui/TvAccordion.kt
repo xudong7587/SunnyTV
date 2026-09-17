@@ -23,11 +23,13 @@ import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.feature.Route
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /** One fixed-height viewport, no lazy-scroll correction and no focus scale.
  * All width weights share a transition, so growing + shrinking always equals one wide card.
  * At an edge the physical focus slot stays put and only its media changes.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable fun TvAccordionCards(entries:List<MediaEntry>,selected:Int,onSelect:(Int)->Unit,
     modifier:Modifier=Modifier,id:String,onMore:(()->Unit)?=null) {
     if(entries.isEmpty()) return
@@ -39,12 +41,14 @@ import kotlin.math.roundToInt
     var start by rememberSaveable(id) {mutableIntStateOf(0)}
     var direction by remember {mutableIntStateOf(1)}
     var pending by remember {mutableStateOf<Int?>(null)}
+    var rowFocused by remember {mutableStateOf(false)}
+    val returnOffset=remember {Animatable(0f)}
     val requesters=remember(entries.size) {List(entries.size) {FocusRequester()}}
     val moreFocus=remember {FocusRequester()}
     val selectedIndex=selected.coerceIn(0,entries.lastIndex+if(onMore!=null) 1 else 0)
     val expanded=selectedIndex.coerceAtMost(entries.lastIndex)
     val safeStart=start.coerceIn(0,expanded)
-    BoxWithConstraints(modifier.fillMaxWidth().height(181.dp).clipToBounds().testTag("$id:viewport").focusGroup()) {
+    BoxWithConstraints(modifier.fillMaxWidth().height(181.dp).clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
         val inset=8.dp
         val height=165.dp
         val gap=8.dp
@@ -62,11 +66,24 @@ import kotlin.math.roundToInt
             onSelect(next)
             pending=next
         }
-        LaunchedEffect(page,id,pageActive) {
-            if(pageActive) {
-                val prior=model.focusMemory[page]
-                val index=if(prior=="$id:all" && onMore!=null) entries.size else entries.indexOfFirst {"$id:${it.key}"==prior}
-                if(index>=0) select(index)
+        LaunchedEffect(rowFocused) {
+            if(rowFocused) {
+                // Every vertical entrance starts at the left, even if the previous exit is still animating.
+                returnOffset.snapTo(0f)
+                start=0
+                onSelect(0)
+                pending=0
+            } else {
+                pending=null
+                // First contract the currently wide card, then reveal the original narrow sequence.
+                delay(motion.duration(320).toLong())
+                val prior=start
+                if(prior>0) {
+                    returnOffset.snapTo(prior*(narrow+gap).value)
+                    start=0
+                    onSelect(0)
+                    returnOffset.animateTo(0f,motion.fade(400))
+                } else onSelect(0)
             }
         }
         LaunchedEffect(pending,start) {
@@ -77,11 +94,11 @@ import kotlin.math.roundToInt
             pending=null
         }
         // A single coordinated transition keeps all uninvolved X positions constant.
-        val transition=updateTransition(expanded-safeStart,label="shelf-expansion")
+        val transition=updateTransition(if(rowFocused) expanded-safeStart else -1,label="shelf-expansion")
         val weights=(0 until slots).map {slot->
-            transition.animateFloat(transitionSpec={motion.spring()},label="slot-$slot") {if(it==slot) 1f else 0f}
+            transition.animateFloat(transitionSpec={if(targetState==-1 || initialState==-1) motion.fade(320) else motion.spring()},label="slot-$slot") {if(it==slot) 1f else 0f}
         }
-        val offset by animateDpAsState(if(selectedIndex==entries.size)
+        val offset=animateDpAsState(if(rowFocused && selectedIndex==entries.size)
             ShelfWindow.revealAllOffset(slots,narrow.value,wide.value,gap.value,allWidth.value,viewport.value).dp else 0.dp,
             motion.spring(),label="shelf-view-all-reveal")
         Layout(modifier=Modifier.fillMaxSize(),content={
@@ -93,14 +110,14 @@ import kotlin.math.roundToInt
                         val delta=if(event.key==Key.DirectionRight) 1 else -1
                         select(index+delta);true
                     } else false
-                },active=selectedIndex==index,shape=RoundedCornerShape(15.dp),restoreFocus=false,onFocus={
+                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),restoreFocus=false,onFocus={
                     if(selectedIndex!=index) select(index)
                 },onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,contentKey={it.key},transitionSpec={
                         (fadeIn(motion.fade(320))+slideInHorizontally(motion.fade(320)) {it/6*direction}) togetherWith
                             (fadeOut(motion.fade(320))+slideOutHorizontally(motion.fade(320)) {-it/6*direction}) using SizeTransform(clip=false)
                     },label="shelf-media") {media->
-                        ShelfArtwork(media,weights[slot].value,wide,expanded==index)
+                        ShelfArtwork(media,{weights[slot].value},wide,rowFocused && expanded==index)
                     }
                 }
             }
@@ -132,14 +149,14 @@ import kotlin.math.roundToInt
             }
             layout(constraints.maxWidth,constraints.maxHeight) {
                 placeables.forEachIndexed {index,placeable->
-                    placeable.placeRelative(insetPx+boundaries[index].roundToInt()-with(density) {offset.roundToPx()},insetPx)
+                    placeable.placeRelative(insetPx+boundaries[index].roundToInt()-with(density) {(offset.value+returnOffset.value.dp).roundToPx()},insetPx)
                 }
             }
         }
     }
 }
 
-@Composable private fun ShelfArtwork(item:MediaEntry,weight:Float,wide:Dp,expanded:Boolean) {
+@Composable private fun ShelfArtwork(item:MediaEntry,weight:()->Float,wide:Dp,expanded:Boolean) {
     val motion=LocalMotion.current
     Box(Modifier.fillMaxSize()) {
         Crossfade(if(expanded) MediaLogic.wideArtwork(item) else item.primary,animationSpec=motion.fade(300),label="shelf-artwork") {art->
@@ -149,11 +166,11 @@ import kotlin.math.roundToInt
         if(item.rating>0) Text("★ %.1f".format(item.rating),color=Color.White,fontSize=10.sp,
             modifier=Modifier.align(Alignment.TopStart).padding(7.dp))
         Column(Modifier.align(Alignment.BottomStart).requiredWidth((wide-26.dp).coerceAtLeast(1.dp))
-            .padding(start=13.dp,bottom=13.dp).graphicsLayer {alpha=weight.coerceIn(0f,1f)}) {
+            .padding(start=13.dp,bottom=13.dp).graphicsLayer {alpha=weight().coerceIn(0f,1f)}) {
             Text(item.title,color=Color.White,fontSize=19.sp,lineHeight=24.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
             Text(item.subtitle,color=Color.White.copy(.82f),fontSize=11.sp,maxLines=1,modifier=Modifier.padding(top=5.dp))
         }
         Text(item.title,color=Color.White,fontSize=11.sp,lineHeight=15.sp,fontWeight=FontWeight.Medium,maxLines=3,overflow=TextOverflow.Ellipsis,
-            modifier=Modifier.align(Alignment.BottomStart).padding(7.dp).graphicsLayer {alpha=(1f-weight).coerceIn(0f,1f)})
+            modifier=Modifier.align(Alignment.BottomStart).padding(7.dp).graphicsLayer {alpha=(1f-weight()).coerceIn(0f,1f)})
     }
 }

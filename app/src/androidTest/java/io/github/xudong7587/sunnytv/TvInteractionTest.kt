@@ -185,7 +185,7 @@ class TvInteractionTest {
         rule.onNodeWithTag("source:save").assertExists()
     }
 
-    @Test fun tvRowKeepsItsSelectionWhenFocusLeaves() {
+    @Test fun tvRowResetsItsSelectionWhenFocusLeaves() {
         var selected=-1
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
@@ -199,10 +199,11 @@ class TvInteractionTest {
                 }}
             }
         }
+        focus("reset-row:fixture:0")
         focus("reset-row:fixture:1")
         rule.runOnIdle {assertEquals(1,selected)}
         focus("outside-row")
-        rule.runOnIdle {assertEquals(1,selected)}
+        rule.runOnIdle {assertEquals(0,selected)}
     }
     @Test fun detailHidesPinnedNavigation() {
         rule.activityRule.scenario.onActivity {activity->

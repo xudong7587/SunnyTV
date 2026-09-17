@@ -176,7 +176,7 @@ import kotlinx.coroutines.*
                     } }
                     item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"}) {chooser="hero"}}
                     item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
-                    item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup()) {
+                    item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup(),verticalArrangement=Arrangement.spacedBy(13.dp)) {
                     ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
                         model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
                     }
@@ -201,6 +201,7 @@ import kotlinx.coroutines.*
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
+                    item {ToggleRow("阴影效果","使用轻微右下偏移阴影；深色模式仅用于按钮",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
                     item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
                     item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
                     item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -237,6 +238,9 @@ import kotlinx.coroutines.*
                 "设备与诊断" -> {
                     item {DisplayDiagnostics()}
                     item {ToggleRow("显示播放诊断","首帧耗时以真实渲染事件记录；不是 prepare() 耗时",model.settings.diagnostics) {model.saveSettings(model.settings.copy(diagnostics=!model.settings.diagnostics))}}
+                    model.app.store.playbackDiagnostic().takeIf {it.isNotBlank()}?.let {diagnostic->item {
+                        Text("最近一次播放错误\n$diagnostic",color=SunnyColors.Text,fontSize=14.sp,lineHeight=23.sp)
+                    }}
                     item {Text("设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\nABI：${Build.SUPPORTED_ABIS.joinToString()}\n应用：${BuildConfig.VERSION_NAME}\n网络日志不包含 Token、Cookie 或完整媒体地址。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=25.sp)}
                 }
                 "关于" -> {

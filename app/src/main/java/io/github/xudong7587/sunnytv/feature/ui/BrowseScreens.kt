@@ -121,10 +121,13 @@ import kotlinx.coroutines.delay
             if(embySources.isEmpty()) item {
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
-                item(key="home-hero") {
+                item(key="home-stage") {
+                    // Compose the first media-library row before scrolling starts, so entering it
+                    // does not inflate/decode a new lazy item in the middle of a transition.
+                    Column {
                     val darkPalette=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
                     CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(heroHeight).testTag("home:hero").onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
+                        Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero").onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
                             if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
                                 scope.launch {list.scrollToItem(0);bridge?.enterNavigation()};true
                             } else if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {
@@ -141,8 +144,7 @@ import kotlinx.coroutines.delay
 
                         }
                     }
-                }
-                item {
+                    Spacer(Modifier.height(6.dp))
                     Column(Modifier.padding(horizontal=30.dp).padding(top=if(compact) 0.dp else 68.dp).onPreviewKeyEvent {
                         if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
                             scope.launch {list.moveHomePage(0,heroExtentPx,motion);withFrameNanos {};bridge?.enterContent()};true
@@ -151,6 +153,7 @@ import kotlinx.coroutines.delay
                     SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
                     StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp)) {
                         items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
+                    }
                     }
                     }
                 }

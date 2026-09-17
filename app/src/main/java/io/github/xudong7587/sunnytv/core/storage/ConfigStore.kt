@@ -63,6 +63,8 @@ class ConfigStore(context: Context) {
         prefs.all.keys.filter { it.startsWith("pos:$sourceId:") }.forEach { editor.remove(it) }
         editor.apply()
     }
+    fun savePlaybackDiagnostic(text:String) {prefs.edit().putString("playbackDiagnostic",text.take(1500)).apply()}
+    fun playbackDiagnostic():String = prefs.getString("playbackDiagnostic","").orEmpty()
     fun settings(): AppSettings = AppSettings(
         prefs.getBoolean("motion",false), prefs.getBoolean("hq",false), prefs.getBoolean("backdrop",true),
         prefs.getBoolean("resume",true), prefs.getBoolean("next",true), prefs.getBoolean("diag",false),
@@ -81,7 +83,7 @@ class ConfigStore(context: Context) {
         }.toMap(),
         prefs.getFloat("animationSpeed",1f).takeIf {it in MotionPolicy.speeds} ?: 1f,
         prefs.getInt("fontScale",2).coerceIn(0,4),
-        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty()
+        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true)
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -89,7 +91,7 @@ class ConfigStore(context: Context) {
         s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
         libraryEditor.apply()
-        prefs.edit().putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
+        prefs.edit().putBoolean("shadows",s.shadowsEnabled).putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
         .putBoolean("backdrop",s.backdropEnabled).putBoolean("resume",s.showResume).putBoolean("next",s.showNextUp)
         .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds)
         .putBoolean("dark",s.darkTheme).putInt("accent",s.accentIndex).putString("artworkMode",s.artworkMode)

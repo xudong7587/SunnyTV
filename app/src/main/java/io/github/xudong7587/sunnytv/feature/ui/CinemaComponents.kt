@@ -3,6 +3,9 @@ package io.github.xudong7587.sunnytv.feature.ui
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,7 +29,8 @@ import io.github.xudong7587.sunnytv.feature.Route
 /** Tinted, layered material. No fullscreen live blur or additional full-size image decode. */
 @Composable fun Modifier.cinemaGlass(radius:Dp=28.dp):Modifier {
     val shape=RoundedCornerShape(radius)
-    return shadow(10.dp,shape,clip=false).clip(shape)
+    val settings=LocalAppModel.current.settings
+    return flatShadow(shape,settings.shadowsEnabled && !settings.darkTheme).clip(shape)
         .background(Brush.verticalGradient(listOf(SunnyColors.SurfaceRaised.copy(.84f),SunnyColors.Surface.copy(.72f))))
         .border(.75.dp,Brush.verticalGradient(listOf(Color.White.copy(.28f),SunnyColors.Border.copy(.28f))),shape)
 }
@@ -115,17 +119,23 @@ import io.github.xudong7587.sunnytv.feature.Route
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable fun LibraryLatestRow(library:MediaEntry,folder:Boolean=false) {
     val model=LocalAppModel.current
     LaunchedEffect(library.key,folder) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
     val entries=(if(folder) model.folderPreviews[library.key] else model.libraryLatest[library.key])
     var selected by rememberSaveable(library.key,folder) {mutableIntStateOf(0)}
-    Column {
+    val reveal=remember {BringIntoViewRequester()}
+    val scope=rememberCoroutineScope()
+    val axis=LocalTvFocusMotion.current
+    Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=14.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(if(folder) library.title else "${library.title} · 最新入库",color=SunnyColors.Text,fontSize=19.sp,
                 fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
-            Action("进入媒体库",id="more:${library.key}",icon="arrow") {model.navigate(Route.Library(library))}
+            Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.onFocusChanged {
+                if(it.isFocused) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
+            }) {model.navigate(Route.Library(library))}
         }
         if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})

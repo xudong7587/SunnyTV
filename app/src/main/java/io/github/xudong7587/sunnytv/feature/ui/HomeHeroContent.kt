@@ -51,7 +51,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                     detectHorizontalDragGestures(onDragStart={drag=0f},onDragEnd={
                         if(kotlin.math.abs(drag)>40.dp.toPx()) {direction=if(drag<0) 1 else -1;change(direction)}
                     }) {event,amount->event.consume();drag+=amount}
-                },shape=RoundedCornerShape(18.dp),onClick={model.navigate(Route.Detail(entry))}) {
+                },shape=RoundedCornerShape(18.dp),focusOutline=false,onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,transitionSpec={
                         (fadeIn(motion.fade(320))+slideInHorizontally(motion.fade(320)) {it/8*direction}) togetherWith
                             (fadeOut(motion.fade(320))+slideOutHorizontally(motion.fade(320)) {-it/8*direction})
@@ -72,7 +72,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                 items(following,key={it.key}) {media->
                     Column(Modifier.width(stripWidth).animateItem(fadeInSpec=motion.fade(300),placementSpec=motion.spring(),fadeOutSpec=motion.fade(300))) {
                         FocusTile("$id:strip:${media.key}",Modifier.fillMaxWidth().height(side).focusProperties {canFocus=false},
-                            shape=RoundedCornerShape(13.dp),onClick={direction=1;choose(items.indexOf(media))}) {
+                            shape=RoundedCornerShape(13.dp),focusOutline=false,onClick={direction=1;choose(items.indexOf(media))}) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),320)
                         }
                         Text(media.year.takeIf {it>0}?.toString().orEmpty(),color=SunnyColors.Secondary,fontSize=10.sp,modifier=Modifier.padding(top=8.dp))
@@ -105,9 +105,9 @@ import io.github.xudong7587.sunnytv.feature.Route
             } else Text("暂无推荐",color=SunnyColors.Text,fontSize=28.sp)
             if(resume.isNotEmpty()) {
                 Text("继续播放",color=SunnyColors.Secondary,fontSize=11.sp)
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
                     resume.take(2).forEach {media->
-                        FocusTile("quick-resume:${media.key}",Modifier.weight(1f),shape=RoundedCornerShape(24.dp),onClick={onPlay(media,false)}) {
+                        FocusTile("quick-resume:${media.key}",Modifier.weight(1f),shape=RoundedCornerShape(24.dp),button=true,onClick={onPlay(media,false)}) {
                             Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 ArtworkView(media,media.primary,Modifier.size(32.dp).clip(CircleShape),128)
                                 Column(Modifier.weight(1f)) {
@@ -117,6 +117,8 @@ import io.github.xudong7587.sunnytv.feature.Route
                             }
                         }
                     }
+                    if(!compact) Text("↓ 向下浏览\n更多媒体库",color=SunnyColors.Secondary,fontSize=10.sp,lineHeight=16.sp,
+                        modifier=Modifier.width(80.dp))
                 }
             }
         }

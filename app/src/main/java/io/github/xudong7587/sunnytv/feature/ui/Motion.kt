@@ -79,12 +79,9 @@ private val HorizontalReveal=object:BringIntoViewSpec {
     }
 }
 
-/** Home has one full-viewport hero before its first shelf; scroll that known distance at the chosen speed. */
+/** The hero and first library row are one precomposed stage; animate only its scroll offset. */
 suspend fun LazyListState.moveHomePage(index:Int,heroExtentPx:Float,motion:MotionTokens) {
-    if(!motion.enabled) {scrollToItem(index);return}
-    if(firstVisibleItemIndex<=1) {
-        val current=(if(firstVisibleItemIndex==0) 0f else heroExtentPx)+firstVisibleItemScrollOffset
-        animateScrollBy((if(index==0) 0f else heroExtentPx)-current,animationSpec=motion.spring())
-        scrollToItem(index)
-    } else animateScrollToItem(index)
+    val target=if(index==0) 0 else heroExtentPx.toInt()
+    if(!motion.enabled || firstVisibleItemIndex!=0) {scrollToItem(0,target);return}
+    animateScrollBy(target-firstVisibleItemScrollOffset.toFloat(),animationSpec=motion.fade(420))
 }
