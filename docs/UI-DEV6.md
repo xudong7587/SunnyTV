@@ -33,3 +33,10 @@ SHA-256：3a386f31ab5b4413e90dab5db8e7523731547d30d201337294b4d9c06ef15aa9。
 
 待用户验收：遥控器长按跨行与回顶、4K 清晰度、手机竖屏边界、低端电视长时间浏览帧率和内存。
 通知问题仍按 NOTIFICATION-INCIDENT-20260917.md 的证据与限制处理；没有修改 MediaIndex 或 NAS 数据。
+
+## 安装与预览实况
+
+用户确认后，dev6 首包已覆盖安装成功（SHA-256 830cc5cd6d3b395b2c973e36c635b53bd553e38bb89fb4768db00a85ca6cc076）。
+该包包含圆形续播缩略图及上述界面变更。最终源码仅再为续播两行文字补充 14sp/12sp 行高，最终包见上方 SHA。
+最终包第二次覆盖返回 INSTALL_FAILED_ABORTED: User rejected permissions，未再次尝试；因此手机尚不包含最后的行高微调。
+4K 预览已实际打开：scrcpy 新显示器 ID 8，3840×2160 / 640dpi，60Hz，Texture 3840×2160；这证明预览分辨率，不证明应用实际达到 60fps。
