@@ -213,6 +213,8 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
       - name: Install the pinned Android SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Optional persistent debug signing identity
