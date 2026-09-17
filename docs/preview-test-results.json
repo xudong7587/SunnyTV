@@ -1,0 +1,54 @@
+{
+  "tests": [
+    {
+      "name": "home library cards",
+      "passed": true
+    },
+    {
+      "name": "library hero",
+      "passed": true
+    },
+    {
+      "name": "poster grid",
+      "passed": true
+    },
+    {
+      "name": "detail",
+      "passed": true
+    },
+    {
+      "name": "player mock labeled",
+      "passed": true
+    },
+    {
+      "name": "subtitles panel",
+      "passed": true
+    },
+    {
+      "name": "reduce motion toggle",
+      "passed": true
+    },
+    {
+      "name": "search filters",
+      "passed": true
+    },
+    {
+      "name": "search escaped",
+      "passed": true
+    },
+    {
+      "name": "folder entries",
+      "passed": true
+    },
+    {
+      "name": "keyboard retains button focus",
+      "passed": true
+    },
+    {
+      "name": "no browser JS exceptions",
+      "passed": true
+    }
+  ],
+  "browser_errors": [],
+  "scope": "Offline HTML design preview only; not Android APK or real servers."
+}

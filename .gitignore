@@ -1,0 +1,17 @@
+.gradle/
+.kotlin/
+.idea/
+**/build/
+local.properties
+*.jks
+*.keystore
+*.hprof
+captures/
+.DS_Store
+.env
+.sunny-tools/
+.local-tests/
+__pycache__/
+*.pyc
+.ci-logs/
+dist/

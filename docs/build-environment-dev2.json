@@ -1,0 +1,12 @@
+{
+  "snapshot": "0.1.0-dev2",
+  "android_sdk_available": false,
+  "gradle_available": false,
+  "adb_available": false,
+  "github_write_api_available": false,
+  "remote_repository_created": false,
+  "remote_workflow_run": false,
+  "apk_produced": false,
+  "network_attempts": "Official Google SDK/Maven, Gradle and Maven Central downloads failed from this runtime; no credentials requested.",
+  "executed": "Independent Kotlin contracts and offline Python tests only; browser preview reported separately."
+}

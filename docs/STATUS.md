@@ -1,0 +1,40 @@
+# SunnyTV 0.1.0-dev2 — 真实开发状态
+
+更新：2026-09-17。dev2 是在 dev1 上的增量开发，不是重命名演示壳。原始交付状态见 `history/STATUS-dev1.md`。
+
+## 当前做到哪里
+
+| 部分 | 当前实际状态 | 仍需验证 |
+|---|---|---|
+| 总首页、所有媒体库、单库沉浸首页、海报墙、详情季集、搜索、云盘、设置 | 有原生源码和统一组件，dev2 改进胶囊导航 | Android 编译、遥控器与视觉真机对齐 |
+| Emby 原生库图/海报/Backdrop/Logo、Resume/Latest/NextUp、登录、收藏、播放回报 | 有真实请求逻辑，不使用 HTML 的假数据替代 | 用户 Emby 联调、版本和权限差异 |
+| CloudDrive2 | 已写只读 WebDAV 目录、视频、STRM；不是原生 gRPC | 真实 CD2 服务和网络错误 |
+| MediaIndex STRM/302/代理流 | 有纯逻辑契约与 HTTP 适配源码 | 实际302/Range/UA/错误码与网盘链路 |
+| Media3 播放与轨道面板 | 已写；dev2 做下层焦点隔离 | Android API 编译、Surface、音视频、生命周期 |
+| 起播计时 | dev2 区分点击/源解析/交接/引擎首帧；时序计算已测 | 不代表已取得真机首帧数据或已经提速 |
+| 网页建仓与构建 | 已生成一次上传的工作流、离线安全测试和说明 | 用户实际新建仓库/上传，随后远程执行 |
+| GitHub 远程状态 | 本轮未建仓、未提交、未运行 Actions | 当前聊天连接仅有读取接口 |
+| APK | 本交付包没有 APK | `testDebugUnitTest lintDebug assembleDebug` 首次跑通 |
+
+## 本轮实际测试与边界
+
+- `scripts/test-core.sh`：**114 passed / 0 failed**。使用当前可用 kotlinc/JDK 编译并执行不依赖 Android 的源码；见 `core-test-results.txt`。
+- `scripts/test-bootstrap.py`：**18 项通过**。校验归档、路径穿越/符号链接、敏感文件、已有仓库保护与 README 备份；见 `bootstrap-test-results.json`。
+- `scripts/test-bootstrap-workflow.py`：检查生成的完整 YAML、嵌入的实际 Python/ZIP/SHA256、所有 run 步骤 Bash 语法及可重复恢复；结果见 `bootstrap-workflow-test-results.json`。这是离线工作流验证，不是 Actions 运行。
+- `scripts/check-project.py`：源包 XML 和脚本语法；具体数量与结果见 `project-check-results.json`。不证明 Compose/Media3 API 可编译。
+- HTML 原型检查的范围仅为离线设计预览，见 `preview-test-results.json`；它不证明任何 Android 接口或电视性能。
+
+没有 Android SDK/Gradle，也无法从本运行环境下载工具链依赖；没有执行 Android 整包编译、Gradle JUnit/MockWebServer 测试、lint、安装、NAS 联调或 TV 性能测试。不能用 114 + 18 的数量推导功能完成率。
+
+## 接下来按此顺序
+
+1. **BUILD-01**：用户上传一次初始化工作流；Actions 提交源码、生成官方 Wrapper、执行完整 Android 检查并保留日志。首轮报错先修，不能绕过测试强发 APK。
+2. **PLAY-01**：验证真实 Emby 播放和进度；补完整设备能力、媒体源和转码协商。当前只实现基础直放/流播放路径，不伪报全格式支持。
+3. **NET-01**：真实 MediaIndex 302/proxy、Range、续播、CD2 WebDAV、外部字幕；扩充 HTTP 层测试。当前 `TransportTest.kt` 未在 Gradle 执行。
+4. **TV-01**：在用户电视测试连续按键、模态焦点、返回恢复、输入法、Surface/休眠、硬解/音轨。Macrobenchmark/Baseline Profile 与真机日志到此阶段再考虑 PC/Codex。
+
+仍有明确缺项：自动下一集与跨季、字幕延迟、默认音轨、MediaSession、持久分页缓存/容量驱逐、账号编辑/重新登录、CD2 原生 API/NFO、特定 HDR/DV/音频直通补丁。不得把已有按钮或设计图写成这些功能已完成。
+
+## 不变约束
+
+不改 MediaIndex；不让播放器执行 NAS 或网盘删除/移动；不嵌入账号、个人地址、网盘 Cookie 或签名凭据。身份信息仅由用户在本机/应用设置输入。内嵌初始化源码排除评审海报及原始截图；发布前还要确定原创代码许可证、签名与依赖声明。

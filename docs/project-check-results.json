@@ -1,0 +1,77 @@
+{
+  "scope": "source/XML/script sanity only; not Android compile",
+  "checks": [
+    {
+      "name": "XML app/src/main/AndroidManifest.xml",
+      "passed": true
+    },
+    {
+      "name": "XML app/src/main/res/values/styles.xml",
+      "passed": true
+    },
+    {
+      "name": "XML app/src/main/res/xml/network_security_config.xml",
+      "passed": true
+    },
+    {
+      "name": "XML app/src/main/res/drawable/ic_sunny.xml",
+      "passed": true
+    },
+    {
+      "name": "XML app/src/main/res/drawable/tv_banner.xml",
+      "passed": true
+    },
+    {
+      "name": "Python syntax export-preview.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax bootstrap_restore.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax test-bootstrap-workflow.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax test-preview.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax check-project.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax test-bootstrap.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax export-github-bootstrap.py",
+      "passed": true
+    },
+    {
+      "name": "Bash syntax build.sh",
+      "passed": true
+    },
+    {
+      "name": "Bash syntax device-report.sh",
+      "passed": true
+    },
+    {
+      "name": "Bash syntax generate-wrapper.sh",
+      "passed": true
+    },
+    {
+      "name": "Bash syntax test-core.sh",
+      "passed": true
+    },
+    {
+      "name": "JavaScript syntax",
+      "passed": true
+    },
+    {
+      "name": "No preview imagery or redistributed fonts in native app",
+      "passed": true
+    }
+  ]
+}

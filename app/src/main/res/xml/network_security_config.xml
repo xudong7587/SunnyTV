@@ -1,0 +1,7 @@
+<network-security-config>
+    <!-- User-configured LAN servers and STRM frequently use HTTP. TLS verification remains on.
+         Credential confinement and downgrade protection are additionally enforced in SafeHttp. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>

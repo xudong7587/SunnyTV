@@ -1,0 +1,116 @@
+PASS  extensionless MediaIndex URL
+PASS  UTF-8 BOM + CRLF
+PASS  surrounding whitespace
+PASS  comment line
+PASS  signed query ordering preserved
+PASS  encoded Chinese path
+PASS  encoded hash allowed
+PASS  empty STRM rejected
+PASS  two URLs rejected
+PASS  invalid UTF8 rejected
+PASS  over-limit text rejected
+PASS  header syntax rejected
+PASS  file URL rejected
+PASS  javascript URL rejected
+PASS  ftp URL rejected
+PASS  embedded credentials rejected
+PASS  literal # rejected
+PASS  CRLF injection rejected
+PASS  unencoded space rejected
+PASS  HTTP LAN accepted
+PASS  IPv6 origin accepted
+PASS  base prefix retained
+PASS  base query rejected
+PASS  same-origin scope
+PASS  path sibling denied
+PASS  outside path denied
+PASS  cross-host denied
+PASS  cross-port denied
+PASS  cross-scheme denied
+PASS  default port equivalence
+PASS  case-insensitive host
+PASS  credential headers stripped
+PASS  case-insensitive sensitive headers
+PASS  relative redirect
+PASS  absolute CDN redirect
+PASS  HTTP to HTTPS upgrade
+PASS  HTTPS downgrade denied
+PASS  redirect cycle denied
+PASS  self redirect denied
+PASS  redirect budget
+PASS  last redirect within budget
+PASS  STRM extension case insensitive
+PASS  MediaIndex not mistaken for STRM
+PASS  STRM recursive cycle
+PASS  STRM recursion limit
+PASS  known mime mapping
+PASS  STRM mime left unspecified
+PASS  unknown mime not forced HLS
+PASS  progress clamped above
+PASS  progress clamped below
+PASS  unknown duration
+PASS  seek below zero
+PASS  seek beyond end
+PASS  remaining rounds up
+PASS  native library Primary wins
+PASS  library falls back to Thumb
+PASS  library falls back to Backdrop
+PASS  wide card prefers Thumb
+PASS  cross-source keys never collide
+PASS  folders not playable
+PASS  movie playable
+PASS  scope literal traversal denied
+PASS  scope encoded traversal denied
+PASS  scope double encoded traversal denied
+PASS  scope encoded separator traversal denied
+PASS  percent in genuine filename remains scoped
+PASS  base with dot segment denied
+PASS  invalid port denied
+PASS  positive seek overflow saturates
+PASS  negative seek overflow clamps
+PASS  remaining time cannot overflow
+PASS  relative API URL retains reverse prefix
+PASS  root relative API URL is not silently rewritten
+PASS  HTTP reference preserves signed parameters
+PASS  DAV 207 XML self omitted
+PASS  DAV directory normalized trailing slash
+PASS  DAV collection recognized
+PASS  DAV relative href resolves
+PASS  DAV cross origin href ignored
+PASS  DAV outside configured root ignored
+PASS  DAV failed propstat ignored
+PASS  DAV duplicate href removed
+PASS  DAV file size parsed
+PASS  DAV displayname escaped entities
+PASS  DAV percent UTF8 filename fallback
+PASS  DAV literal plus preserved
+PASS  DAV HTML login page rejected
+PASS  DAV DOCTYPE denied
+PASS  DAV XML byte limit
+PASS  DAV invalid directory scope
+PASS  DAV no-ns response is not accepted
+PASS  DAV XML empty collection is valid
+PASS  DAV merges successful propstats
+PASS  reports ignore progress before start
+PASS  reports start precedes progress
+PASS  reports retain latest heartbeat only
+PASS  reports stop cannot discard start
+PASS  reports ignore heartbeat after stop
+PASS  reports duplicate start idempotent
+PASS  reports unplayed cancellation sends nothing
+PASS  reports positions clamped
+PASS  reports duplicate stop idempotent
+PASS  startup total includes source and handoff
+PASS  startup source interval
+PASS  startup activity handoff interval
+PASS  startup engine interval is independent
+PASS  startup unknown source does not invent a total
+PASS  startup retry measures current engine only
+PASS  startup invalid ordering hides total
+PASS  startup frame before engine is unavailable
+PASS  startup zero timestamp is valid
+PASS  startup unknown marks are unavailable
+PASS  startup no negative duration
+PASS  startup large monotonic timestamps
+
+RESULT: 114 passed / 0 failed

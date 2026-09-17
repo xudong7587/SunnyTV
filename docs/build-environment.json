@@ -1,0 +1,23 @@
+{
+  "date": "2026-09-17",
+  "java": "OpenJDK 21.0.11",
+  "standalone_kotlin": "1.9.0",
+  "android_target_kotlin": "2.1.20 (not compiled here)",
+  "node": "22.16.0",
+  "android_sdk_available": false,
+  "gradle_available": false,
+  "download_probe": "DNS resolution failed for repo.maven.apache.org and services.gradle.org",
+  "apk_produced": false,
+  "core_tests": {
+    "passed": 102,
+    "failed": 0
+  },
+  "preview_checks": {
+    "passed": 12,
+    "failed": 0
+  },
+  "project_sanity_checks": {
+    "passed": 13,
+    "failed": 0
+  }
+}
