@@ -33,8 +33,8 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     suspend fun item(id: String): MediaEntry = withContext(Dispatchers.Default) {parseItem(JSONObject(get("Users/${config.userId}/Items/$id")))}
     suspend fun resume(parent: String = ""): List<MediaEntry> = parsePage(get("Users/${config.userId}/Items/Resume",
         mapOf("Limit" to "16", "MediaTypes" to "Video", "Fields" to fields, "ImageTypeLimit" to "1") + optionalParent(parent))).items
-    suspend fun latest(parent: String = ""): List<MediaEntry> {
-        val data = get("Users/${config.userId}/Items/Latest", mapOf("Limit" to "18", "Fields" to fields,
+    suspend fun latest(parent: String = "", limit:Int=18): List<MediaEntry> {
+        val data = get("Users/${config.userId}/Items/Latest", mapOf("Limit" to limit.coerceIn(1,18).toString(), "Fields" to fields,
             "ImageTypeLimit" to "1", "GroupItems" to "true") + optionalParent(parent))
         return if(data.trimStart().startsWith("[")) parseArray(JSONArray(data)) else parsePage(data).items
     }
@@ -51,10 +51,14 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         val n = async { row("接着看") { nextUp() } }
         HomeFeed(v.await(), r.await(), l.await(), n.await(), warnings.toList())
     }
-    suspend fun library(parent: String, start: Int = 0, sort: String = "DateCreated", query: String = "", favorites: Boolean = false): MediaPage {
-        val q = mutableMapOf("Recursive" to "true", "IncludeItemTypes" to "Movie,Series", "StartIndex" to "$start",
-            "Limit" to "48", "SortBy" to sort, "SortOrder" to if(sort == "SortName") "Ascending" else "Descending",
+    suspend fun library(parent: String, start: Int = 0, sort: String = "DateCreated", query: String = "", favorites: Boolean = false,
+        ascending:Boolean=sort=="SortName", foldersOnly:Boolean=false, limit:Int=48, mixed:Boolean=false): MediaPage {
+        require(Presentation.sorts.any {it.first==sort}) {"Unsupported sort"}
+        val q = mutableMapOf("Recursive" to (!foldersOnly).toString(), "StartIndex" to "${start.coerceAtLeast(0)}",
+            "Limit" to limit.coerceIn(1,48).toString(), "SortBy" to sort, "SortOrder" to if(ascending) "Ascending" else "Descending",
             "Fields" to fields, "ImageTypeLimit" to "1")
+        if(foldersOnly) q["IsFolder"]="true"
+        else q["IncludeItemTypes"]=if(mixed) "Movie,Episode,Video" else "Movie,Series,Video"
         q.putAll(optionalParent(parent))
         if(query.isNotBlank()) q["SearchTerm"] = query
         if(favorites) q["Filters"] = "IsFavorite"
@@ -70,12 +74,19 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
         client.bytes(request.build())
     }
+    suspend fun setPlayed(item:MediaEntry,value:Boolean) {
+        val request=Request.Builder().url(url("Users/${config.userId}/PlayedItems/${item.id}"))
+        if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
+        client.bytes(request.build())
+    }
+    suspend fun similar(id:String):List<MediaEntry> = parsePage(get("Items/$id/Similar",
+        mapOf("UserId" to config.userId,"Limit" to "12","Fields" to fields))).items
     fun imageUrl(art: Artwork, width: Int): String {
         val index = art.index?.let { "/$it" }.orEmpty()
         return url("Items/${art.itemId}/Images/${art.type}$index", mapOf("tag" to art.tag,
             "MaxWidth" to width.toString(), "Quality" to "90"))
     }
-    suspend fun playback(item: MediaEntry, fromStart: Boolean = false): PlaybackRequest {
+    suspend fun playback(item: MediaEntry, fromStart: Boolean = false, versionId:String=""): PlaybackRequest {
         val start = if(fromStart) 0 else item.positionMs
         val info = JSONObject(post("Items/${item.id}/PlaybackInfo", JSONObject()
             .put("UserId",config.userId).put("StartTimeTicks", start * 10_000)
@@ -84,8 +95,9 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         if(info.text("ErrorCode") != null) throw SourceException("服务器没有返回可直放的媒体源")
         val sources = info.optJSONArray("MediaSources") ?: throw SourceException("没有媒体源")
         val list = (0 until sources.length()).map { sources.getJSONObject(it) }
-        val source = list.firstOrNull { it.optBoolean("SupportsDirectPlay") || it.optBoolean("SupportsDirectStream") }
-            ?: list.firstOrNull { !it.has("SupportsDirectPlay") && !it.has("SupportsDirectStream") }
+        val candidates=if(versionId.isBlank()) list else list.filter {it.text("Id")==versionId}
+        val source = candidates.firstOrNull { it.optBoolean("SupportsDirectPlay") || it.optBoolean("SupportsDirectStream") }
+            ?: candidates.firstOrNull { !it.has("SupportsDirectPlay") && !it.has("SupportsDirectStream") }
             ?: throw SourceException("服务端未提供可直放/直流的媒体源；首版不自动申请转码")
         if(source.optBoolean("RequiresOpening")) throw SourceException("此媒体源需要专用打开会话，首版暂不支持")
         val sid = source.text("Id").orEmpty()
@@ -117,7 +129,8 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         }
         return PlaybackRequest(config.id, resolved, item.title, start,
             MediaLogic.mime(source.optString("Container")), scope, subtitles,
-            item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key)
+            item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key,
+            mediaLogo=item.logo)
     }
     suspend fun report(request: PlaybackRequest, event: String, position: Long, paused: Boolean) {
         require(event in setOf("Playing", "Playing/Progress", "Playing/Stopped"))
@@ -152,11 +165,27 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             j.text("Overview").orEmpty(),j.optInt("ProductionYear"),j.optDouble("CommunityRating",0.0),
             j.optLong("RunTimeTicks")/10_000,u.optLong("PlaybackPositionTicks")/10_000,
             u.optBoolean("Played"),u.optBoolean("IsFavorite"),(0 until genres.length()).map { genres.getString(it) },
-            primary,art("Thumb"),backdrop,art("Logo"),j.optString("SeriesId"),
-            j.optInt("ParentIndexNumber"),j.optInt("IndexNumber"),j.text("Path").orEmpty(),j.optBoolean("IsFolder"))
+            primary,art("Thumb"),backdrop,art("Logo") ?: j.text("ParentLogoItemId")?.let { logoId ->
+                j.text("ParentLogoImageTag")?.let {Artwork(logoId,"Logo",it)} },j.optString("SeriesId"),
+            j.optInt("ParentIndexNumber"),j.optInt("IndexNumber"),j.text("Path").orEmpty(),j.optBoolean("IsFolder"),
+            banner=art("Banner"),collectionType=j.text("CollectionType").orEmpty(),
+            people=j.optJSONArray("People").objects().take(30).map {p->MediaPerson(p.optString("Id"),
+                p.optString("Name"),p.optString("Role",p.optString("Type")),p.text("PrimaryImageTag")?.let {Artwork(p.optString("Id"),"Primary",it)})},
+            versions=j.optJSONArray("MediaSources").objects().take(20).map {s->
+                val streams=s.optJSONArray("MediaStreams").objects()
+                val video=streams.firstOrNull {it.optString("Type")=="Video"}
+                MediaVersion(s.optString("Id"),s.optString("Name","默认版本"),video?.optInt("Width") ?: 0,
+                    video?.optInt("Height") ?: 0,video?.text("VideoRange") ?: "",s.optLong("Size"),s.optLong("Bitrate"),
+                    s.optString("Container"),streams.map {t->MediaTrack(t.optInt("Index"),t.optString("Type"),
+                        t.optString("Language"),t.optString("DisplayTitle",t.optString("Title",t.optString("Codec"))),t.optString("Codec"))})},
+            officialRating=j.text("OfficialRating").orEmpty(),externalLinks=j.optJSONArray("ExternalUrls").objects().mapNotNull {l->
+                val link=l.text("Url") ?: return@mapNotNull null
+                if(link.startsWith("https://")) MediaLink(l.optString("Name","更多信息"),link) else null})
     }
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+        private fun JSONArray?.objects():List<JSONObject> = if(this==null) emptyList() else
+            (0 until length()).mapNotNull {optJSONObject(it)}
         private fun JSONObject.text(name: String): String? = if(isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
         fun headers(token: String, device: String): Map<String,String> = buildMap {
             put("X-Emby-Authorization","MediaBrowser Client=\"SunnyTV\", Device=\"Android TV\", DeviceId=\"$device\", Version=\"0.1.0\"")

@@ -11,6 +11,8 @@ import io.github.xudong7587.sunnytv.core.network.HttpPolicy
 import io.github.xudong7587.sunnytv.core.network.safeError
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.UUID
 
 sealed interface Route {
@@ -44,6 +46,16 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     val errors = mutableStateMapOf<String, String>()
     val loading = mutableStateMapOf<String, Boolean>()
     val libraryResume = mutableStateMapOf<String, List<MediaEntry>>()
+    val libraryLatest = mutableStateMapOf<String, List<MediaEntry>>()
+    var heroCandidates by mutableStateOf<List<MediaEntry>>(emptyList());private set
+    private val artworkFeedSlots=Semaphore(3)
+    val folderPages = mutableStateMapOf<String, MediaPage>()
+    val folderPreviews = mutableStateMapOf<String, List<MediaEntry>>()
+    val similar = mutableStateMapOf<String,List<MediaEntry>>()
+    val selectedVersion = mutableStateMapOf<String,String>()
+    val selectedAudio = mutableStateMapOf<String,MediaTrack>()
+    val selectedSubtitle = mutableStateMapOf<String,String>()
+    val selectedSubtitleTrack = mutableStateMapOf<String,MediaTrack>()
     val pages = mutableStateMapOf<String, MediaPage>()
     val children = mutableStateMapOf<String, List<MediaEntry>>()
     val details = mutableStateMapOf<String, MediaEntry>()
@@ -94,8 +106,9 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refresh() {
+        libraryLatest.clear()
         sources.filter { it.kind == SourceKind.EMBY }.forEach { config ->
-            launchLoad("feed:${config.id}", replace = true) { feeds[config.id] = app.emby(config).home() }
+            launchLoad("feed:${config.id}", replace = true) { feeds[config.id] = app.emby(config).home();loadHero() }
         }
     }
 
@@ -111,16 +124,57 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadLibrary(item: MediaEntry, sort: String = "DateCreated", more: Boolean = false) {
-        val append = more && librarySort[item.key] == sort
+    fun loadLatest(item:MediaEntry) {
+        if(libraryLatest.containsKey(item.key)) return
+        launchLoad("latest:${item.key}") {libraryLatest[item.key]=artworkFeedSlots.withPermit {app.emby(source(item.sourceId)).latest(item.id,10)}}
+    }
+    fun loadHero() {
+        val preferences=settings
+        val libraries=feeds.values.flatMap {it.libraries}.filter {preferences.heroAllLibraries || it.key in preferences.heroLibraryKeys}
+        if(preferences.heroMode!="random") {heroCandidates=emptyList();return}
+        launchLoad("hero",replace=true) {
+            if(libraries.isEmpty()) {heroCandidates=emptyList();return@launchLoad}
+            // Sample at most six libraries and six items each; never enumerate an entire library.
+            val sampled=coroutineScope {libraries.shuffled().take(6).map {library->async {
+                artworkFeedSlots.withPermit {
+                    try {app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=6,
+                        mixed=library.collectionType in setOf("mixed","homevideos")).items}
+                    catch(e:CancellationException) {throw e}
+                    catch(_:Exception) {emptyList()}
+                }
+            }}.awaitAll()}
+            val rows=sampled.map {it.shuffled()}
+            // Round-robin selection keeps small libraries represented in the six visible choices.
+            heroCandidates=(0 until 6).flatMap {index->rows.mapNotNull {it.getOrNull(index)}}.distinctBy {it.key}.take(6)
+            if(heroCandidates.isEmpty()) errors["hero"]="所选媒体库暂时没有可用推荐"
+        }
+    }
+    fun loadLibraryFolders(item:MediaEntry,more:Boolean=false) {
+        launchLoad("folders:${item.key}",replace=!more) {
+            val old=folderPages[item.key]
+            val next=app.emby(source(item.sourceId)).library(item.id,if(more) old?.items?.size ?: 0 else 0,
+                "SortName",foldersOnly=true)
+            folderPages[item.key]=if(more) MediaPage(((old?.items ?: emptyList())+next.items).distinctBy {it.key},next.total) else next
+        }
+    }
+    fun loadFolderPreview(item:MediaEntry) {
+        if(folderPreviews.containsKey(item.key)) return
+        launchLoad("folder-preview:${item.key}") {
+            folderPreviews[item.key]=app.emby(source(item.sourceId)).library(item.id,limit=10,mixed=true).items
+        }
+    }
+    fun loadLibrary(item: MediaEntry, sort: String = "DateCreated", more: Boolean = false,ascending:Boolean=sort=="SortName") {
+        val sortKey="$sort:$ascending"
+        val append = more && librarySort[item.key] == sortKey
         launchLoad("library:${item.key}", replace = !more) {
             val api = app.emby(source(item.sourceId))
             val old = pages[item.key]
-            val fresh = api.library(item.id, if (append) old?.items?.size ?: 0 else 0, sort)
+            val fresh = api.library(item.id, if (append) old?.items?.size ?: 0 else 0, sort,
+                ascending=ascending,mixed=item.collectionType in setOf("mixed","homevideos") || item.type=="Folder")
             pages[item.key] = if (append) {
                 MediaPage(((old?.items ?: emptyList()) + fresh.items).distinctBy { it.key }, fresh.total)
             } else fresh
-            librarySort[item.key] = sort
+            librarySort[item.key] = sortKey
             if (!append) {
                 try { libraryResume[item.key] = api.resume(item.id) }
                 catch (e: CancellationException) { throw e }
@@ -136,6 +190,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             val entry = api.item(item.id)
             details[item.key] = entry
             if (entry.type in setOf("Series", "Season")) children[item.key] = api.children(entry)
+            launchLoad("similar:${item.key}",replace=true) {similar[item.key]=api.similar(item.id)}
         }
     }
 
@@ -169,10 +224,13 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             busy = true
             try {
                 val config = source(item.sourceId)
-                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(item, fromStart)
+                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(item, fromStart,selectedVersion[item.key].orEmpty())
                 else app.dav(config).playback(item, if (fromStart) 0 else app.store.position(item.key))
                 ensureActive()
-                ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime()))
+                ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),
+                    audioLanguage=selectedAudio[item.key]?.language.orEmpty(),audioTitle=selectedAudio[item.key]?.title.orEmpty(),
+                    subtitlePreference=selectedSubtitle[item.key] ?: settings.subtitlePreference,
+                    subtitleTitle=selectedSubtitleTrack[item.key]?.title.orEmpty()))
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = safeError(e) }
             finally { busy = false }
@@ -185,8 +243,17 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             details[item.key] = item.copy(favorite = !item.favorite)
         }
     }
+    fun played(item:MediaEntry) {
+        launchLoad("played:${item.key}") {
+            app.emby(source(item.sourceId)).setPlayed(item,!item.played)
+            details[item.key]=item.copy(played=!item.played,positionMs=0)
+        }
+    }
 
-    fun saveSettings(value: AppSettings) { settings = value; app.store.saveSettings(value) }
+    fun saveSettings(value: AppSettings) {
+        val old=settings;settings=value;app.store.saveSettings(value)
+        if(old.heroMode!=value.heroMode || old.heroAllLibraries!=value.heroAllLibraries || old.heroLibraryKeys!=value.heroLibraryKeys) loadHero()
+    }
 
     fun addSource(kind: SourceKind, name: String, base: String, user: String, password: String, onSuccess: () -> Unit) {
         if (busy) return
@@ -261,6 +328,9 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     private fun clearMediaState() {
         feeds.clear(); errors.clear(); pages.clear(); libraryResume.clear()
         details.clear(); children.clear(); folders.clear(); librarySort.clear(); focusMemory.clear()
+        libraryLatest.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear()
+        selectedVersion.clear(); selectedAudio.clear(); selectedSubtitle.clear(); selectedSubtitleTrack.clear()
+        heroCandidates=emptyList()
     }
 
     private fun launchLoad(key: String, replace: Boolean = false, block: suspend () -> Unit) {
