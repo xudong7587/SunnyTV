@@ -1,0 +1,5 @@
+SunnyTV
+Copyright (C) 2026 SunnyTV contributors.
+Original code: GPL-3.0-only
+Source: https://github.com/xudong7587/SunnyTV
+Third-party components retain their original licenses.

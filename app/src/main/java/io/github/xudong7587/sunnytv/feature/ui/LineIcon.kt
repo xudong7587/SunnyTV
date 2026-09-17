@@ -51,6 +51,8 @@ fun actionIcon(text:String):String=when {
         "sort"->"M4 6 L16 6 M4 11 L12 11 M4 16 L8 16 M19 10 L19 21 M15 17 L19 21 L23 17"
         "ascending"->"M12 21 L12 3 M5 10 L12 3 L19 10"
         "descending"->"M12 3 L12 21 M5 14 L12 21 L19 14"
+        "list"->"M4 5 L5 5 M9 5 L21 5 M4 12 L5 12 M9 12 L21 12 M4 19 L5 19 M9 19 L21 19"
+        "numbers"->"M9 3 L7 21 M17 3 L15 21 M3 9 L21 9 M2 15 L20 15"
         "layers"->"M2 8 L12 2 L22 8 L12 14 Z M2 13 L12 19 L22 13 M2 18 L12 24 L22 18"
         "back"->"M14 4 L6 12 L14 20 M6 12 L22 12"
         "play"->"M6 3 L21 12 L6 21 Z"

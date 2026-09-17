@@ -181,6 +181,41 @@ class TvInteractionTest {
         rule.onNodeWithTag("nav:首页").assertDoesNotExist()
         rule.onNodeWithTag("detail-play").assertExists()
     }
+
+    @Test fun libraryHeaderCanMoveDownAndEscapeReturnsToParent() {
+        lateinit var model:AppModel
+        val library=MediaEntry("library","fixture","示例媒体库","CollectionFolder")
+        rule.activityRule.scenario.onActivity {activity->
+            model=AppModel(activity.application,false)
+            model.pages[library.key]=MediaPage(entries,entries.size)
+            model.navigate(Route.Library(library))
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {SunnyRoot {_,_->}}}
+            }
+        }
+        focus("hero:fixture:0")
+        rule.onNodeWithTag("hero:fixture:0").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("library-sort").assertIsFocused()
+        rule.onNodeWithTag("library-sort").performKeyInput {pressKey(Key.Escape)}
+        rule.runOnIdle {assertEquals(Route.Home,model.route)}
+    }
+    @Test fun episodeLayoutsSwitchWithoutChangingRealSettings() {
+        lateinit var model:AppModel
+        val season=MediaEntry("season","fixture","示例季","Season")
+        val episodes=entries.mapIndexed {index,entry->entry.copy(type="Episode",episode=index+1,overview="完全虚构的单集简介")}
+        rule.activityRule.scenario.onActivity {activity->
+            model=AppModel(activity.application,false)
+            model.pages[season.key]=MediaPage(episodes,episodes.size)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {LibraryScreen(season) {_,_->}}}
+            }
+        }
+        rule.onNodeWithTag("episode-layout:vertical").performScrollTo().performClick()
+        rule.runOnIdle {assertEquals("vertical",model.settings.episodeLayouts[season.key])}
+        rule.onNodeWithTag("episode-layout:numbers").performClick()
+        rule.runOnIdle {assertEquals("numbers",model.settings.episodeLayouts[season.key])}
+        rule.onNodeWithTag("episode:fixture:0").performScrollTo().assertContentDescriptionEquals("第 1 集 · 媒体 0")
+    }
     private fun saveScreenshot(name:String) {
         val bitmap=rule.onRoot().captureToImage().asAndroidBitmap()
         java.io.File(rule.activity.cacheDir,name).outputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}

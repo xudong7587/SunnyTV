@@ -11,6 +11,8 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.launch
 import androidx.lifecycle.Lifecycle
@@ -37,6 +39,7 @@ import kotlinx.coroutines.delay
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     if(item.isPlayable || item.type in setOf("Series","Season")) Action("播放",id="hero-play",primary=true) {onPlay(item,false)}
                     Action("查看详情",id="hero-detail") {model.navigate(Route.Detail(item))}
+                    if(!LocalNavVisible.current) Action("返回",id="library-back",icon="back") {model.back()}
                 }
             }
             if(tall) LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
@@ -60,6 +63,7 @@ import kotlinx.coroutines.delay
                         if(item.isPlayable || item.type in setOf("Series","Season")) Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="hero-play",primary=true,
                             onClick={onPlay(item,false)})
                         Action("查看详情",id="hero-detail",onClick={model.navigate(Route.Detail(item))})
+                        if(!LocalNavVisible.current) Action("返回",id="library-back",icon="back") {model.back()}
                     }
                 }
             }
@@ -105,7 +109,7 @@ import kotlinx.coroutines.delay
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val viewport=maxHeight
-        LazyColumn(state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+        LazyColumn(state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             if(embySources.isEmpty()) item {
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
@@ -171,21 +175,31 @@ import kotlinx.coroutines.delay
     val gridState=rememberLazyGridState()
     val scope=rememberCoroutineScope()
     val mode=model.settings.libraryArtworkModes[library.key] ?: model.settings.artworkMode
+    val episodeContainer=library.type in setOf("Series","Season")
+    val episodeLayout=model.settings.episodeLayouts[library.key] ?: "horizontal"
+    val toolsEntry=remember(library.key) {FocusRequester()}
     LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
     Box(Modifier.fillMaxSize()) {
         Backdrop(hero ?: library)
-        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
+        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(episodeContainer && episodeLayout=="numbers") 68.dp else if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
             horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
             contentPadding=PaddingValues(start=pageSidePadding,end=pageSidePadding,top=pageTopPadding,bottom=40.dp)) {
-            item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Box(Modifier.onFocusChanged {if(it.hasFocus) scope.launch {gridState.scrollToItem(0)}}.focusGroup()) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}}
+            item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Box(Modifier.onPreviewKeyEvent {
+                if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {
+                    scope.launch {gridState.scrollToItem(1);withFrameNanos {};toolsEntry.requestFocus()};true
+                } else if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
+                    scope.launch {gridState.scrollToItem(0)};true
+                } else false
+            }) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}}
             item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
-                    LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
+                    LazyRow(Modifier.focusRequester(toolsEntry).focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
                         item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
                         item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
-                        item {Action("视图：$mode") {chooser="view"}}
-                        if(Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
+                        if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout)}
+                        else item {Action("视图：$mode") {chooser="view"}}
+                        if(!episodeContainer && Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
                     }
                 }
             }
@@ -198,7 +212,12 @@ import kotlinx.coroutines.delay
                 if(folders?.items?.isEmpty()==true) item(span={GridItemSpan(maxLineSpan)}) {Text("此目录没有可浏览的子文件夹",color=SunnyColors.Secondary)}
                 model.errors["folders:${library.key}"]?.let {error->item(span={GridItemSpan(maxLineSpan)}) {EmptyState("目录读取失败",error,"重试") {model.loadLibraryFolders(library)}}}
             } else {
-                items(page?.items ?: emptyList(),key={it.key}) {entry->
+                val entries=page?.items.orEmpty()
+                if(episodeContainer) when(episodeLayout) {
+                    "vertical" -> items(entries,key={it.key},span={GridItemSpan(maxLineSpan)}) {EpisodeListCard(it)}
+                    "numbers" -> itemsIndexed(entries,key={_,entry->entry.key}) {index,entry->EpisodeNumber(entry,index,Modifier.fillMaxWidth())}
+                    else -> item(span={GridItemSpan(maxLineSpan)}) {EpisodeHorizontal(entries)}
+                } else items(entries,key={it.key}) {entry->
                     PosterWallCard(entry,mode) {model.navigate(Route.Detail(entry))}
                 }
                 if(page!=null && page.items.size<page.total) item(span={GridItemSpan(maxLineSpan)}) {

@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +74,8 @@ import kotlinx.coroutines.withContext
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
+    val episodeLayout=model.settings.episodeLayouts[item.key] ?: "horizontal"
+    val numberColumns=if(LocalCompact.current) 4 else 10
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
         Box(Modifier.fillMaxSize().background(tint)) {
             LazyColumn(state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -80,6 +83,7 @@ import kotlinx.coroutines.withContext
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
                         ArtworkView(item,item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
                         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.55f),Color.Transparent))))
+                        Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start=pageSidePadding,top=12.dp)) {Action("返回",id="detail-back",icon="back") {model.back()}}
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,tint.copy(.3f),tint))))
                         Column(Modifier.align(Alignment.BottomStart).padding(start=pageSidePadding,end=pageSidePadding,bottom=4.dp).widthIn(max=680.dp),
                             verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -92,7 +96,7 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    LazyRow(modifier=Modifier.onFocusChanged {if(it.hasFocus) scope.launch {list.scrollToItem(0)}}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    LazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放") {onPlay(item,true)}}
@@ -125,10 +129,27 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 val children=model.children[item.key] ?: emptyList()
-                if(children.isNotEmpty()) item {Column(Modifier.padding(horizontal=pageSidePadding)) {
-                    SectionTitle(if(item.type=="Series") "选择季" else "剧集","查看全部") {model.navigate(Route.Library(item))}
-                    AccordionCards(children,childSelected,{childSelected=it},id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
-                }}
+                if(children.isNotEmpty()) {
+                    if(children.any {it.type=="Episode"}) {
+                        item {Column(Modifier.padding(horizontal=pageSidePadding),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            SectionTitle("剧集")
+                            EpisodeLayoutButtons(item,episodeLayout)
+                        }}
+                        when(episodeLayout) {
+                            "vertical" -> items(children,key={"episode:${it.key}"}) {entry->Box(Modifier.padding(horizontal=pageSidePadding)) {EpisodeListCard(entry)}}
+                            "numbers" -> items(children.chunked(numberColumns),key={"numbers:${it.first().key}"}) {row->
+                                Row(Modifier.padding(horizontal=pageSidePadding).fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    row.forEach {entry->EpisodeNumber(entry,children.indexOf(entry),Modifier.weight(1f))}
+                                    repeat(numberColumns-row.size) {Spacer(Modifier.weight(1f))}
+                                }
+                            }
+                            else -> item {Box(Modifier.padding(horizontal=pageSidePadding)) {EpisodeHorizontal(children)}}
+                        }
+                    } else item {Column(Modifier.padding(horizontal=pageSidePadding)) {
+                        SectionTitle("选择季","查看全部") {model.navigate(Route.Library(item))}
+                        AccordionCards(children,childSelected,{childSelected=it},id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
+                    }}
+                }
                 if(item.people.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("演员表")

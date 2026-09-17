@@ -72,10 +72,14 @@ class ConfigStore(context: Context) {
         prefs.getBoolean("heroAll",true),prefs.getInt("heroInterval",8).coerceIn(3,60),prefs.getInt("uiScale",2).coerceIn(0,4),
         prefs.all.filterKeys {it.startsWith("libraryArtwork:")}.mapNotNull {(key,value)->
             (value as? String)?.takeIf {it in setOf("Poster","Thumb","Banner")}?.let {key.removePrefix("libraryArtwork:") to it}
+        }.toMap(),
+        prefs.all.filterKeys {it.startsWith("episodeLayout:")}.mapNotNull {(key,value)->
+            (value as? String)?.takeIf {it in setOf("horizontal","vertical","numbers")}?.let {key.removePrefix("episodeLayout:") to it}
         }.toMap()
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
+        s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
         libraryEditor.apply()
         prefs.edit().putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)

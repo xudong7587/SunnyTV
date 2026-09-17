@@ -116,7 +116,12 @@ import io.github.xudong7587.sunnytv.feature.Route
     val entries=(if(folder) model.folderPreviews[library.key] else model.libraryLatest[library.key])
     var selected by rememberSaveable(library.key,folder) {mutableIntStateOf(0)}
     Column {
-        SectionTitle(library.title,"进入媒体库") {model.navigate(Route.Library(library))}
+        Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
+            horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            Text(if(folder) library.title else "${library.title} · 最新入库",color=SunnyColors.Text,fontSize=19.sp,
+                fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
+            Action("进入媒体库",id="more:${library.key}",icon="arrow") {model.navigate(Route.Library(library))}
+        }
         if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})
         else if(model.errors["${if(folder) "folder-preview" else "latest"}:${library.key}"]!=null) {

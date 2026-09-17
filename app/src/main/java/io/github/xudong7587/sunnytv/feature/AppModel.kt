@@ -34,10 +34,10 @@ fun Route.key(): String = when (this) {
 }
 
 /** Application coordinator. Source implementations and transport policies never depend on Compose. */
-class AppModel @JvmOverloads constructor(application: Application, restoreSources:Boolean=true) : AndroidViewModel(application) {
+class AppModel @JvmOverloads constructor(application: Application, private val restoreSources:Boolean=true) : AndroidViewModel(application) {
     val app = application as SunnyApp
     var sources by mutableStateOf<List<SourceConfig>>(emptyList()); private set
-    var settings by mutableStateOf(app.store.settings()); private set
+    var settings by mutableStateOf(if(restoreSources) app.store.settings() else AppSettings()); private set
     var message by mutableStateOf("")
     var busy by mutableStateOf(false); private set
     var route by mutableStateOf<Route>(Route.Home); private set
@@ -269,7 +269,7 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
     }
 
     fun saveSettings(value: AppSettings) {
-        val old=settings;settings=value;app.store.saveSettings(value)
+        val old=settings;settings=value;if(restoreSources) app.store.saveSettings(value)
         if(old.heroMode!=value.heroMode || old.heroAllLibraries!=value.heroAllLibraries || old.heroLibraryKeys!=value.heroLibraryKeys) loadHero()
     }
 

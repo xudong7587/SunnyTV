@@ -102,7 +102,12 @@ class MainActivity: ComponentActivity() {
     val focus=LocalFocusManager.current
     CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,LocalNavVisible provides navVisible) {
         Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
-            Box(Modifier.fillMaxSize().onKeyEvent {event->
+            Box(Modifier.fillMaxSize().onPreviewKeyEvent {event->
+                if(event.key==Key.Back || event.key==Key.Escape) {
+                    if(event.type==KeyEventType.KeyUp) model.back()
+                    true
+                } else false
+            }.onKeyEvent {event->
                 if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp) {
                     if(!focus.moveFocus(FocusDirection.Up) && navVisible) scope.launch {bridge.revealTop?.invoke();bridge.enterNavigation()}
                     true

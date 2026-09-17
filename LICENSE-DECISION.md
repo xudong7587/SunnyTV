@@ -1,5 +1,9 @@
-# 发布许可证待决定
+# SunnyTV 发布许可证
 
-这是提供给用户继续开发的原创工程快照，本轮未代替仓库所有者决定公开发行许可证，也未将工程自动发布到GitHub。
+2026-09-17，按仓库所有者本轮开源发布要求，SunnyTV 原创代码与原创示意图采用 GNU General Public License version 3（SPDX: GPL-3.0-only）。完整条款见根目录 LICENSE。
 
-后续公开源码/APK前，由所有者决定原创代码的许可证，并完成THIRD_PARTY_NOTICES所列依赖与素材审计。实际复制Moonfin或其他上游源码后，需要核对相应许可证及分发义务，不能仅修改项目名或删除上游声明。
+Copyright (C) 2026 SunnyTV contributors.
+
+第三方组件保留各自许可证与署名，不因项目采用 GPL 而移除或更改。实际 dev7 运行时清单见 docs/licenses/DEPENDENCIES.md；随构件提供的声明已保留在 docs/licenses/THIRD_PARTY_NOTICES.txt。
+
+README 图形全部由 scripts/generate-readme-art.py 生成；没有使用真实电影、剧集、人物照片、媒体库截图或网络海报。

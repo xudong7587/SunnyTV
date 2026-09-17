@@ -1,5 +1,7 @@
 # 构建、测试和签名
 
+> 2026-09-17：工程已具备 Gradle Wrapper 与实际构建产物。当前执行 `./gradlew assembleDebug testDebugUnitTest lintDebug`（Windows 为 `gradlew.bat`），需要 JDK17/21 和 SDK35。下方首次交付环境限制为历史记录，最新结果以 STATUS.md 为准。
+
 ## 当前环境证据
 
 本轮容器有 JDK21、kotlinc1.9.0、Node22和Chromium；没有 Android SDK 和 Gradle 可执行文件。访问 `repo.maven.apache.org`、`services.gradle.org` 的下载尝试出现DNS解析失败。
