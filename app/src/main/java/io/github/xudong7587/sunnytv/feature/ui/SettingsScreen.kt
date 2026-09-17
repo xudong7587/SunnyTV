@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
@@ -16,6 +17,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import io.github.xudong7587.sunnytv.core.network.HttpPolicy
 import io.github.xudong7587.sunnytv.feature.player.PlayerActivity
@@ -30,20 +36,37 @@ import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.*
 
-@Composable fun Field(label:String,value:String,onChange:(String)->Unit,modifier:Modifier=Modifier,password:Boolean=false,autoFocus:Boolean=false) {
+@Composable fun Field(label:String,value:String,onChange:(String)->Unit,modifier:Modifier=Modifier,password:Boolean=false,autoFocus:Boolean=false,
+    requester:FocusRequester?=null,next:FocusRequester?=null,previous:FocusRequester?=null,
+    confirmText:String="下一项",tag:String=label) {
     var focused by remember {mutableStateOf(false)}
-    val focusRequester=remember {FocusRequester()}
+    val ownRequester=remember {FocusRequester()}
+    val focusRequester=requester ?: ownRequester
+    val confirmRequester=remember {FocusRequester()}
+    val keyboard=LocalSoftwareKeyboardController.current
+    val focusManager=LocalFocusManager.current
+    val confirm:()->Unit={
+        keyboard?.hide()
+        if(next!=null) next.requestFocus() else focusManager.moveFocus(FocusDirection.Next)
+    }
     LaunchedEffect(Unit) {if(autoFocus) {delay(100);runCatching {focusRequester.requestFocus()}}}
     Column(modifier,verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(label,color=SunnyColors.Secondary,fontSize=12.sp)
         BasicTextField(value=value,onValueChange=onChange,singleLine=true,
-            keyboardOptions=KeyboardOptions(keyboardType=if(password) KeyboardType.Password else KeyboardType.Text),
+            keyboardOptions=KeyboardOptions(keyboardType=if(password) KeyboardType.Password else KeyboardType.Text,
+                imeAction=if(password || next==null) ImeAction.Done else ImeAction.Next),
+            keyboardActions=KeyboardActions(onAny={confirm()}),
             visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
             cursorBrush=SolidColor(SunnyColors.Accent),textStyle=TextStyle(color=SunnyColors.Text,fontSize=15.sp),
-            modifier=Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged {focused=it.isFocused}
+            modifier=Modifier.fillMaxWidth().testTag(tag).focusRequester(focusRequester)
+                .focusProperties {if(next!=null) down=confirmRequester; if(previous!=null) up=previous}
+                .onFocusChanged {focused=it.isFocused}
                 .background(SunnyColors.Background,RoundedCornerShape(9.dp))
                 .border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(9.dp))
                 .padding(14.dp))
+        if(next!=null) FocusTile("$tag:confirm",Modifier.focusRequester(confirmRequester).focusProperties {down=next; up=focusRequester},onClick=confirm) {
+            Text(confirmText,color=SunnyColors.Accent,fontSize=13.sp,modifier=Modifier.padding(horizontal=18.dp,vertical=10.dp))
+        }
     }
 }
 
@@ -236,21 +259,27 @@ import kotlinx.coroutines.*
 @Composable fun AddSourceDialog(kind:SourceKind,onClose:()->Unit,onConnected:()->Unit=onClose,firstConnection:Boolean=false) {
     val model=LocalAppModel.current
     var name by remember {mutableStateOf(if(kind==SourceKind.EMBY) "家庭 Emby" else "CloudDrive2")}
+    val nameFocus=remember {FocusRequester()}; val baseFocus=remember {FocusRequester()}
+    val userFocus=remember {FocusRequester()}; val passwordFocus=remember {FocusRequester()}
+    val saveFocus=remember {FocusRequester()}
     var base by remember {mutableStateOf("")}; var user by remember {mutableStateOf("")}; var password by remember {mutableStateOf("")}
     Dialog(onDismissRequest={if(!model.busy && !firstConnection) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Column(Modifier.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
             .verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(13.dp)) {
             Text(if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
             Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
-            Field("来源名称",name,{name=it},autoFocus=true)
-            Field("服务地址（完整 http:// 或 https:// 地址）",base,{base=it})
-            Row(horizontalArrangement=Arrangement.spacedBy(15.dp)) {
-                Field("用户名",user,{user=it},Modifier.weight(1f))
-                Field("密码",password,{password=it},Modifier.weight(1f),password=true)
-            }
+            Field("来源名称",name,{name=it},autoFocus=true,requester=nameFocus,next=baseFocus,tag="source:name")
+            Field("服务地址（完整 http:// 或 https:// 地址）",base,{base=it},requester=baseFocus,next=userFocus,previous=nameFocus,tag="source:address")
+            Field("用户名",user,{user=it},requester=userFocus,next=passwordFocus,previous=baseFocus,tag="source:username")
+            Field("密码",password,{password=it},password=true,requester=passwordFocus,next=saveFocus,previous=userFocus,
+                confirmText="填写完成",tag="source:password")
             Text("HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp)
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Action(if(model.busy) "连接中…" else "验证并保存",primary=true) {if(!model.busy) model.addSource(kind,name,base,user,password,onConnected)}
+                FocusTile("source:save",Modifier.focusRequester(saveFocus).focusProperties {up=passwordFocus},
+                    onClick={if(!model.busy) model.addSource(kind,name,base,user,password,onConnected)}) {
+                    Text(if(model.busy) "连接中…" else "验证并保存",color=SunnyColors.Accent,fontSize=15.sp,
+                        modifier=Modifier.padding(horizontal=20.dp,vertical=14.dp))
+                }
                 if(!firstConnection) Action("取消") {if(!model.busy) onClose()}
             }
         }

@@ -30,6 +30,38 @@ class TvInteractionTest {
     @get:Rule val rule=createAndroidComposeRule<ComponentActivity>()
     private val entries=(0..5).map {MediaEntry("$it","fixture","媒体 $it","Movie")}
     private fun focus(tag:String) {rule.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.RequestFocus)}
+    private fun showSourceForm(firstConnection:Boolean) {
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    AddSourceDialog(SourceKind.EMBY,onClose={},firstConnection=firstConnection)
+                }}
+            }
+        }
+    }
+    @Test fun sourceImeConfirmationAdvancesAllFieldsAndReachesSave() {
+        showSourceForm(true)
+        val fields=listOf("source:name","source:address","source:username","source:password","source:save")
+        fields.zipWithNext().forEach {(current,next)->
+            focus(current)
+            rule.onNodeWithTag(current).performTextReplacement(if(current=="source:address") "https://example.invalid/emby" else "test")
+            rule.onNodeWithTag(current).performImeAction()
+            rule.onNodeWithTag(next).assertIsFocused()
+        }
+    }
+    @Test fun sourceRemoteReachesVisibleConfirmationAndAdvancesWithoutImeAction() {
+        showSourceForm(false)
+        focus("source:address")
+        rule.onNodeWithTag("source:address").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("source:address:confirm").assertIsFocused().performKeyInput {pressKey(Key.DirectionCenter)}
+        rule.onNodeWithTag("source:username").assertIsFocused()
+        focus("source:password")
+        rule.onNodeWithTag("source:password").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("source:password:confirm").assertIsFocused().performKeyInput {pressKey(Key.DirectionCenter)}
+        rule.onNodeWithTag("source:save").assertIsFocused()
+        rule.onNodeWithText("验证并保存").assertExists()
+    }
     @Test fun heroRemoteNavigationWrapsAndTracksFocusDuringRapidReversal() {
         var selected=0
         rule.activityRule.scenario.onActivity {activity->

@@ -23,9 +23,9 @@
 
 SunnyTV 是基于 Kotlin、Compose TV 和 Media3 的 Android 媒体客户端，以 Emby 为主要媒体来源，也保留 MediaIndex STRM / 重定向播放与 CloudDrive2 WebDAV 兼容能力。应用不内置影视内容，需要连接自己的媒体服务。
 
-当前发布为 **0.1.0-dev8 开发测试版**。本机 Android 构建、单元测试和 lint 已通过；电视兼容性、4K 实际帧率、HDR 与音频能力仍需按设备验证，详见 [开发状态](docs/STATUS.md)。
+当前发布为 **0.1.0-dev9 开发测试版**。本机 Android 构建、单元测试和 lint 已通过；电视兼容性、4K 实际帧率、HDR 与音频能力仍需按设备验证，详见 [开发状态](docs/STATUS.md)。
 
-[下载开发版](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev8) · [本轮更新](docs/UI-DEV8.md) · [构建说明](docs/BUILD.md)
+[下载开发版](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev9) · [本轮更新](docs/UI-DEV9.md) · [构建说明](docs/BUILD.md)
 
 本地构建需要 JDK 17 或 21、Android SDK 35：
 
