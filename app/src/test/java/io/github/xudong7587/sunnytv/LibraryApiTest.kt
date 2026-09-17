@@ -54,4 +54,65 @@ class LibraryApiTest {
             assertEquals("DELETE",server.takeRequest().method)
         }
     }
+    @Test fun browsingAndRandomRecommendationsNeverWritePlaybackEvents()=runBlocking {
+        MockWebServer().use {server->
+            server.dispatcher=object:Dispatcher() {
+                override fun dispatch(request:RecordedRequest)=MockResponse().setBody(
+                    if(request.path.orEmpty().contains("/Latest")) "[]" else "{\"Items\":[]}")
+            }
+            val api=source(server)
+            api.home();api.library("lib",sort="Random",limit=6);api.latest("lib",10);api.similar("film")
+            assertEquals(7,server.requestCount)
+            repeat(7) {
+                val request=server.takeRequest()
+                assertEquals("GET",request.method)
+                assertFalse(request.path.orEmpty().contains("Sessions/"))
+                assertFalse(request.path.orEmpty().contains("PlayedItems/"))
+            }
+        }
+    }
+    @Test fun wholeSeriesAndSeasonCannotTriggerBulkPlayedUpdates()=runBlocking {
+        MockWebServer().use {server->
+            val api=source(server)
+            for(type in listOf("Series","Season","Folder")) {
+                try {api.setPlayed(MediaEntry("series","s","Series",type),true);fail("bulk update accepted")}
+                catch(_:IllegalArgumentException) {}
+            }
+            assertEquals(0,server.requestCount)
+        }
+    }
+    @Test fun enteringSeriesSeasonAndEpisodeListsUsesReadRequestsOnly()=runBlocking {
+        MockWebServer().use {server->
+            server.dispatcher=object:Dispatcher() {
+                override fun dispatch(request:RecordedRequest)=MockResponse().setBody(when(request.requestUrl?.encodedPath) {
+                    "/Users/u/Items/series"->"""{"Id":"series","Type":"Series","Name":"Documentary"}"""
+                    "/Shows/series/Seasons"->"""{"Items":[{"Id":"season","Type":"Season","SeriesId":"series"}]}"""
+                    else->"""{"Items":[{"Id":"episode","Type":"Episode","SeriesId":"series"}]}"""
+                })
+            }
+            val api=source(server)
+            val series=api.item("series")
+            val season=api.children(series).single()
+            assertEquals("Episode",api.children(season).single().type)
+            api.similar(series.id)
+            assertEquals(4,server.requestCount)
+            repeat(4) {assertEquals("GET",server.takeRequest().method)}
+        }
+    }
+    @Test fun favoriteAndPlayedUseReturnedServerState()=runBlocking {
+        MockWebServer().use {server->
+            val api=source(server);val item=MediaEntry("film","s","Film","Movie",positionMs=9000)
+            server.enqueue(MockResponse().setBody("{\"IsFavorite\":true,\"Played\":false,\"PlaybackPositionTicks\":90000000}"))
+            val favorite=api.setFavorite(item,true)
+            assertTrue(favorite.favorite);assertEquals(9000L,favorite.positionMs)
+            assertEquals("/Users/u/FavoriteItems/film",server.takeRequest().path)
+            server.enqueue(MockResponse().setBody("{\"IsFavorite\":true,\"Played\":true,\"PlaybackPositionTicks\":0}"))
+            val played=api.setPlayed(favorite,true)
+            assertTrue(played.played);assertTrue(played.favorite);assertEquals(0L,played.positionMs)
+            server.enqueue(MockResponse().setBody("{\"IsFavorite\":false,\"Played\":true}"))
+            val removed=api.setFavorite(played,false)
+            server.takeRequest();assertEquals("DELETE",server.takeRequest().method)
+            assertFalse(removed.favorite);assertTrue(removed.played)
+        }
+    }
 }

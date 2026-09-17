@@ -69,15 +69,22 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         "Season" -> parsePage(get("Shows/${item.seriesId}/Episodes", mapOf("UserId" to config.userId, "SeasonId" to item.id, "Fields" to fields))).items
         else -> emptyList()
     }
-    suspend fun setFavorite(item: MediaEntry, value: Boolean) {
+    suspend fun setFavorite(item: MediaEntry, value: Boolean):MediaEntry {
         val request = Request.Builder().url(url("Users/${config.userId}/FavoriteItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
-        client.bytes(request.build())
+        return userDataResult(item,client.bytes(request.build()).toString(Charsets.UTF_8),favorite=value)
     }
-    suspend fun setPlayed(item:MediaEntry,value:Boolean) {
+    suspend fun setPlayed(item:MediaEntry,value:Boolean):MediaEntry {
+        require(item.isPlayable) {"请在单集或影片页面标记已看"}
         val request=Request.Builder().url(url("Users/${config.userId}/PlayedItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
-        client.bytes(request.build())
+        return userDataResult(item,client.bytes(request.build()).toString(Charsets.UTF_8),played=value)
+    }
+    private fun userDataResult(item:MediaEntry,body:String,favorite:Boolean=item.favorite,played:Boolean=item.played):MediaEntry {
+        val data=body.takeIf {it.isNotBlank()}?.let {JSONObject(it)}
+        return item.copy(favorite=data?.optBoolean("IsFavorite",favorite) ?: favorite,
+            played=data?.optBoolean("Played",played) ?: played,
+            positionMs=if(data?.has("PlaybackPositionTicks")==true) data.optLong("PlaybackPositionTicks")/10_000 else item.positionMs)
     }
     suspend fun similar(id:String):List<MediaEntry> = parsePage(get("Items/$id/Similar",
         mapOf("UserId" to config.userId,"Limit" to "12","Fields" to fields))).items

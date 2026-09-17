@@ -34,13 +34,14 @@ fun Route.key(): String = when (this) {
 }
 
 /** Application coordinator. Source implementations and transport policies never depend on Compose. */
-class AppModel(application: Application) : AndroidViewModel(application) {
+class AppModel @JvmOverloads constructor(application: Application, restoreSources:Boolean=true) : AndroidViewModel(application) {
     val app = application as SunnyApp
     var sources by mutableStateOf<List<SourceConfig>>(emptyList()); private set
     var settings by mutableStateOf(app.store.settings()); private set
     var message by mutableStateOf("")
     var busy by mutableStateOf(false); private set
     var route by mutableStateOf<Route>(Route.Home); private set
+    var sourcesReady by mutableStateOf(false); private set
 
     val feeds = mutableStateMapOf<String, HomeFeed>()
     val errors = mutableStateMapOf<String, String>()
@@ -68,7 +69,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     private var playJob: Job? = null
 
     init {
-        viewModelScope.launch {
+        if(restoreSources) viewModelScope.launch {
             try {
                 sources = withContext(Dispatchers.IO) { app.store.sources() }
                 refresh()
@@ -76,7 +77,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (_: Exception) {
                 message = "账号密钥无法读取，请在设置中重置来源后重新登录"
-            }
+            } finally {sourcesReady=true}
         }
     }
 
@@ -239,15 +240,31 @@ class AppModel(application: Application) : AndroidViewModel(application) {
 
     fun favorite(item: MediaEntry) {
         launchLoad("favorite:${item.key}") {
-            app.emby(source(item.sourceId)).setFavorite(item, !item.favorite)
-            details[item.key] = item.copy(favorite = !item.favorite)
+            val current=details[item.key] ?: item
+            val changed=app.emby(source(item.sourceId)).setFavorite(current, !current.favorite)
+            updateUserData(changed)
         }
     }
     fun played(item:MediaEntry) {
+        // A series/season write can update every episode and emit a notification per item.
+        // This control intentionally operates on individual playable media only.
+        if(!item.isPlayable) return
         launchLoad("played:${item.key}") {
-            app.emby(source(item.sourceId)).setPlayed(item,!item.played)
-            details[item.key]=item.copy(played=!item.played,positionMs=0)
+            val current=details[item.key] ?: item
+            val changed=app.emby(source(item.sourceId)).setPlayed(current,!current.played)
+            updateUserData(changed)
         }
+    }
+
+    private fun updateUserData(changed:MediaEntry) {
+        fun MediaEntry.updated()=if(key==changed.key) copy(favorite=changed.favorite,played=changed.played,positionMs=changed.positionMs) else this
+        details[changed.key]=changed
+        pages.keys.toList().forEach {k->pages[k]?.let {pages[k]=it.copy(items=it.items.map {entry->entry.updated()})}}
+        listOf(children,libraryLatest,libraryResume,similar,folderPreviews).forEach {map->
+            map.keys.toList().forEach {k->map[k]=map[k].orEmpty().map {it.updated()}}
+        }
+        feeds.keys.toList().forEach {k->feeds[k]?.let {f->feeds[k]=f.copy(resume=f.resume.map {it.updated()},latest=f.latest.map {it.updated()},nextUp=f.nextUp.map {it.updated()})}}
+        heroCandidates=heroCandidates.map {it.updated()}
     }
 
     fun saveSettings(value: AppSettings) {
@@ -340,7 +357,10 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try { block() }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { errors[key] = safeError(e) }
+            catch (e: Exception) {
+                errors[key] = safeError(e)
+                if(key.startsWith("favorite:") || key.startsWith("played:")) message=errors[key].orEmpty()
+            }
             finally {
                 if (loads[key] == currentCoroutineContext()[Job]) {
                     loads.remove(key)
