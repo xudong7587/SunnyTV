@@ -2,6 +2,8 @@ package io.github.xudong7587.sunnytv.feature.player
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.provider.Settings
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
@@ -70,6 +72,13 @@ class PlayerActivity: ComponentActivity() {
     private var reporter: PlaybackReporter? = null
     private var resumePlayWhenReady = true
     private var reportFailures by mutableIntStateOf(0)
+    private var gestureActive by mutableStateOf(false)
+    private var gestureNotice by mutableStateOf("")
+    private var gestureStartPosition = 0L
+    private var gestureSeekTarget: Long? = null
+    private var gestureStartBrightness = .5f
+    private var gestureStartVolume = 0
+    private val audioManager get() = getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var selectionNotice by mutableStateOf("")
     private val settings get()=app.store.settings()
 
@@ -91,7 +100,7 @@ class PlayerActivity: ComponentActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {panel.isNotBlank()->panel=""; controls->controls=false; else->finish()}
         }
-        setContent {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}
+        setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
     }
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) createPlayer()}
     override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);super.onSaveInstanceState(outState)}
@@ -263,6 +272,60 @@ class PlayerActivity: ComponentActivity() {
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
             }},
                 update={view->view.player=player;view.resizeMode=resizeMode},modifier=Modifier.fillMaxSize())
+            if(panel.isBlank()) PlayerTouchSurface(
+                onTap = { controls = !controls },
+                onDoubleTap = { region ->
+                    player?.let { p ->
+                        if(region == 1) {
+                            if(p.isPlaying) { p.pause(); gestureNotice="已暂停" }
+                            else { p.play(); gestureNotice="继续播放" }
+                        } else if(p.isCurrentMediaItemSeekable && p.duration > 0) {
+                            seek(if(region == 0) -30_000 else 30_000)
+                            gestureNotice=if(region == 0) "后退 30 秒" else "前进 30 秒"
+                        } else gestureNotice="当前媒体暂不支持快进"
+                    }
+                },
+                onStart = {
+                    gestureActive=true
+                    gestureSeekTarget=null
+                    gestureStartPosition=player?.currentPosition ?: 0
+                    gestureStartBrightness=window.attributes.screenBrightness.takeIf { it >= 0 }
+                        ?: (Settings.System.getInt(contentResolver,Settings.System.SCREEN_BRIGHTNESS,128)/255f)
+                    gestureStartVolume=audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                },
+                onDrag = { region, dx, dy ->
+                    when(region) {
+                        0 -> {
+                            val level=(gestureStartBrightness+dy).coerceIn(.01f,1f)
+                            window.attributes=window.attributes.apply { screenBrightness=level }
+                            gestureNotice="亮度 ${(level*100).toInt()}%"
+                        }
+                        2 -> {
+                            val audio=audioManager
+                            val max=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                            val level=(gestureStartVolume+dy*max).toInt().coerceIn(0,max)
+                            if(!audio.isVolumeFixed) audio.setStreamVolume(AudioManager.STREAM_MUSIC,level,0)
+                            gestureNotice=if(audio.isVolumeFixed) "此设备音量固定" else "音量 ${level*100/max}%"
+                        }
+                        else -> player?.let { p ->
+                            if(p.isCurrentMediaItemSeekable && p.duration > 0) {
+                                gestureSeekTarget=PlayerGesturePolicy.seekTarget(gestureStartPosition,dx,p.duration)
+                                gestureNotice="跳转至 ${clock(gestureSeekTarget!!)} / ${clock(p.duration)}"
+                            } else gestureNotice="当前媒体暂不支持快进"
+                        }
+                    }
+                },
+                onEnd = { commit ->
+                    if(commit) gestureSeekTarget?.let { target -> player?.seekTo(target); position=target }
+                    gestureSeekTarget=null
+                    gestureActive=false
+                },
+            )
+            LaunchedEffect(gestureNotice,gestureActive) {
+                if(!gestureActive && gestureNotice.isNotBlank()) { delay(1200); gestureNotice="" }
+            }
+            if(gestureNotice.isNotBlank()) Text(gestureNotice,color=Color.White,fontSize=20.sp,
+                modifier=Modifier.align(Alignment.Center).background(Color.Black.copy(.75f),RoundedCornerShape(12.dp)).padding(20.dp))
             if(status.isNotBlank() || error.isNotBlank()) {
                 Text(error.ifBlank {status},color=SunnyColors.Text,fontSize=16.sp,
                     modifier=Modifier.align(Alignment.Center).widthIn(max=650.dp).background(Color.Black.copy(.75f)).padding(20.dp))
@@ -271,13 +334,13 @@ class PlayerActivity: ComponentActivity() {
                 color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopStart).padding(25.dp).background(Color.Black.copy(.7f)).padding(12.dp))
             if(controls && panel.isBlank()) {
                 Box(Modifier.align(Alignment.TopStart).padding(start=36.dp,top=26.dp).width(250.dp).height(70.dp)) {PlayerMediaTitle()}
-                LaunchedEffect(controls,playing,panel,error) {
-                    if(playing && panel.isEmpty() && error.isEmpty()) {delay(6000);controls=false}
+                LaunchedEffect(controls,playing,panel,error,gestureActive) {
+                    if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.95f))))
                     .padding(start=40.dp,end=40.dp,top=45.dp,bottom=27.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                    Text(request.title,color=SunnyColors.Text,fontSize=25.sp,fontWeight=FontWeight.Bold)
+                    Text(request.title,color=SunnyColors.Text,fontSize=25.sp,lineHeight=31.sp,maxLines=2,fontWeight=FontWeight.Bold)
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=SunnyColors.Secondary,fontSize=12.sp)
                     Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(.22f))) {
                         Box(Modifier.fillMaxWidth(MediaLogic.progress(position,duration)).fillMaxHeight().background(SunnyColors.Accent))
@@ -310,7 +373,7 @@ class PlayerActivity: ComponentActivity() {
         }
         var failed by remember(logo) {mutableStateOf(false)}
         var loaded by remember(logo) {mutableStateOf(false)}
-        if(!loaded || failed || logo==null || source==null) Text(request.title,color=SunnyColors.Text,fontSize=22.sp,maxLines=2)
+        if(!loaded || failed || logo==null || source==null) Text(request.title,color=SunnyColors.Text,fontSize=22.sp,lineHeight=27.sp,maxLines=2)
         val config=source
         if(logo!=null && config!=null && !failed) {
             val image=remember(logo,config.id) {ImageRequest.Builder(this).data(app.emby(config).imageUrl(logo,720))

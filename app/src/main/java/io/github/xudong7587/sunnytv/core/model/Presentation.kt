@@ -2,6 +2,9 @@ package io.github.xudong7587.sunnytv.core.model
 
 /** Stable IDs are also the server's sorting keys; never sort only the loaded page. */
 object Presentation {
+    val uiScales=listOf(.8f,.9f,1f,1.1f,1.2f)
+    val uiScaleNames=listOf("小","较小","标准","较大","大")
+    fun supportsFolders(item:MediaEntry)=item.collectionType.lowercase() in setOf("","mixed","homevideos","tvshows") || item.type=="Folder"
     val sorts = listOf("DateCreated" to "加入日期", "SortName" to "名称", "CommunityRating" to "IMDb / 社区评分",
         "CriticRating" to "影评人评分", "ProductionYear" to "出品年份", "PremiereDate" to "上映时间",
         "OfficialRating" to "官方评级", "DatePlayed" to "播放日期", "Runtime" to "播放时长",

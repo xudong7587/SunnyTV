@@ -20,6 +20,7 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -188,7 +189,7 @@ import kotlinx.coroutines.delay
     var failed by remember(item.key, logo) { mutableStateOf(false) }
     val context = LocalContext.current
     if (logo == null || source == null || failed) {
-        Text(item.title, color = SunnyColors.Text, fontSize = fontSize, fontWeight = FontWeight.Bold,
+        Text(item.title, color = SunnyColors.Text, fontSize = fontSize, lineHeight = fontSize * 1.2f, fontWeight = FontWeight.Bold,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
         return
     }
@@ -199,8 +200,9 @@ import kotlinx.coroutines.delay
             .diskCacheKey("${source.id}:${logo.itemId}:Logo:${logo.tag}:720")
             .crossfade(false).build()
     }
-    Box(Modifier.fillMaxWidth().height(75.dp), contentAlignment = Alignment.CenterStart) {
-        if (!loaded) Text(item.title, color = SunnyColors.Text, fontSize = fontSize,
+    val titleHeight=with(LocalDensity.current) {(fontSize * 2.4f).toDp()}.coerceAtLeast(75.dp)
+    Box(Modifier.fillMaxWidth().height(titleHeight), contentAlignment = Alignment.CenterStart) {
+        if (!loaded) Text(item.title, color = SunnyColors.Text, fontSize = fontSize, lineHeight = fontSize * 1.2f,
             fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         AsyncImage(model = request, imageLoader = model.app.images(source), contentDescription = item.title,
             contentScale = ContentScale.Fit, alignment = Alignment.CenterStart, modifier = Modifier.fillMaxSize(),

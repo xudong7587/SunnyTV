@@ -66,5 +66,6 @@ data class AppSettings(
     val darkTheme:Boolean = true, val accentIndex:Int = 2,
     val artworkMode:String = "Poster", val subtitlePreference:String = "default",
     val heroMode:String = "random", val heroLibraryKeys:Set<String> = emptySet(),
-    val heroAllLibraries:Boolean = true, val heroIntervalSeconds:Int = 8
+    val heroAllLibraries:Boolean = true, val heroIntervalSeconds:Int = 8,
+    val uiScaleLevel:Int = 2
 )

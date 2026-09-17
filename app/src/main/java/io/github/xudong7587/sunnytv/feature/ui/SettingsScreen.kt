@@ -84,6 +84,19 @@ import kotlinx.coroutines.*
                     item {Action("重置损坏的来源配置") {resetConfirm=true}}
                 }
                 "首页与外观" -> {
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            SectionTitle("UI 大小","即时预览")
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Presentation.uiScaleNames.forEachIndexed {index,label->
+                                    FocusTile("ui-scale:$index",Modifier.weight(1f),active=model.settings.uiScaleLevel==index,
+                                        onClick={model.saveSettings(model.settings.copy(uiScaleLevel=index))}) {
+                                        Text(label,color=SunnyColors.Text,fontSize=12.sp,modifier=Modifier.padding(vertical=13.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                     item {ToggleRow("深色主题","浅色与重点色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
                     item {SectionTitle("重点色", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
                     val columns=if(compact) 3 else 5

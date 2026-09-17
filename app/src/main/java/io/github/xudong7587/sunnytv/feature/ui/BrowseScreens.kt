@@ -172,11 +172,10 @@ import kotlinx.coroutines.delay
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
-                        item {Action("排序：${Presentation.sorts.firstOrNull {it.first==sort}?.second}") {chooser="sort"}}
-                        item {Action(if(ascending) "升序排列" else "降序排列",id="library-order",active=ascending) {ascending=!ascending;model.loadLibrary(library,sort,ascending=ascending)}}
+                        item {Action("排序：${Presentation.sorts.firstOrNull {it.first==sort}?.second} · ${if(ascending) "升序" else "降序"}",id="library-sort",active=true) {chooser="sort"}}
                         item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
                         item {Action("视图：$mode") {chooser="view"}}
-                        if(library.collectionType in setOf("tvshows","mixed","homevideos") || library.type=="Folder") item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
+                        if(Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
                     }
                 }
             }
@@ -200,10 +199,10 @@ import kotlinx.coroutines.delay
         }
     }
     if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"默认字幕";else->"展现方式"},
-        when(chooser) {"sort"->Presentation.sorts;"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
+        when(chooser) {"sort"->Presentation.sorts.map {(key,label)->key to if(key==sort) "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
             else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
         when(chooser) {"sort"->sort;"subtitle"->model.settings.subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
-        when(chooser) {"sort"->{sort=value;ascending=value=="SortName";model.loadLibrary(library,sort,ascending=ascending)}
+        when(chooser) {"sort"->{ascending=if(sort==value) !ascending else value=="SortName";sort=value;model.loadLibrary(library,sort,ascending=ascending)}
             "subtitle"->model.saveSettings(model.settings.copy(subtitlePreference=value))
             else->model.saveSettings(model.settings.copy(artworkMode=value))}
         chooser=""

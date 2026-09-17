@@ -70,9 +70,9 @@ class MainActivity: ComponentActivity() {
                 onDispose {keyboardFallback=null}
             }
             CompositionLocalProvider(LocalAppModel provides model) {
-                SunnyTheme(model.settings) { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
+                ScaledUi(model.settings) {SunnyTheme(model.settings) { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
                     startActivity(PlayerActivity.intent(this,request))
-                } }) }
+                } }) }}
             }
         }
     }

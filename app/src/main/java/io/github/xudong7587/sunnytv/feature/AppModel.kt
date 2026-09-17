@@ -139,7 +139,7 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
             val sampled=coroutineScope {libraries.shuffled().take(6).map {library->async {
                 artworkFeedSlots.withPermit {
                     try {app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=6,
-                        mixed=library.collectionType in setOf("mixed","homevideos")).items}
+                        mixed=library.collectionType in setOf("","mixed","homevideos")).items}
                     catch(e:CancellationException) {throw e}
                     catch(_:Exception) {emptyList()}
                 }
@@ -171,7 +171,7 @@ class AppModel @JvmOverloads constructor(application: Application, restoreSource
             val api = app.emby(source(item.sourceId))
             val old = pages[item.key]
             val fresh = api.library(item.id, if (append) old?.items?.size ?: 0 else 0, sort,
-                ascending=ascending,mixed=item.collectionType in setOf("mixed","homevideos") || item.type=="Folder")
+                ascending=ascending,mixed=item.collectionType in setOf("","mixed","homevideos") || item.type=="Folder")
             pages[item.key] = if (append) {
                 MediaPage(((old?.items ?: emptyList()) + fresh.items).distinctBy { it.key }, fresh.total)
             } else fresh
