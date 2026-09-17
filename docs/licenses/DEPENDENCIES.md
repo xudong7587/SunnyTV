@@ -1,4 +1,4 @@
-# dev7 实际 APK 运行时依赖
+# dev7–dev8 实际 APK 运行时依赖
 
 从 Gradle debugRuntimeClasspath 解析并核对缓存中的对应版本 POM（含父 POM）。共 89 个构件，声明均为 Apache 2.0；原始打包声明见 THIRD_PARTY_NOTICES.txt。
 

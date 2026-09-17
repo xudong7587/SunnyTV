@@ -9,7 +9,7 @@ object Presentation {
         "CriticRating" to "影评人评分", "ProductionYear" to "出品年份", "PremiereDate" to "上映时间",
         "OfficialRating" to "官方评级", "DatePlayed" to "播放日期", "Runtime" to "播放时长",
         "Bitrate" to "比特率", "Size" to "大小", "Random" to "随机")
-    val subtitles = listOf("none" to "无字幕", "zh-Hans" to "Chinese simple", "zh" to "Chinese", "en" to "English")
+    val subtitles = listOf("none" to "默认关闭", "zh-Hans" to "优先简体中文", "zh" to "优先中文", "en" to "优先英文")
     val accents = listOf(
         Triple("象牙米",0xFFF1EBDD,0xFF493D2E), Triple("淡金",0xFFD8C89B,0xFF403B2D),
         Triple("青瓷绿",0xFFBFD8C9,0xFF29483D), Triple("雾青",0xFFADCBC5,0xFF284744),

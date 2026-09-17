@@ -34,11 +34,12 @@ import io.github.xudong7587.sunnytv.feature.Route
 @Composable fun CinemaBackdrop(item:MediaEntry?,modifier:Modifier=Modifier) {
     val model=LocalAppModel.current
     val base=SunnyColors.Background
+    val compact=LocalCompact.current
     val lowRam=(androidx.compose.ui.platform.LocalContext.current.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
     Box(modifier.fillMaxSize().background(base)) {
         if(item!=null && model.settings.backdropEnabled) {
             Crossfade(item,animationSpec=tween(if(model.settings.reduceMotion || lowRam) 0 else 220),label="backdrop") {media->
-                ArtworkView(media,media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
+                ArtworkView(media,if(compact) media.primary ?: media.backdrop else media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
             }
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(base.copy(.65f),base.copy(.04f)))))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(*listOf(0f to base.copy(.3f),.25f to Color.Transparent,.72f to Color.Transparent,1f to base).toTypedArray())))

@@ -20,7 +20,8 @@ data class MediaEntry(
     val episode: Int = 0, val path: String = "", val isFolder: Boolean = false,
     val banner: Artwork? = null, val collectionType: String = "",
     val people: List<MediaPerson> = emptyList(), val versions: List<MediaVersion> = emptyList(),
-    val officialRating: String = "", val externalLinks: List<MediaLink> = emptyList()
+    val officialRating: String = "", val externalLinks: List<MediaLink> = emptyList(),
+    val tracks:List<MediaTrack> = emptyList()
 ) : Serializable {
     val key: String get() = "$sourceId:$id"
     val isPlayable: Boolean get() = !isFolder && type in setOf("Movie", "Episode", "Video", "File")
@@ -32,7 +33,7 @@ data class MediaEntry(
 }
 data class MediaPage(val items: List<MediaEntry>, val total: Int)
 data class MediaPerson(val id:String, val name:String, val role:String, val primary:Artwork?) : Serializable
-data class MediaTrack(val index:Int, val type:String, val language:String, val title:String, val codec:String) : Serializable
+data class MediaTrack(val index:Int, val type:String, val language:String, val title:String, val codec:String, val external:Boolean=false, val isDefault:Boolean=false) : Serializable
 data class MediaVersion(val id:String, val name:String, val width:Int, val height:Int, val range:String,
     val size:Long, val bitrate:Long, val container:String, val tracks:List<MediaTrack>) : Serializable
 data class MediaLink(val name:String, val url:String) : Serializable
@@ -44,7 +45,7 @@ data class HomeFeed(
 
 data class HeaderScope(val baseUrl: String, val headers: Map<String, String>) : Serializable
 
-data class ExternalSubtitle(val url: String, val mime: String, val language: String, val title: String) : Serializable
+data class ExternalSubtitle(val url: String, val mime: String, val language: String, val title: String, val id:String="", val isDefault:Boolean=false) : Serializable
 
 data class PlaybackRequest(
     val sourceId: String, val stableUrl: String, val title: String,
@@ -55,7 +56,8 @@ data class PlaybackRequest(
     // elapsedRealtime() marks. -1 means unavailable; never use wall-clock timestamps.
     val requestedAtMs: Long = -1, val sourceReadyAtMs: Long = -1,
     val audioLanguage:String = "", val audioTitle:String = "", val subtitlePreference:String = "default",
-    val subtitleTitle:String = "", val mediaLogo:Artwork? = null
+    val subtitleTitle:String = "", val mediaLogo:Artwork? = null,
+    val subtitleTrackId:String = "", val subtitleOrdinal:Int = -1, val explicitSubtitle:Boolean=false
 ) : Serializable
 
 data class AppSettings(
@@ -68,5 +70,6 @@ data class AppSettings(
     val heroMode:String = "random", val heroLibraryKeys:Set<String> = emptySet(),
     val heroAllLibraries:Boolean = true, val heroIntervalSeconds:Int = 8,
     val uiScaleLevel:Int = 2, val libraryArtworkModes:Map<String,String> = emptyMap(),
-    val episodeLayouts:Map<String,String> = emptyMap()
+    val episodeLayouts:Map<String,String> = emptyMap(),
+    val librarySubtitlePreferences:Map<String,String> = emptyMap()
 )

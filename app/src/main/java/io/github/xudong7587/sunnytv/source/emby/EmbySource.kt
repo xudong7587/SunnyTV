@@ -130,22 +130,41 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         }
         HttpPolicy.validate(stable)
         val resolved = StrmResolver(client).resolve(stable)
-        val subs = source.optJSONArray("MediaStreams") ?: JSONArray()
-        val subtitles = (0 until subs.length()).map { subs.getJSONObject(it) }.filter {
-            it.optString("Type") == "Subtitle" && it.optBoolean("IsExternal") && it.text("DeliveryUrl") != null
-        }.mapNotNull { s ->
-            val mime = when(s.optString("Codec").lowercase()) {
-                "srt", "subrip" -> "application/x-subrip"; "vtt", "webvtt" -> "text/vtt"
-                "ass", "ssa" -> "text/x-ssa"; else -> null
-            }
-            mime?.let { ExternalSubtitle(absolute(s.getString("DeliveryUrl")), it,
-                s.optString("Language"), s.optString("DisplayTitle", "字幕")) }
-        }
+        val subtitles = externalSubtitles(item.id,sid,source.optJSONArray("MediaStreams") ?: JSONArray())
         return PlaybackRequest(config.id, resolved, item.title, start,
             MediaLogic.mime(source.optString("Container")), scope, subtitles,
             item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key,
             mediaLogo=item.logo)
     }
+    internal fun externalSubtitles(itemId:String,sourceId:String,streams:JSONArray):List<ExternalSubtitle> = streams.objects()
+        .filter {it.optString("Type")=="Subtitle" && it.optBoolean("IsExternal")}
+        .mapNotNull {stream->
+            val format=stream.text("DeliveryFormat") ?: stream.optString("Codec")
+            val mime=when(format.lowercase()) {
+                "srt","subrip"->"application/x-subrip";"vtt","webvtt"->"text/vtt";"ass","ssa"->"text/x-ssa";else->null
+            } ?: return@mapNotNull null
+            val extension=when(format.lowercase()) {"subrip"->"srt";"webvtt"->"vtt";else->format.lowercase()}
+            val delivery=stream.text("DeliveryUrl")?.let {absolute(it)}
+                ?: if(sourceId.isNotBlank() && stream.has("Index") && stream.optBoolean("SupportsExternalStream",true))
+                    url("Videos/$itemId/$sourceId/Subtitles/${stream.optInt("Index")}/Stream.$extension") else null
+            delivery?.let {ExternalSubtitle(it,mime,stream.optString("Language"),parseTrack(stream).title,
+                "emby-sub:${stream.optInt("Index")}",stream.optBoolean("IsDefault"))}
+        }
+    private fun parseTrack(t:JSONObject):MediaTrack {
+        val file=if(t.optBoolean("IsExternal")) t.text("Path")?.replace('\\','/')?.substringAfterLast('/') else null
+        return MediaTrack(t.optInt("Index"),t.optString("Type"),t.optString("Language"),
+            file?.takeIf {it.isNotBlank()} ?: t.text("DisplayTitle") ?: t.text("Title") ?: "${t.optString("Type")} ${t.optInt("Index")}",
+            t.optString("Codec"),t.optBoolean("IsExternal"),t.optBoolean("IsDefault"))
+    }
+    suspend fun person(name:String):MediaEntry {
+        val endpoint=base.newBuilder().addPathSegment("Persons").addPathSegment(name).addQueryParameter("UserId",config.userId).build()
+        val body=client.bytes(Request.Builder().url(endpoint).build()).toString(Charsets.UTF_8)
+        return withContext(Dispatchers.Default) {parseItem(JSONObject(body)).copy(type="Person")}
+    }
+    suspend fun personWorks(personId:String,start:Int=0):MediaPage = parsePage(get("Users/${config.userId}/Items",
+        mapOf("PersonIds" to personId,"Recursive" to "true","IncludeItemTypes" to "Movie,Series,Video",
+            "SortBy" to "PremiereDate,SortName","SortOrder" to "Descending","StartIndex" to start.coerceAtLeast(0).toString(),
+            "Limit" to "48","Fields" to fields,"ImageTypeLimit" to "1")))
     suspend fun report(request: PlaybackRequest, event: String, position: Long, paused: Boolean) {
         require(event in setOf("Playing", "Playing/Progress", "Playing/Stopped"))
         post("Sessions/$event", JSONObject().put("ItemId",request.embyItemId)
@@ -190,8 +209,8 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
                 val video=streams.firstOrNull {it.optString("Type")=="Video"}
                 MediaVersion(s.optString("Id"),s.optString("Name","默认版本"),video?.optInt("Width") ?: 0,
                     video?.optInt("Height") ?: 0,video?.text("VideoRange") ?: "",s.optLong("Size"),s.optLong("Bitrate"),
-                    s.optString("Container"),streams.map {t->MediaTrack(t.optInt("Index"),t.optString("Type"),
-                        t.optString("Language"),t.optString("DisplayTitle",t.optString("Title",t.optString("Codec"))),t.optString("Codec"))})},
+                    s.optString("Container"),streams.map {parseTrack(it)})},
+            tracks=j.optJSONArray("MediaStreams").objects().map {parseTrack(it)},
             officialRating=j.text("OfficialRating").orEmpty(),externalLinks=j.optJSONArray("ExternalUrls").objects().mapNotNull {l->
                 val link=l.text("Url") ?: return@mapNotNull null
                 if(link.startsWith("https://")) MediaLink(l.optString("Name","更多信息"),link) else null})

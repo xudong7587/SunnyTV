@@ -140,4 +140,40 @@ class LibraryApiTest {
         }
     }
 
+    @Test fun sidecarsAreScopedToMediaVersionAndKeepFileIdentity() {
+        MockWebServer().use {server->
+            val api=source(server)
+            val streams=org.json.JSONArray("""[
+                {"Index":2,"Type":"Subtitle","IsExternal":false,"Codec":"srt"},
+                {"Index":4,"Type":"Subtitle","IsExternal":true,"Codec":"srt","Language":"zh","Path":"/media/fiction/film.zh.srt","IsDefault":true},
+                {"Index":5,"Type":"Subtitle","IsExternal":true,"Codec":"ass","Language":"zh","DeliveryUrl":"/subs/actual.ass","Path":"/media/fiction/film.commentary.ass"},
+                {"Index":6,"Type":"Subtitle","IsExternal":true,"Codec":"pgs"}
+            ]""")
+            val subtitles=api.externalSubtitles("film","version-a",streams)
+            assertEquals(2,subtitles.size)
+            assertEquals("film.zh.srt",subtitles[0].title)
+            assertTrue(subtitles[0].url.endsWith("/Videos/film/version-a/Subtitles/4/Stream.srt"))
+            assertEquals("emby-sub:4",subtitles[0].id);assertTrue(subtitles[0].isDefault)
+            assertEquals("film.commentary.ass",subtitles[1].title)
+            assertTrue(subtitles[1].url.endsWith("/subs/actual.ass"))
+            assertEquals(0,server.requestCount)
+        }
+    }
+    @Test fun personBiographyAndPagedCreditsUseReadOnlyEmbyQueries()=runBlocking {
+        MockWebServer().use {server->
+            server.enqueue(MockResponse().setBody("""{"Id":"actor-1","Type":"Person","Name":"A / B","Overview":"Fictional biography"}"""))
+            server.enqueue(MockResponse().setBody("""{"Items":[{"Id":"film","Type":"Movie"}],"TotalRecordCount":100}"""))
+            val api=source(server);val person=api.person("A / B")
+            assertEquals("Fictional biography",person.overview)
+            val request=server.takeRequest();assertEquals("GET",request.method)
+            assertEquals(listOf("Persons","A / B"),request.requestUrl!!.pathSegments)
+            assertEquals("u",request.requestUrl!!.queryParameter("UserId"))
+            val works=api.personWorks(person.id,48);assertEquals(100,works.total)
+            val credits=server.takeRequest();assertEquals("GET",credits.method)
+            assertEquals("actor-1",credits.requestUrl!!.queryParameter("PersonIds"))
+            assertEquals("48",credits.requestUrl!!.queryParameter("StartIndex"))
+            assertEquals("48",credits.requestUrl!!.queryParameter("Limit"))
+        }
+    }
+
 }

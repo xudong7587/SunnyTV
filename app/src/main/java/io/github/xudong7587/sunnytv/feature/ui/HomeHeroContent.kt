@@ -65,7 +65,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Text(entry.year.takeIf {it>0}?.toString().orEmpty(),color=SunnyColors.Secondary,fontSize=11.sp,modifier=Modifier.padding(top=8.dp))
             }
             val following=(1 until items.size).map {items[(index+it)%items.size]}
-            val stripWidth=((containerWidth-side-9.dp-7.dp*(following.size-1).coerceAtLeast(0))/following.size.coerceAtLeast(1)).coerceAtLeast(20.dp)
+            val stripWidth=if(LocalCompact.current) 52.dp else ((containerWidth-side-9.dp-7.dp*(following.size-1).coerceAtLeast(0))/following.size.coerceAtLeast(1)).coerceAtLeast(20.dp)
             LazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                 items(following,key={it.key}) {media->
                     Column(Modifier.width(stripWidth).animateItem()) {

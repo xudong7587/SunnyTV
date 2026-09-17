@@ -175,6 +175,7 @@ import kotlinx.coroutines.delay
     val gridState=rememberLazyGridState()
     val scope=rememberCoroutineScope()
     val mode=model.settings.libraryArtworkModes[library.key] ?: model.settings.artworkMode
+    val subtitlePreference=model.settings.librarySubtitlePreferences[library.key] ?: model.settings.subtitlePreference
     val episodeContainer=library.type in setOf("Series","Season")
     val episodeLayout=model.settings.episodeLayouts[library.key] ?: "horizontal"
     val toolsEntry=remember(library.key) {FocusRequester()}
@@ -196,7 +197,7 @@ import kotlinx.coroutines.delay
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
                     LazyRow(Modifier.focusRequester(toolsEntry).focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
                         item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
-                        item {Action("字幕：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "默认"}") {chooser="subtitle"}}
+                        item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==subtitlePreference}?.second ?: "媒体默认"}") {chooser="subtitle"}}
                         if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout)}
                         else item {Action("视图：$mode") {chooser="view"}}
                         if(!episodeContainer && Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",active=folderMode) {folderMode=!folderMode}}
@@ -227,19 +228,19 @@ import kotlinx.coroutines.delay
             model.errors["library:${library.key}"]?.let {error->item(span={GridItemSpan(maxLineSpan)}) {EmptyState("读取失败",error,"重试") {model.loadLibrary(library,sort,ascending=ascending)}}}
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"默认字幕";else->"展现方式"},
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"字幕优先级（未匹配时跟随媒体默认）";else->"展现方式"},
         when(chooser) {"sort"->Presentation.sorts.map {(key,label)->key to if(key==sort) "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
             else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
-        when(chooser) {"sort"->sort;"subtitle"->model.settings.subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
+        when(chooser) {"sort"->sort;"subtitle"->subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
         when(chooser) {"sort"->{ascending=if(sort==value) !ascending else value=="SortName";sort=value;model.loadLibrary(library,sort,ascending=ascending)}
-            "subtitle"->model.saveSettings(model.settings.copy(subtitlePreference=value))
+            "subtitle"->model.saveSettings(model.settings.copy(librarySubtitlePreferences=model.settings.librarySubtitlePreferences+(library.key to value)))
             else->model.saveSettings(model.settings.copy(libraryArtworkModes=model.settings.libraryArtworkModes+(library.key to value)))}
         chooser=""
     }
 }
 
 @Composable fun DetailScreen(initial:MediaEntry,onPlay:(MediaEntry,Boolean)->Unit) {
-    MediaDetailContent(initial,onPlay)
+    if(initial.type=="Person") PersonScreen(initial) else MediaDetailContent(initial,onPlay)
 }
 
 @Composable fun CloudScreen(onPlay:(MediaEntry,Boolean)->Unit) {

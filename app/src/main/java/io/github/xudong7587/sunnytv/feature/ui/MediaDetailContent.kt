@@ -70,7 +70,7 @@ import kotlinx.coroutines.withContext
     val themed=base.copy(background=tint,surface=lerp(tint,base.surface,.30f),raised=lerp(tint,base.raised,.55f))
     var panel by remember(item.key) {mutableStateOf("")}
     val version=item.versions.firstOrNull {it.id==model.selectedVersion[item.key]} ?: item.versions.firstOrNull()
-    val tracks=version?.tracks ?: emptyList()
+    val tracks=version?.tracks ?: item.tracks
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
@@ -81,7 +81,7 @@ import kotlinx.coroutines.withContext
             LazyColumn(state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 item(key="detail-header") {
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
-                        ArtworkView(item,item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
+                        ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
                         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.55f),Color.Transparent))))
                         Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start=pageSidePadding,top=12.dp)) {Action("返回",id="detail-back",icon="back") {model.back()}}
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,tint.copy(.3f),tint))))
@@ -156,8 +156,10 @@ import kotlinx.coroutines.withContext
                         LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                             items(item.people,key={"${it.id}:${it.name}:${it.role}"}) {person ->
                                 Column(Modifier.width(104.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    ArtworkView(MediaEntry(person.id,item.sourceId,person.name,"Person",primary=person.primary),person.primary,
-                                        Modifier.size(88.dp).clip(CircleShape),180,fit=false,fallbackText=person.name.take(1))
+                                    val actor=MediaEntry(person.id.ifBlank {"person:${person.name}"},item.sourceId,person.name,"Person",primary=person.primary)
+                                    FocusTile("person:${actor.key}",Modifier.size(88.dp),shape=CircleShape,onClick={model.navigate(Route.Detail(actor))}) {
+                                        ArtworkView(actor,person.primary,Modifier.fillMaxSize(),180,fit=false,fallbackText=person.name.take(1))
+                                    }
                                     Text(person.name,color=SunnyColors.Text,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(top=9.dp))
                                     Text(person.role,color=SunnyColors.Secondary,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 }
@@ -181,11 +183,12 @@ import kotlinx.coroutines.withContext
                 if(track==null) model.selectedAudio.remove(item.key) else model.selectedAudio[item.key]=track
                 panel=""
             }
-            "subtitle" -> ChoiceDialog("字幕",listOf("default" to "跟随媒体默认")+Presentation.subtitles+
-                tracks.filter {it.type=="Subtitle"}.map {"track:${it.index}" to it.title},
-                model.selectedSubtitleTrack[item.key]?.let {"track:${it.index}"} ?: model.selectedSubtitle[item.key] ?: model.settings.subtitlePreference,{panel=""}) {id->
+            "subtitle" -> ChoiceDialog(if(tracks.none {it.type=="Subtitle"}) "此版本暂无 Emby 已识别的字幕" else "此媒体的实际字幕",
+                listOf("default" to "自动选择（按字幕偏好）","none" to "关闭字幕")+
+                tracks.filter {it.type=="Subtitle"}.map {"track:${it.index}" to "${it.title} · ${if(it.external) "外挂" else "内嵌"}"},
+                model.selectedSubtitleTrack[item.key]?.let {"track:${it.index}"} ?: model.selectedSubtitle[item.key] ?: "default",{panel=""}) {id->
                 val track=tracks.firstOrNull {it.type=="Subtitle" && "track:${it.index}"==id}
-                if(track!=null) {model.selectedSubtitleTrack[item.key]=track;model.selectedSubtitle[item.key]=track.language}
+                if(track!=null) {model.selectedSubtitleTrack[item.key]=track;model.selectedSubtitle.remove(item.key);version?.let {model.selectedVersion[item.key]=it.id}}
                 else {model.selectedSubtitleTrack.remove(item.key);model.selectedSubtitle[item.key]=id}
                 panel=""
             }

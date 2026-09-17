@@ -125,8 +125,8 @@ import kotlinx.coroutines.delay
 @Composable fun Backdrop(item:MediaEntry?) {
     val model=LocalAppModel.current
     Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
-        if(model.settings.backdropEnabled && item?.backdrop!=null) {
-            ArtworkView(item,item.backdrop,Modifier.fillMaxSize(),widthPx=1920)
+        if(model.settings.backdropEnabled && item!=null && (item.backdrop!=null || item.primary!=null)) {
+            ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),widthPx=1920)
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.7f),Color.Black.copy(.20f)))))
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(SunnyColors.Background.copy(.20f),SunnyColors.Background.copy(.72f),SunnyColors.Background))))

@@ -58,6 +58,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     val selectedSubtitle = mutableStateMapOf<String,String>()
     val selectedSubtitleTrack = mutableStateMapOf<String,MediaTrack>()
     val pages = mutableStateMapOf<String, MediaPage>()
+    val personWorks = mutableStateMapOf<String,MediaPage>()
+    private val mediaLibraries=mutableMapOf<String,String>()
     val children = mutableStateMapOf<String, List<MediaEntry>>()
     val details = mutableStateMapOf<String, MediaEntry>()
     val folders = mutableStateMapOf<String, List<MediaEntry>>()
@@ -127,7 +129,10 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
 
     fun loadLatest(item:MediaEntry) {
         if(libraryLatest.containsKey(item.key)) return
-        launchLoad("latest:${item.key}") {libraryLatest[item.key]=artworkFeedSlots.withPermit {app.emby(source(item.sourceId)).latest(item.id,10)}}
+        launchLoad("latest:${item.key}") {
+            val entries=artworkFeedSlots.withPermit {app.emby(source(item.sourceId)).latest(item.id,10)}
+            entries.forEach {mediaLibraries[it.key]=item.key};libraryLatest[item.key]=entries
+        }
     }
     fun loadHero() {
         val preferences=settings
@@ -155,13 +160,16 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             val old=folderPages[item.key]
             val next=app.emby(source(item.sourceId)).library(item.id,if(more) old?.items?.size ?: 0 else 0,
                 "SortName",foldersOnly=true)
+            next.items.forEach {mediaLibraries[it.key]=mediaLibraries[item.key] ?: item.key}
             folderPages[item.key]=if(more) MediaPage(((old?.items ?: emptyList())+next.items).distinctBy {it.key},next.total) else next
         }
     }
     fun loadFolderPreview(item:MediaEntry) {
         if(folderPreviews.containsKey(item.key)) return
         launchLoad("folder-preview:${item.key}") {
-            folderPreviews[item.key]=app.emby(source(item.sourceId)).library(item.id,limit=10,mixed=true).items
+            val entries=app.emby(source(item.sourceId)).library(item.id,limit=10,mixed=true).items
+            mediaLibraries[item.key]?.let {library->entries.forEach {mediaLibraries[it.key]=library}}
+            folderPreviews[item.key]=entries
         }
     }
     fun loadLibrary(item: MediaEntry, sort: String = "DateCreated", more: Boolean = false,ascending:Boolean=sort=="SortName") {
@@ -172,6 +180,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             val old = pages[item.key]
             val fresh = api.library(item.id, if (append) old?.items?.size ?: 0 else 0, sort,
                 ascending=ascending,mixed=item.collectionType in setOf("","mixed","homevideos") || item.type=="Folder")
+            fresh.items.forEach {mediaLibraries[it.key]=mediaLibraries[item.key] ?: item.key}
             pages[item.key] = if (append) {
                 MediaPage(((old?.items ?: emptyList()) + fresh.items).distinctBy { it.key }, fresh.total)
             } else fresh
@@ -185,16 +194,39 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
 
     fun loadDetail(item: MediaEntry) {
-        if (source(item.sourceId).kind != SourceKind.EMBY) return
+        if (sources.firstOrNull {it.id==item.sourceId}?.kind != SourceKind.EMBY) return
+        if(item.type=="Person") {loadPerson(item);return}
         launchLoad("detail:${item.key}", replace = true) {
             val api = app.emby(source(item.sourceId))
             val entry = api.item(item.id)
             details[item.key] = entry
-            if (entry.type in setOf("Series", "Season")) children[item.key] = api.children(entry)
+            if (entry.type in setOf("Series", "Season")) {
+                val entries=api.children(entry)
+                mediaLibraries[item.key]?.let {library->entries.forEach {mediaLibraries[it.key]=library}}
+                children[item.key] = entries
+            }
             launchLoad("similar:${item.key}",replace=true) {similar[item.key]=api.similar(item.id)}
         }
     }
 
+    fun loadPerson(person:MediaEntry) {
+        launchLoad("person:${person.key}",replace=true) {
+            details[person.key]=app.emby(source(person.sourceId)).person(person.title)
+            loadPersonWorks(person)
+        }
+    }
+    fun loadPersonWorks(person:MediaEntry,more:Boolean=false) {
+        launchLoad("person-works:${person.key}",replace=!more) {
+            val resolved=details[person.key] ?: person
+            val old=personWorks[person.key]
+            val next=app.emby(source(person.sourceId)).personWorks(resolved.id,if(more) old?.items?.size ?: 0 else 0)
+            personWorks[person.key]=if(more) MediaPage((old?.items.orEmpty()+next.items).distinctBy {it.key},next.total) else next
+        }
+    }
+    private fun subtitlePreference(item:MediaEntry):String {
+        val library=mediaLibraries[item.key] ?: stack.filterIsInstance<Route.Library>().lastOrNull()?.item?.key
+        return settings.librarySubtitlePreferences[library] ?: settings.subtitlePreference
+    }
     fun loadFolder(id: String, path: String) {
         launchLoad("folder:$id:$path", replace = true) { folders["$id:$path"] = app.dav(source(id)).list(path) }
     }
@@ -229,10 +261,16 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                 val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(playable, fromStart,selectedVersion[playable.key].orEmpty())
                 else app.dav(config).playback(item, if (fromStart) 0 else app.store.position(item.key))
                 ensureActive()
+                val chosenSubtitle=selectedSubtitleTrack[playable.key]
+                val version=details[playable.key]?.versions?.firstOrNull {it.id==request.mediaSourceId}
+                val embedded=(version?.tracks ?: details[playable.key]?.tracks ?: playable.tracks).filter {it.type=="Subtitle" && !it.external}
                 ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),
                     audioLanguage=selectedAudio[item.key]?.language.orEmpty(),audioTitle=selectedAudio[item.key]?.title.orEmpty(),
-                    subtitlePreference=selectedSubtitle[item.key] ?: settings.subtitlePreference,
-                    subtitleTitle=selectedSubtitleTrack[item.key]?.title.orEmpty()))
+                    subtitlePreference=if(selectedSubtitle[playable.key]=="none") "none" else subtitlePreference(item),
+                    subtitleTitle=chosenSubtitle?.title.orEmpty(),
+                    explicitSubtitle=chosenSubtitle!=null,
+                    subtitleTrackId=chosenSubtitle?.takeIf {it.external}?.let {"emby-sub:${it.index}"}.orEmpty(),
+                    subtitleOrdinal=if(chosenSubtitle!=null && !chosenSubtitle.external) embedded.indexOfFirst {it.index==chosenSubtitle.index} else -1))
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = safeError(e) }
             finally { busy = false }
@@ -346,7 +384,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     private fun clearMediaState() {
         feeds.clear(); errors.clear(); pages.clear(); libraryResume.clear()
         details.clear(); children.clear(); folders.clear(); librarySort.clear(); focusMemory.clear()
-        libraryLatest.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear()
+        libraryLatest.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
         selectedVersion.clear(); selectedAudio.clear(); selectedSubtitle.clear(); selectedSubtitleTrack.clear()
         heroCandidates=emptyList()
     }

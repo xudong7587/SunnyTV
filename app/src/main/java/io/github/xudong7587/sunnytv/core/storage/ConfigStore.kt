@@ -75,10 +75,14 @@ class ConfigStore(context: Context) {
         }.toMap(),
         prefs.all.filterKeys {it.startsWith("episodeLayout:")}.mapNotNull {(key,value)->
             (value as? String)?.takeIf {it in setOf("horizontal","vertical","numbers")}?.let {key.removePrefix("episodeLayout:") to it}
+        }.toMap(),
+        prefs.all.filterKeys {it.startsWith("librarySubtitle:")}.mapNotNull {(key,value)->
+            (value as? String)?.let {key.removePrefix("librarySubtitle:") to it}
         }.toMap()
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
+        s.librarySubtitlePreferences.forEach {(key,value)->libraryEditor.putString("librarySubtitle:$key",value)}
         s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
         libraryEditor.apply()

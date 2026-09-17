@@ -80,6 +80,8 @@ class PlayerActivity: ComponentActivity() {
     private var gestureStartVolume = 0
     private val audioManager get() = getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var selectionNotice by mutableStateOf("")
+    private var availableTracks by mutableStateOf(Tracks.EMPTY)
+    private var subtitleManuallySelected=false
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,8 +144,10 @@ class PlayerActivity: ComponentActivity() {
         selectionNotice=""
         var audioPreferenceApplied=false
         var subtitlePreferenceApplied=false
+        subtitleManuallySelected=false
+        availableTracks=Tracks.EMPTY
         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT,request.subtitlePreference!="default")
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT,request.subtitlePreference=="none" && !request.explicitSubtitle)
             .build()
         val media=androidx.media3.common.MediaItem.Builder().setUri(request.stableUrl)
             .setMediaId(request.localKey.ifBlank {"session"})
@@ -151,10 +155,12 @@ class PlayerActivity: ComponentActivity() {
         request.mimeHint?.let {media.setMimeType(it)}
         media.setSubtitleConfigurations(request.subtitles.map {sub ->
             androidx.media3.common.MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
-                .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).build()
+                .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).setId(sub.id)
+                .setSelectionFlags(if(sub.isDefault) C.SELECTION_FLAG_DEFAULT else 0).build()
         })
         p.addListener(object:Player.Listener {
             override fun onTracksChanged(tracks:Tracks) {
+                availableTracks=tracks
                 fun choose(type:Int,title:String,language:String):Boolean {
                     val options=tracks.groups.filter {it.type==type}.flatMap {group->
                         (0 until group.length).filter {group.isTrackSupported(it)}.map {group to it}
@@ -179,8 +185,21 @@ class PlayerActivity: ComponentActivity() {
                 if(!audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
                     audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
                 }
-                if(!subtitlePreferenceApplied && request.subtitlePreference !in setOf("default","none")) {
-                    subtitlePreferenceApplied=choose(C.TRACK_TYPE_TEXT,request.subtitleTitle,request.subtitlePreference)
+                if(!subtitleManuallySelected && !subtitlePreferenceApplied && (request.explicitSubtitle || request.subtitlePreference !in setOf("default","none"))) {
+                    val options=tracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}.flatMap {g->(0 until g.length).map {g to it}}
+                    val selected=SubtitleSelection.choose(options.map {(g,i)->val f=g.getTrackFormat(i)
+                        SubtitleSelection.Option(f.id.orEmpty(),f.label.orEmpty(),f.language.orEmpty(),g.isTrackSupported(i))},
+                        request.subtitlePreference,request.explicitSubtitle,request.subtitleTrackId,request.subtitleTitle,request.subtitleOrdinal)
+                    if(selected!=null) {
+                        subtitlePreferenceApplied=true
+                        val (group,index)=options[selected]
+                        p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT,false)
+                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,index)).build()
+                        selectionNotice=""
+                    } else if(request.explicitSubtitle && options.isNotEmpty()) {
+                        selectionNotice="所选字幕暂不可用，可在字幕面板选择此媒体的其他实际字幕"
+                    }
+                    // No match for a library preference leaves the media/player default selection intact.
                 }
             }
             override fun onIsPlayingChanged(isPlaying:Boolean) {
@@ -384,12 +403,13 @@ class PlayerActivity: ComponentActivity() {
     }
     @Composable private fun TrackPanel() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
-        val groups=player?.currentTracks?.groups?.filter {it.type==type} ?: emptyList()
+        val groups=availableTracks.groups.filter {it.type==type}
         Box(Modifier.fillMaxSize().background(Color.Black.copy(.5f)),contentAlignment=Alignment.CenterEnd) {
             LazyColumn(Modifier.width(360.dp).fillMaxHeight().background(SunnyColors.Surface).padding(25.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {Text(if(type==C.TRACK_TYPE_AUDIO) "选择音轨" else "选择字幕",color=SunnyColors.Text,fontSize=24.sp,fontWeight=FontWeight.Bold)}
                 item {PlayerButton("关闭面板",true) {panel=""}}
                 if(type==C.TRACK_TYPE_TEXT) item {PlayerButton("关闭字幕") {
+                    subtitleManuallySelected=true
                     player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()};panel=""
                 }}
                 if(groups.isEmpty()) item {Text("此媒体没有可选择的轨道",color=SunnyColors.Secondary,fontSize=14.sp)}
@@ -397,7 +417,9 @@ class PlayerActivity: ComponentActivity() {
                     for(i in 0 until group.length) {
                         val format=group.getTrackFormat(i)
                         if(group.isTrackSupported(i)) item {
-                            PlayerButton(listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"}) {
+                            PlayerButton((if(group.isTrackSelected(i) && player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)!=true) "✓ " else "")+
+                                listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"}) {
+                                if(type==C.TRACK_TYPE_TEXT) subtitleManuallySelected=true
                                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon()
                                     .setTrackTypeDisabled(type,false).setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,i)).build()}
                                 panel=""
