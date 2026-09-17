@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -35,7 +36,7 @@ PAYLOAD = base64.b64decode(ENCODED)
 
 def execute_restore(target: Path, output: Path) -> str:
     env = {**os.environ, **STEP['env'], 'GITHUB_OUTPUT': str(output)}
-    result = subprocess.run(['python3', '-'], input=PYTHON, cwd=target, env=env,
+    result = subprocess.run([sys.executable, '-'], input=PYTHON, cwd=target, env=env,
                             capture_output=True, text=True, check=True)
     return result.stdout
 

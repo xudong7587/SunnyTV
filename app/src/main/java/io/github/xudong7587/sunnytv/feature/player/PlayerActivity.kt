@@ -197,7 +197,7 @@ class PlayerActivity: ComponentActivity() {
         )
     }
     private fun seek(delta:Long) {player?.let {it.seekTo(MediaLogic.seek(it.currentPosition,delta,it.duration))};position=player?.currentPosition ?: position}
-    override fun dispatchKeyEvent(event:KeyEvent):Boolean {
+    override fun onKeyDown(keyCode:Int, event:KeyEvent):Boolean {
         if(event.action==KeyEvent.ACTION_DOWN) {
             when(event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{player?.let {if(it.isPlaying) it.pause() else it.play()};return true}
@@ -214,7 +214,7 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
         }
-        return super.dispatchKeyEvent(event)
+        return super.onKeyDown(keyCode, event)
     }
     @Composable private fun PlayerContent() {
         Box(Modifier.fillMaxSize().background(Color.Black)) {

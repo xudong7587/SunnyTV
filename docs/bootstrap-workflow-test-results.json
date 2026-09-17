@@ -1,0 +1,8 @@
+{
+  "scope": "Offline parsing/execution of generated Actions restorer; not GitHub or Android",
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "workflow_sha256": "ce2ffd05a9a0fa019a9dd1a5f680bc896365c9db1bebfad846fcf4282eb6421c",
+  "seed_sha256": "57cff7ca848cd0127dcbbb2d28968972a58892692b800066e9f5f8e6d0077dbe"
+}
