@@ -7,6 +7,9 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -37,9 +40,10 @@ import kotlinx.coroutines.delay
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
-    shape:Shape=RoundedCornerShape(12.dp), onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
+    shape:Shape=RoundedCornerShape(12.dp), restoreFocus:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
+    val pageActive=LocalPageActive.current
     val requester=remember(page,id) { FocusRequester() }
     val bridge=LocalNavigationBridge.current
     DisposableEffect(bridge,id,requester) {
@@ -48,37 +52,49 @@ import kotlinx.coroutines.delay
         onDispose {targets?.remove(id)}
     }
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if(focused && !model.settings.reduceMotion) 1.025f else 1f,
-        tween(if(model.settings.reduceMotion) 0 else 130),label="focus-scale")
-    LaunchedEffect(page,id) {
-        if(model.focusMemory[page]==id || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:")))) {
+    val motion=LocalMotion.current
+    val selected=focused || active
+    val base=LocalSunnyPalette.current
+    val fill by animateColorAsState(if(selected) base.focusBackground else base.raised.copy(.72f),motion.fade(240),label="focus-fill")
+    val bottom by animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(.70f),motion.fade(240),label="focus-gradient")
+    val elevation by animateDpAsState(if(focused) 7.dp else 0.dp,motion.spring(),label="focus-elevation")
+    val ink by animateColorAsState(if(selected) base.focusContent else base.text,motion.fade(200),label="focus-ink")
+    val secondary by animateColorAsState(if(selected) base.focusContent.copy(.88f) else base.secondary,motion.fade(200),label="focus-secondary")
+    val accent by animateColorAsState(if(selected) base.focusContent else base.accent,motion.fade(200),label="focus-accent")
+    val sheen by animateFloatAsState(if(focused) 1f else 0f,motion.fade(240),label="focus-sheen")
+    val contentPalette=base.copy(text=ink,secondary=secondary,accent=accent)
+    LaunchedEffect(page,id,pageActive) {
+        if(pageActive && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45); runCatching { requester.requestFocus() }
         }
     }
-    Box(modifier.testTag(id).graphicsLayer { scaleX=scale; scaleY=scale }
-        .focusRequester(requester).onFocusChanged {
+    Box(modifier.testTag(id).shadow(elevation,shape,clip=false)
+        .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
-            if(it.isFocused) { model.focusMemory[page]=id; onFocus() }
+            if(it.isFocused && pageActive) { model.focusMemory[page]=id; onFocus() }
         }.clip(shape)
-        .background(Brush.verticalGradient(listOf(
-            if(focused || active) SunnyColors.SurfaceRaised.copy(.94f) else SunnyColors.SurfaceRaised.copy(.72f),
-            SunnyColors.Surface.copy(.70f))))
-        .border(if(focused) 2.dp else 1.dp, if(focused) SunnyColors.Accent else if(active) SunnyColors.Border else Color.White.copy(alpha=.07f),shape)
+        .background(Brush.verticalGradient(listOf(fill,bottom)))
+        .border(.75.dp,if(selected) Color.White.copy(.10f) else Color.White.copy(.07f),shape)
         .onPreviewKeyEvent {event->event.type==KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount>0 &&
             event.key in listOf(Key.Enter,Key.NumPadEnter,Key.DirectionCenter)}
-        .clickable(onClick=onClick), contentAlignment=Alignment.Center) { content(focused) }
+        .clickable(enabled=pageActive,onClick=onClick), contentAlignment=Alignment.Center) {
+        CompositionLocalProvider(LocalSunnyPalette provides contentPalette) {content(focused)}
+        if(sheen>0f) Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
+            Color.White.copy(alpha=.055f*sheen),Color.Transparent,base.focusBackground.copy(alpha=.08f*sheen)))))
+    }
 }
 
-@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),onClick:()->Unit) {
+@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),modifier:Modifier=Modifier,onClick:()->Unit) {
     val model=LocalAppModel.current
-    FocusTile(id=id,modifier=Modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
+    FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=RoundedCornerShape(28.dp),onClick=onClick) { focused ->
         val ink=if(primary || focused) SunnyColors.Accent else SunnyColors.Text
         Row(Modifier.height(48.dp).widthIn(min=48.dp)
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             LineIcon(icon,ink)
-            val ms=if(model.settings.reduceMotion) 0 else 160
-            AnimatedVisibility(focused || active,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
+            val motion=LocalMotion.current
+            AnimatedVisibility(focused || active,enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
+                exit=shrinkHorizontally(motion.spring())+fadeOut(motion.fade(240))) {
                 Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
                     modifier=Modifier.padding(start=8.dp),maxLines=1)
             }
@@ -104,12 +120,13 @@ import kotlinx.coroutines.delay
             val actualWidth=(widthPx*densityScale*(if(model.settings.highQualityArtwork) 1.25f else 1f)).toInt()
                 .coerceAtMost(minOf(maxPixels,maxOf(view.width,view.height,1280))).coerceAtLeast(64)
             val context=LocalContext.current
-            val request=remember(art,actualWidth,source.id) {
+            val fadeMs=LocalMotion.current.duration(300)
+            val request=remember(art,actualWidth,source.id,fadeMs) {
                 ImageRequest.Builder(context).data(service.imageUrl(art,actualWidth))
                     .size(actualWidth,if(art.type=="Primary" && !fit && item.type!="Episode") actualWidth*3/2 else actualWidth*9/16).precision(coil.size.Precision.INEXACT)
                     .memoryCacheKey("${source.id}:${art.itemId}:${art.type}:${art.tag}:$actualWidth")
                     .diskCacheKey("${source.id}:${art.itemId}:${art.type}:${art.tag}:$actualWidth")
-                    .crossfade(false).build()
+                    .crossfade(fadeMs).build()
             }
             AsyncImage(model=request,imageLoader=model.app.images(source),contentDescription=item.title,
                 contentScale=if(fit) ContentScale.Fit else ContentScale.Crop,modifier=Modifier.fillMaxSize(),
@@ -124,9 +141,13 @@ import kotlinx.coroutines.delay
 
 @Composable fun Backdrop(item:MediaEntry?) {
     val model=LocalAppModel.current
+    val motion=LocalMotion.current
+    val compact=LocalCompact.current
     Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
         if(model.settings.backdropEnabled && item!=null && (item.backdrop!=null || item.primary!=null)) {
-            ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),widthPx=1920)
+            Crossfade(item,animationSpec=motion.fade(400),label="library-backdrop") {media->
+                ArtworkView(media,if(compact) media.primary ?: media.backdrop else media.backdrop ?: media.primary,Modifier.fillMaxSize(),widthPx=1920)
+            }
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.7f),Color.Black.copy(.20f)))))
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(SunnyColors.Background.copy(.20f),SunnyColors.Background.copy(.72f),SunnyColors.Background))))
@@ -175,7 +196,7 @@ import kotlinx.coroutines.delay
     if(list.isEmpty()) return
     Column {
         SectionTitle(title)
-        LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp),
+        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp),
             modifier=Modifier.fillMaxWidth().focusGroup()) {
             items(list,key={ it.key }) { entry -> MediaCard(entry,wide,onFocus={onFocus(entry)},onClick={onClick(entry)},focusId="shelf:$title:${entry.key}") }
         }
@@ -199,6 +220,7 @@ import kotlinx.coroutines.delay
     var loaded by remember(item.key, logo) { mutableStateOf(false) }
     var failed by remember(item.key, logo) { mutableStateOf(false) }
     val context = LocalContext.current
+    val motion=LocalMotion.current
     if (logo == null || source == null || failed) {
         Text(item.title, color = SunnyColors.Text, fontSize = fontSize, lineHeight = fontSize * 1.2f, fontWeight = FontWeight.Bold,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -213,11 +235,12 @@ import kotlinx.coroutines.delay
             .crossfade(false).build()
     }
     val titleHeight=with(LocalDensity.current) {(fontSize * 2.4f).toDp()}.coerceAtLeast(75.dp)
+    val logoAlpha by animateFloatAsState(if(loaded) 1f else 0f,motion.fade(300),label="title-logo")
     Box(Modifier.fillMaxWidth().height(titleHeight), contentAlignment = Alignment.CenterStart) {
-        if (!loaded) Text(item.title, color = SunnyColors.Text, fontSize = fontSize, lineHeight = fontSize * 1.2f,
+        if (logoAlpha<1f) Text(item.title, modifier=Modifier.graphicsLayer {alpha=1f-logoAlpha},color = SunnyColors.Text, fontSize = fontSize, lineHeight = fontSize * 1.2f,
             fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         AsyncImage(model = request, imageLoader = model.app.images(source), contentDescription = item.title,
-            contentScale = ContentScale.Fit, alignment = Alignment.CenterStart, modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit, alignment = Alignment.CenterStart, modifier = Modifier.fillMaxSize().graphicsLayer {alpha=logoAlpha},
             onSuccess = { loaded = true }, onError = { failed = true })
     }
 }

@@ -13,6 +13,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
@@ -25,9 +27,10 @@ import io.github.xudong7587.sunnytv.feature.Route
 
 /** The focused square stays in place; only the media order rotates. */
 @Composable fun RotatingHeroCards(items:List<MediaEntry>,selected:Int,onSelect:(Int)->Unit,
-    modifier:Modifier=Modifier,id:String="home-carousel") {
+    modifier:Modifier=Modifier,id:String="home-carousel",requester:FocusRequester?=null) {
     if(items.isEmpty()) return
     val model=LocalAppModel.current
+    val motion=LocalMotion.current
     val index=selected.coerceIn(items.indices)
     val entry=items[index]
     val choose by rememberUpdatedState(onSelect)
@@ -39,7 +42,7 @@ import io.github.xudong7587.sunnytv.feature.Route
         val side=(maxWidth*.55f).coerceAtMost(260.dp)
         Row(horizontalArrangement=Arrangement.spacedBy(9.dp),verticalAlignment=Alignment.Top) {
             Column(Modifier.width(side)) {
-                FocusTile("$id:featured",Modifier.size(side).onPreviewKeyEvent {
+                FocusTile("$id:featured",Modifier.size(side).then(if(requester!=null) Modifier.focusRequester(requester) else Modifier).onPreviewKeyEvent {
                     if(it.type==KeyEventType.KeyDown && it.key in listOf(Key.DirectionLeft,Key.DirectionRight)) {
                         direction=if(it.key==Key.DirectionRight) 1 else -1;change(direction);true
                     } else false
@@ -50,9 +53,8 @@ import io.github.xudong7587.sunnytv.feature.Route
                     }) {event,amount->event.consume();drag+=amount}
                 },shape=RoundedCornerShape(18.dp),onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,transitionSpec={
-                        val ms=if(model.settings.reduceMotion) 0 else 200
-                        (fadeIn(tween(ms))+slideInHorizontally(tween(ms)) {it/8*direction}) togetherWith
-                            (fadeOut(tween(ms))+slideOutHorizontally(tween(ms)) {-it/8*direction})
+                        (fadeIn(motion.fade(320))+slideInHorizontally(motion.fade(320)) {it/8*direction}) togetherWith
+                            (fadeOut(motion.fade(320))+slideOutHorizontally(motion.fade(320)) {-it/8*direction})
                     },label="hero-media") {media->
                         Box(Modifier.fillMaxSize()) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),700)
@@ -66,9 +68,9 @@ import io.github.xudong7587.sunnytv.feature.Route
             }
             val following=(1 until items.size).map {items[(index+it)%items.size]}
             val stripWidth=if(LocalCompact.current) 52.dp else ((containerWidth-side-9.dp-7.dp*(following.size-1).coerceAtLeast(0))/following.size.coerceAtLeast(1)).coerceAtLeast(20.dp)
-            LazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+            StableLazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                 items(following,key={it.key}) {media->
-                    Column(Modifier.width(stripWidth).animateItem()) {
+                    Column(Modifier.width(stripWidth).animateItem(fadeInSpec=motion.fade(300),placementSpec=motion.spring(),fadeOutSpec=motion.fade(300))) {
                         FocusTile("$id:strip:${media.key}",Modifier.fillMaxWidth().height(side).focusProperties {canFocus=false},
                             shape=RoundedCornerShape(13.dp),onClick={direction=1;choose(items.indexOf(media))}) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),320)
@@ -85,6 +87,7 @@ import io.github.xudong7587.sunnytv.feature.Route
     resume:List<MediaEntry>,paused:Boolean,onPause:()->Unit,onPlay:(MediaEntry,Boolean)->Unit) {
     val compact=LocalCompact.current
     val model=LocalAppModel.current
+    val carouselFocus=remember {FocusRequester()}
     @Composable fun Copy() {
         Column(verticalArrangement=Arrangement.spacedBy(if(compact) 9.dp else 13.dp)) {
             Text(if(model.settings.heroMode=="resume") "为你继续" else "首映推荐",color=SunnyColors.Accent,fontSize=11.sp)
@@ -94,7 +97,8 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Text(hero.overview.ifBlank {"来自你的媒体库"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,
                     maxLines=if(compact) 2 else 3,overflow=TextOverflow.Ellipsis)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    if(hero.isPlayable || hero.type in setOf("Series","Season")) Action(if(hero.positionMs>0) "继续播放" else "立即播放",id="home-play",primary=true) {onPlay(hero,false)}
+                    if(hero.isPlayable || hero.type in setOf("Series","Season")) Action(if(hero.positionMs>0) "继续播放" else "立即播放",id="home-play",primary=true,
+                        modifier=if(!compact) Modifier.focusProperties {right=carouselFocus} else Modifier) {onPlay(hero,false)}
                     Action("查看详情",id="home-detail") {model.navigate(Route.Detail(hero))}
                     Action(if(paused) "自动轮播" else "暂停轮播",id="home-pause",active=paused,onClick=onPause)
                 }
@@ -124,6 +128,6 @@ import io.github.xudong7587.sunnytv.feature.Route
     } else Row(Modifier.fillMaxSize().padding(horizontal=30.dp).padding(top=pageTopPadding,bottom=28.dp),
         horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.Bottom) {
         Box(Modifier.weight(.4f)) {Copy()}
-        RotatingHeroCards(candidates,selected,onSelect,Modifier.weight(.6f))
+        RotatingHeroCards(candidates,selected,onSelect,Modifier.weight(.6f),requester=carouselFocus)
     }
 }

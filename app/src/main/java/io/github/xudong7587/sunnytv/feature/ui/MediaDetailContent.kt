@@ -2,6 +2,7 @@ package io.github.xudong7587.sunnytv.feature.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -65,7 +66,7 @@ import kotlinx.coroutines.withContext
     val model=LocalAppModel.current
     val item=model.details[initial.key] ?: initial
     val context=LocalContext.current
-    val tint=posterTint(item)
+    val tint by animateColorAsState(posterTint(item),LocalMotion.current.fade(400),label="detail-tint")
     val base=LocalSunnyPalette.current
     val themed=base.copy(background=tint,surface=lerp(tint,base.surface,.30f),raised=lerp(tint,base.raised,.55f))
     var panel by remember(item.key) {mutableStateOf("")}
@@ -96,7 +97,7 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    LazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    StableLazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放") {onPlay(item,true)}}
@@ -105,7 +106,11 @@ import kotlinx.coroutines.withContext
                             item {Action("CC  字幕") {panel="subtitle"}}
                         }
                         if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played) {panel="played"}}
-                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable) {model.favorite(item)}}
+                        if(item.type in setOf("Series","Season")) {
+                            item {Action("从头播放",id="detail-start",primary=true,autoFocus=true) {onPlay(item,true)}}
+                            item {Action("继续播放",id="detail-resume",primary=true) {onPlay(item,false)}}
+                        }
+                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season")) {model.favorite(item)}}
                         item {Action("返回") {model.back()}}
                     }
                 }
@@ -114,7 +119,7 @@ import kotlinx.coroutines.withContext
                 if(item.versions.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("播放资源", "${item.versions.size} 个版本")
-                        LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(3.dp)) {
+                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(3.dp)) {
                             items(item.versions,key={it.id}) {v->
                                 FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {
@@ -153,7 +158,7 @@ import kotlinx.coroutines.withContext
                 if(item.people.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("演员表")
-                        LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                             items(item.people,key={"${it.id}:${it.name}:${it.role}"}) {person ->
                                 Column(Modifier.width(104.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     val actor=MediaEntry(person.id.ifBlank {"person:${person.name}"},item.sourceId,person.name,"Person",primary=person.primary)

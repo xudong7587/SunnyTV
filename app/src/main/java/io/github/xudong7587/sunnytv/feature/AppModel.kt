@@ -34,9 +34,10 @@ fun Route.key(): String = when (this) {
 }
 
 /** Application coordinator. Source implementations and transport policies never depend on Compose. */
-class AppModel @JvmOverloads constructor(application: Application, private val restoreSources:Boolean=true) : AndroidViewModel(application) {
+class AppModel @JvmOverloads constructor(application: Application, private val restoreSources:Boolean=true,
+    initialSources:List<SourceConfig> = emptyList()) : AndroidViewModel(application) {
     val app = application as SunnyApp
-    var sources by mutableStateOf<List<SourceConfig>>(emptyList()); private set
+    var sources by mutableStateOf(initialSources); private set
     var settings by mutableStateOf(if(restoreSources) app.store.settings() else AppSettings()); private set
     var message by mutableStateOf("")
     var busy by mutableStateOf(false); private set

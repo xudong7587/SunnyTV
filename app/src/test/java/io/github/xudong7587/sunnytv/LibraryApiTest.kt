@@ -10,6 +10,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryApiTest {
+    @Test fun seasonResumeUsesServerHistoryAndKeepsTheSeasonScope()=runBlocking {
+        MockWebServer().use {server->
+            val body="""{"Items":[
+                {"Id":"later","Type":"Episode","ParentIndexNumber":2,"IndexNumber":10,"UserData":{"PlaybackPositionTicks":50000000,"LastPlayedDate":"2026-09-17T12:00:00.1234567Z"}},
+                {"Id":"earlier","Type":"Episode","ParentIndexNumber":2,"IndexNumber":2,"UserData":{"PlaybackPositionTicks":60000000,"LastPlayedDate":"2026-09-16T12:00:00Z"}}]}"""
+            val season=MediaEntry("season-two","s","Season 2","Season",seriesId="show")
+            server.enqueue(MockResponse().setBody(body))
+            val resumed=source(server).playableEpisode(season,false)
+            assertEquals("later",resumed.id);assertEquals(5000L,resumed.positionMs)
+            val request=server.takeRequest()
+            assertEquals("GET",request.method);assertEquals("season-two",request.requestUrl!!.queryParameter("SeasonId"))
+            server.enqueue(MockResponse().setBody(body))
+            assertEquals("earlier",source(server).playableEpisode(season,true).id)
+            server.takeRequest()
+            assertEquals(2,server.requestCount)
+        }
+    }
     private fun source(server:MockWebServer)=EmbySource(SourceConfig("s",SourceKind.EMBY,"Test",server.url("/").toString(),"u","","token"),SafeHttp(),"test")
     @Test fun latestIsScopedAndBounded()=runBlocking {
         MockWebServer().use {server->

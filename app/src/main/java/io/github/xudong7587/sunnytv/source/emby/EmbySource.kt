@@ -73,7 +73,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         require(item.type in setOf("Series","Season"))
         val episodes=parsePage(get("Shows/${if(item.type=="Series") item.id else item.seriesId}/Episodes",
             mapOf("UserId" to config.userId,"Fields" to fields)+(if(item.type=="Season") mapOf("SeasonId" to item.id) else emptyMap()))).items.filter {it.isPlayable}
-        return (if(fromStart) episodes.firstOrNull() else episodes.firstOrNull {it.positionMs>0 && !it.played} ?: episodes.firstOrNull {!it.played} ?: episodes.firstOrNull())
+        return EpisodePlayback.choose(episodes,fromStart)
             ?: error("此剧集没有可播放的单集")
     }
     suspend fun setFavorite(item: MediaEntry, value: Boolean):MediaEntry {
@@ -211,11 +211,22 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
                     video?.optInt("Height") ?: 0,video?.text("VideoRange") ?: "",s.optLong("Size"),s.optLong("Bitrate"),
                     s.optString("Container"),streams.map {parseTrack(it)})},
             tracks=j.optJSONArray("MediaStreams").objects().map {parseTrack(it)},
+            lastPlayedAtMs=parseLastPlayed(j.optJSONObject("UserData")?.text("LastPlayedDate")),
             officialRating=j.text("OfficialRating").orEmpty(),externalLinks=j.optJSONArray("ExternalUrls").objects().mapNotNull {l->
                 val link=l.text("Url") ?: return@mapNotNull null
                 if(link.startsWith("https://")) MediaLink(l.optString("Name","更多信息"),link) else null})
     }
     companion object {
+        private fun parseLastPlayed(value:String?):Long {
+            if(value==null) return 0
+            val normalized=value.replace(Regex("(\\.\\d{3})\\d+"),"$1")
+            for(pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX","yyyy-MM-dd'T'HH:mm:ssX")) {
+                try {return java.text.SimpleDateFormat(pattern,java.util.Locale.ROOT).apply {
+                    timeZone=java.util.TimeZone.getTimeZone("UTC");isLenient=false
+                }.parse(normalized)?.time ?: 0} catch(_:java.text.ParseException) {}
+            }
+            return 0
+        }
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private fun JSONArray?.objects():List<JSONObject> = if(this==null) emptyList() else
             (0 until length()).mapNotNull {optJSONObject(it)}

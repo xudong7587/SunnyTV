@@ -35,10 +35,10 @@ import io.github.xudong7587.sunnytv.feature.Route
     val model=LocalAppModel.current
     val base=SunnyColors.Background
     val compact=LocalCompact.current
-    val lowRam=(androidx.compose.ui.platform.LocalContext.current.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+    val motion=LocalMotion.current
     Box(modifier.fillMaxSize().background(base)) {
         if(item!=null && model.settings.backdropEnabled) {
-            Crossfade(item,animationSpec=tween(if(model.settings.reduceMotion || lowRam) 0 else 220),label="backdrop") {media->
+            Crossfade(item,animationSpec=motion.fade(400),label="backdrop") {media->
                 ArtworkView(media,if(compact) media.primary ?: media.backdrop else media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
             }
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(base.copy(.65f),base.copy(.04f)))))
@@ -52,6 +52,10 @@ import io.github.xudong7587.sunnytv.feature.Route
     modifier:Modifier=Modifier,hero:Boolean=false,id:String,onMore:(()->Unit)?=null) {
     val model=LocalAppModel.current
     val entries=items.take(if(hero) 6 else 10)
+    if(!LocalCompact.current && !hero) {
+        TvAccordionCards(entries,selected,onSelect,modifier,id,onMore)
+        return
+    }
     val count=entries.size+(if(onMore!=null) 1 else 0)
     val requesters=remember(entries.map {it.key},onMore!=null) {List(count) {FocusRequester()}}
     if(count==0) return
@@ -69,7 +73,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                 val target=if(!hero) {if(active && index<entries.size) selectedWidth else height*2/3}
                     else if(count==1) available else if(active) (available-smallWidth*(count-1)).coerceAtLeast(smallWidth) else smallWidth
                 val width by animateDpAsState(target,
-                    if(model.settings.reduceMotion) snap() else spring(dampingRatio=1f,stiffness=500f),label="accordion-width")
+                    LocalMotion.current.spring(),label="accordion-width")
                 val entry=entries.getOrNull(index)
                 FocusTile("$id:${entry?.key ?: "all"}",Modifier.width(width).height(height)
                     .focusRequester(requesters[index]).onPreviewKeyEvent {event ->
@@ -105,7 +109,7 @@ import io.github.xudong7587.sunnytv.feature.Route
         }
         if(hero) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(gap),verticalAlignment=Alignment.CenterVertically) {
             repeat(count) {index->key(entries.getOrNull(index)?.key ?: "all") {Card(index)}}
-        } else LazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
+        } else StableLazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
             items(count,key={entries.getOrNull(it)?.key ?: "all"}) {Card(it)}
         }
     }

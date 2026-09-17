@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
@@ -16,9 +17,11 @@ import androidx.tv.material3.Text
     val model=LocalAppModel.current
     val page=LocalPageKey.current
     val prior=remember {model.focusMemory[page]}
+    val inputMotion=LocalTvFocusMotion.current
+    LaunchedEffect(Unit) {inputMotion.horizontal=false}
     DisposableEffect(Unit) {onDispose {if(prior!=null) model.focusMemory[page]=prior}}
     Dialog(onDismissRequest=onDismiss) {
-        Column(Modifier.width(420.dp).heightIn(max=440.dp)
+        Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.width(420.dp).heightIn(max=440.dp)
             .background(SunnyColors.Surface,RoundedCornerShape(22.dp))
             .border(1.dp,SunnyColors.Border,RoundedCornerShape(22.dp)).padding(22.dp),
             verticalArrangement=Arrangement.spacedBy(14.dp)) {

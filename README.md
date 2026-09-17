@@ -8,7 +8,8 @@
 - 使用 Emby 已有的海报、背景、透明片名 Logo 与单集封面，保留观看进度和收藏状态。
 - 字幕按当前媒体的实际轨道选择，库级设置只作优先级；点击演员可查看介绍与关联作品。
 - 单集支持横向海报、竖向简介和数字选集三种排布，各媒体库可独立保存展示方式。
-- 深浅主题、十组重点色与五档界面大小；图片按显示密度请求，并限制共享缓存开销。
+- 深浅主题、十组重点色、五档界面大小与独立字号；支持导入自定义字体。
+- TV 横向选片固定纵向位置，宽窄海报协调切换；动画支持五档速度与完全关闭。
 - 手机竖屏自适应，播放页支持分区亮度、音量、进度手势和双击控制。
 
 ![SunnyTV 首页示意](docs/images/home.svg)
@@ -23,9 +24,9 @@
 
 SunnyTV 是基于 Kotlin、Compose TV 和 Media3 的 Android 媒体客户端，以 Emby 为主要媒体来源，也保留 MediaIndex STRM / 重定向播放与 CloudDrive2 WebDAV 兼容能力。应用不内置影视内容，需要连接自己的媒体服务。
 
-当前发布为 **0.1.0-dev9 开发测试版**。本机 Android 构建、单元测试和 lint 已通过；电视兼容性、4K 实际帧率、HDR 与音频能力仍需按设备验证，详见 [开发状态](docs/STATUS.md)。
+当前发布为 **0.1.0-dev10 开发测试版**。本机 Android 构建、36 个单元测试及 23 项 TV 模拟器交互测试通过，lint 无错误；实体电视兼容性、4K 实际帧率、HDR 与音频能力仍需按设备验证，详见 [开发状态](docs/STATUS.md)。
 
-[下载开发版](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev9) · [本轮更新](docs/UI-DEV9.md) · [构建说明](docs/BUILD.md)
+[下载开发版](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev10) · [本轮更新](docs/UI-DEV10.md) · [构建说明](docs/BUILD.md)
 
 本地构建需要 JDK 17 或 21、Android SDK 35：
 

@@ -29,7 +29,7 @@ import io.github.xudong7587.sunnytv.feature.Route
 
 @Composable fun EpisodeHorizontal(entries:List<MediaEntry>) {
     val model=LocalAppModel.current
-    LazyRow(Modifier.fillMaxWidth().focusGroup(),horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
+    StableLazyRow(Modifier.fillMaxWidth().focusGroup(),horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
         items(entries,key={it.key}) {entry->
             Column(Modifier.width(240.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 MediaCard(entry,wide=true,onClick={model.navigate(Route.Detail(entry))},focusId="episode:${entry.key}")

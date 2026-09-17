@@ -21,7 +21,7 @@ data class MediaEntry(
     val banner: Artwork? = null, val collectionType: String = "",
     val people: List<MediaPerson> = emptyList(), val versions: List<MediaVersion> = emptyList(),
     val officialRating: String = "", val externalLinks: List<MediaLink> = emptyList(),
-    val tracks:List<MediaTrack> = emptyList()
+    val tracks:List<MediaTrack> = emptyList(), val lastPlayedAtMs:Long = 0
 ) : Serializable {
     val key: String get() = "$sourceId:$id"
     val isPlayable: Boolean get() = !isFolder && type in setOf("Movie", "Episode", "Video", "File")
@@ -71,5 +71,7 @@ data class AppSettings(
     val heroAllLibraries:Boolean = true, val heroIntervalSeconds:Int = 8,
     val uiScaleLevel:Int = 2, val libraryArtworkModes:Map<String,String> = emptyMap(),
     val episodeLayouts:Map<String,String> = emptyMap(),
-    val librarySubtitlePreferences:Map<String,String> = emptyMap()
+    val librarySubtitlePreferences:Map<String,String> = emptyMap(),
+    val animationSpeed:Float = 1f, val fontScaleLevel:Int = 2,
+    val customFontFile:String = "", val customFontName:String = ""
 )

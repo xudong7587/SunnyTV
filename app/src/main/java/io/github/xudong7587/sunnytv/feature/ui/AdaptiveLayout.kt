@@ -13,5 +13,6 @@ val pageSidePadding @Composable get()=if(LocalCompact.current) 18.dp else 30.dp
 @Composable fun ScaledUi(settings:AppSettings,content:@Composable ()->Unit) {
     val base=LocalDensity.current
     val scale=Presentation.uiScales[settings.uiScaleLevel.coerceIn(0,4)]
-    CompositionLocalProvider(LocalDensity provides Density(base.density*scale,base.fontScale),content=content)
+    val fontScale=MotionPolicy.fontScales[settings.fontScaleLevel.coerceIn(0,4)]
+    CompositionLocalProvider(LocalDensity provides Density(base.density*scale,base.fontScale*fontScale),content=content)
 }

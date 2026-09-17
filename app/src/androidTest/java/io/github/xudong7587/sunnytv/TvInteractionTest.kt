@@ -159,6 +159,8 @@ class TvInteractionTest {
     }
     @Test fun portraitHomeAndSetupRemainWithinViewport() {
         rule.activityRule.scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        rule.waitUntil(5000) {rule.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
             activity.setContentForTest {
@@ -180,10 +182,10 @@ class TvInteractionTest {
             }
         }
         rule.onNodeWithText("连接你的媒体库").assertIsDisplayed()
-        rule.onNodeWithTag("验证并保存").assertExists()
+        rule.onNodeWithTag("source:save").assertExists()
     }
 
-    @Test fun rowRestoresFirstCardWhenFocusLeaves() {
+    @Test fun tvRowKeepsItsSelectionWhenFocusLeaves() {
         var selected=-1
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
@@ -200,7 +202,7 @@ class TvInteractionTest {
         focus("reset-row:fixture:1")
         rule.runOnIdle {assertEquals(1,selected)}
         focus("outside-row")
-        rule.runOnIdle {assertEquals(0,selected)}
+        rule.runOnIdle {assertEquals(1,selected)}
     }
     @Test fun detailHidesPinnedNavigation() {
         rule.activityRule.scenario.onActivity {activity->
@@ -246,7 +248,8 @@ class TvInteractionTest {
         rule.runOnIdle {assertEquals("vertical",model.settings.episodeLayouts[season.key])}
         rule.onNodeWithTag("episode-layout:numbers").performClick()
         rule.runOnIdle {assertEquals("numbers",model.settings.episodeLayouts[season.key])}
-        rule.onNodeWithTag("episode:fixture:0").performScrollTo().assertContentDescriptionEquals("第 1 集 · 媒体 0")
+        rule.onNodeWithTag("library:grid").performScrollToKey("fixture:0")
+        rule.onNodeWithTag("episode:fixture:0").assertContentDescriptionEquals("第 1 集 · 媒体 0")
     }
     private fun saveScreenshot(name:String) {
         val bitmap=rule.onRoot().captureToImage().asAndroidBitmap()

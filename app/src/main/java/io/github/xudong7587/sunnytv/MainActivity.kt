@@ -31,6 +31,8 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -100,8 +102,11 @@ class MainActivity: ComponentActivity() {
     val navVisible=route !is Route.Library && route !is Route.Detail
     val scope=rememberCoroutineScope()
     val focus=LocalFocusManager.current
-    CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,LocalNavVisible provides navVisible) {
-        Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
+    val inputMotion=remember(route) {TvFocusMotion()}
+    val motion=LocalMotion.current
+    CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,
+        LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion) {
+        Box(Modifier.fillMaxSize().background(SunnyColors.Background).onPreviewKeyEvent {inputMotion.record(it);false}) {
             Box(Modifier.fillMaxSize().onPreviewKeyEvent {event->
                 if(event.key==Key.Back || event.key==Key.Escape) {
                     if(event.type==KeyEventType.KeyUp) model.back()
@@ -113,20 +118,32 @@ class MainActivity: ComponentActivity() {
                     true
                 } else false
             }) {
-                    stateHolder.SaveableStateProvider(route.key()) {
-                        when(route) {
+                AnimatedContent(route,modifier=Modifier.fillMaxSize(),contentKey={it.key()},transitionSpec={
+                    (fadeIn(motion.fade(400)) togetherWith fadeOut(motion.fade(400))).using(null)
+                },label="page-transition") {visibleRoute->
+                    val visibleBridge=remember(visibleRoute) {if(visibleRoute==route) bridge else NavigationBridge()}
+                    CompositionLocalProvider(LocalPageKey provides visibleRoute.key(),LocalPageActive provides (visibleRoute==route),
+                        LocalNavigationBridge provides visibleBridge,LocalNavVisible provides (visibleRoute !is Route.Library && visibleRoute !is Route.Detail)) {
+                    StableVerticalViewport {
+                    stateHolder.SaveableStateProvider(visibleRoute.key()) {
+                        when(visibleRoute) {
                             Route.Home -> HomeScreen(onPlay)
                             Route.Libraries -> LibrariesScreen()
-                            is Route.Library -> LibraryScreen(route.item,onPlay)
-                            is Route.Detail -> DetailScreen(route.item,onPlay)
+                            is Route.Library -> LibraryScreen(visibleRoute.item,onPlay)
+                            is Route.Detail -> DetailScreen(visibleRoute.item,onPlay)
                             Route.Cloud -> CloudScreen(onPlay)
-                            is Route.Folder -> FolderScreen(route,onPlay)
+                            is Route.Folder -> FolderScreen(visibleRoute,onPlay)
                             Route.Settings -> SettingsScreen()
                             Route.Search -> SearchScreen(onPlay)
                         }
                     }
+                    }
+                    }
+                }
             }
-            if(navVisible) TopNav(bridge)
+            AnimatedVisibility(navVisible,enter=fadeIn(motion.fade(300)),exit=fadeOut(motion.fade(300))) {
+                CompositionLocalProvider(LocalPageActive provides navVisible) {TopNav(bridge)}
+            }
             if(model.sourcesReady && model.sources.none {it.kind==SourceKind.EMBY}) {
                 AddSourceDialog(SourceKind.EMBY,onClose={},onConnected={model.navigate(Route.Home,root=true)},firstConnection=true)
             }
@@ -161,9 +178,9 @@ class MainActivity: ComponentActivity() {
                     Row(Modifier.height(44.dp).widthIn(min=44.dp).padding(horizontal=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
                         val ink=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary
                         LineIcon(actionIcon(label),ink)
-                        val ms=if(model.settings.reduceMotion) 0 else 160
-                        AnimatedVisibility(focused,enter=expandHorizontally(tween(ms))+fadeIn(tween(ms)),
-                            exit=shrinkHorizontally(tween(ms))+fadeOut(tween(ms))) {
+                        val motion=LocalMotion.current
+                        AnimatedVisibility(focused,enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
+                            exit=shrinkHorizontally(motion.spring())+fadeOut(motion.fade(240))) {
                             Text(label,color=ink,fontSize=12.sp,fontWeight=FontWeight.Medium,modifier=Modifier.padding(start=7.dp))
                         }
                     }

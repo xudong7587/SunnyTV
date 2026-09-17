@@ -2,6 +2,13 @@ package io.github.xudong7587.sunnytv.feature.ui
 
 import android.os.Build
 import android.os.SystemClock
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import io.github.xudong7587.sunnytv.core.storage.FontStore
 import io.github.xudong7587.sunnytv.BuildConfig
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -22,6 +29,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import io.github.xudong7587.sunnytv.core.network.HttpPolicy
 import io.github.xudong7587.sunnytv.feature.player.PlayerActivity
@@ -45,21 +53,35 @@ import kotlinx.coroutines.*
     val confirmRequester=remember {FocusRequester()}
     val keyboard=LocalSoftwareKeyboardController.current
     val focusManager=LocalFocusManager.current
+    val inputMotion=LocalTvFocusMotion.current
+    val compact=LocalCompact.current
+    val pageActive=LocalPageActive.current
     val confirm:()->Unit={
+        inputMotion.horizontal=false
         keyboard?.hide()
         if(next!=null) next.requestFocus() else focusManager.moveFocus(FocusDirection.Next)
     }
-    LaunchedEffect(Unit) {if(autoFocus) {delay(100);runCatching {focusRequester.requestFocus()}}}
+    LaunchedEffect(autoFocus,pageActive) {
+        if(autoFocus && pageActive) {withFrameNanos {};if(!focused) focusRequester.requestFocus()}
+    }
     Column(modifier,verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(label,color=SunnyColors.Secondary,fontSize=12.sp)
-        BasicTextField(value=value,onValueChange=onChange,singleLine=true,
+        BasicTextField(value=value,onValueChange=onChange,singleLine=true,enabled=pageActive,
             keyboardOptions=KeyboardOptions(keyboardType=if(password) KeyboardType.Password else KeyboardType.Text,
                 imeAction=if(password || next==null) ImeAction.Done else ImeAction.Next),
             keyboardActions=KeyboardActions(onAny={confirm()}),
             visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
-            cursorBrush=SolidColor(SunnyColors.Accent),textStyle=TextStyle(color=SunnyColors.Text,fontSize=15.sp),
+            cursorBrush=SolidColor(SunnyColors.Accent),textStyle=TextStyle(color=SunnyColors.Text,fontSize=15.sp,fontFamily=androidx.tv.material3.LocalTextStyle.current.fontFamily),
             modifier=Modifier.fillMaxWidth().testTag(tag).focusRequester(focusRequester)
                 .focusProperties {if(next!=null) down=confirmRequester; if(previous!=null) up=previous}
+                .onPreviewKeyEvent {event->
+                    inputMotion.record(event)
+                    if(!compact && event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && next!=null) {
+                        keyboard?.hide();confirmRequester.requestFocus();true
+                    } else if(!compact && event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && previous!=null) {
+                        keyboard?.hide();previous.requestFocus();true
+                    } else false
+                }
                 .onFocusChanged {focused=it.isFocused}
                 .background(SunnyColors.Background,RoundedCornerShape(9.dp))
                 .border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(9.dp))
@@ -85,6 +107,7 @@ import kotlinx.coroutines.*
     val model=LocalAppModel.current; val coroutine=rememberCoroutineScope()
     val compact=LocalCompact.current
     val context=LocalContext.current
+    val motion=LocalMotion.current
     var directUrl by remember {mutableStateOf("")}
     var resetConfirm by remember {mutableStateOf(false)}
     var category by rememberSaveable {mutableStateOf("媒体来源")}
@@ -92,6 +115,18 @@ import kotlinx.coroutines.*
     var removing by remember {mutableStateOf<SourceConfig?>(null)}
     var chooser by remember {mutableStateOf("")}
     var librariesExpanded by remember {mutableStateOf(false)}
+    var importingFont by remember {mutableStateOf(false)}
+    val fontPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {uri->
+        if(uri!=null) coroutine.launch {
+            importingFont=true
+            try {
+                val (file,label)=withContext(Dispatchers.IO) {FontStore.import(context,uri)}
+                model.saveSettings(model.settings.copy(customFontFile=file,customFontName=label))
+            } catch(e:CancellationException) {throw e}
+            catch(_:Exception) {model.message="字体导入失败，请选择有效的 TTF / OTF / TTC 字体（不超过 64 MB）"}
+            finally {importingFont=false}
+        }
+    }
     SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
         LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
@@ -146,7 +181,8 @@ import kotlinx.coroutines.*
                         model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
                     }
                     SettingChoiceRow("参与轮播的媒体库",if(librariesExpanded) "收起  ⌃" else "展开  ⌄") {librariesExpanded=!librariesExpanded}
-                        androidx.compose.animation.AnimatedVisibility(librariesExpanded) {
+                        androidx.compose.animation.AnimatedVisibility(librariesExpanded,
+                            enter=expandVertically(motion.spring())+fadeIn(motion.fade()),exit=shrinkVertically(motion.spring())+fadeOut(motion.fade())) {
                             Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
                                 .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
@@ -165,7 +201,27 @@ import kotlinx.coroutines.*
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
-                    item {ToggleRow("减少动画","关闭焦点缩放，保留即时描边",model.settings.reduceMotion) {model.saveSettings(model.settings.copy(reduceMotion=!model.settings.reduceMotion))}}
+                    item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
+                    item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        SectionTitle("字体大小",Presentation.uiScaleNames[model.settings.fontScaleLevel.coerceIn(0,4)])
+                        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Presentation.uiScaleNames.forEachIndexed {index,label->
+                                FocusTile("font-size:$index",Modifier.weight(1f),active=model.settings.fontScaleLevel==index,
+                                    onClick={model.saveSettings(model.settings.copy(fontScaleLevel=index))}) {
+                                    Text(label,color=SunnyColors.Text,fontSize=13.sp,modifier=Modifier.padding(vertical=12.dp))
+                                }
+                            }
+                        }
+                    }}
+                    item {SettingChoiceRow("自定义字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统字体"}) {
+                        if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
+                        catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器，然后从 U 盘或本地存储选择字体。"}
+                    }}
+                    if(model.settings.customFontFile.isNotBlank()) item {Action("恢复系统字体") {
+                        model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
+                    }}
+                    item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
                     item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
                     item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
                     item {Action("清理海报缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="海报缓存已清理"}}}
@@ -190,14 +246,15 @@ import kotlinx.coroutines.*
             }
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";else->"字幕优先级（未匹配时跟随媒体默认）"},
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";else->"字幕优先级（未匹配时跟随媒体默认）"},
         when(chooser) {"artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
+            "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();else->model.settings.subtitlePreference},
+        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();else->model.settings.subtitlePreference},
         onDismiss={chooser=""}) {value ->
-        model.saveSettings(when(chooser) {"artwork"->model.settings.copy(artworkMode=value)
+        model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
             "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
         chooser=""
     }
@@ -262,9 +319,11 @@ import kotlinx.coroutines.*
     val nameFocus=remember {FocusRequester()}; val baseFocus=remember {FocusRequester()}
     val userFocus=remember {FocusRequester()}; val passwordFocus=remember {FocusRequester()}
     val saveFocus=remember {FocusRequester()}
+    val inputMotion=LocalTvFocusMotion.current
+    LaunchedEffect(Unit) {inputMotion.horizontal=false}
     var base by remember {mutableStateOf("")}; var user by remember {mutableStateOf("")}; var password by remember {mutableStateOf("")}
     Dialog(onDismissRequest={if(!model.busy && !firstConnection) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
+        Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
             .verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(13.dp)) {
             Text(if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
             Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
@@ -290,7 +349,8 @@ import kotlinx.coroutines.*
     FocusTile("setting:$title",Modifier.fillMaxWidth(),onClick=onClick) {
         Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
             Text(title,color=SunnyColors.Text,fontSize=16.sp,modifier=Modifier.weight(1f))
-            Text(value,color=SunnyColors.Secondary,fontSize=13.sp)
+            Text(value,color=SunnyColors.Secondary,fontSize=13.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier=Modifier.widthIn(max=if(LocalCompact.current) 180.dp else 340.dp))
         }
     }
 }

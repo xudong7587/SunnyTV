@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.launch
 import androidx.lifecycle.Lifecycle
@@ -42,7 +44,7 @@ import kotlinx.coroutines.delay
                     if(!LocalNavVisible.current) Action("返回",id="library-back",icon="back") {model.back()}
                 }
             }
-            if(tall) LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
+            if(tall) StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
                 items(candidates.take(12),key={it.key}) {entry->MediaCard(entry,onFocus={onSelect(entry)},onClick={model.navigate(Route.Detail(entry))},focusId="hero:${entry.key}")}
             }
         }
@@ -68,7 +70,7 @@ import kotlinx.coroutines.delay
                 }
             }
             if(tall) {
-                LazyRow(Modifier.weight(.60f),horizontalArrangement=Arrangement.spacedBy(15.dp),contentPadding=PaddingValues(4.dp)) {
+                StableLazyRow(Modifier.weight(.60f),horizontalArrangement=Arrangement.spacedBy(15.dp),contentPadding=PaddingValues(4.dp)) {
                     items(candidates.take(12),key={it.key}) { entry ->
                         MediaCard(entry,autoFocus=entry==candidates.firstOrNull(),onFocus={onSelect(entry)},onClick={model.navigate(Route.Detail(entry))},focusId="hero:${entry.key}")
                     }
@@ -91,6 +93,9 @@ import kotlinx.coroutines.delay
     val list=rememberLazyListState()
     val bridge=LocalNavigationBridge.current
     val scope=rememberCoroutineScope()
+    val compact=LocalCompact.current
+    val librariesFocus=remember {FocusRequester()}
+    val motion=LocalMotion.current
     DisposableEffect(bridge,list) {bridge?.revealTop={list.scrollToItem(0)};onDispose {bridge?.revealTop=null}}
     var heroFocused by remember {mutableStateOf(false)}
     LaunchedEffect(incoming,heroFocused,model.busy) {if(!heroFocused && !model.busy) {candidates=incoming;selected=selected.coerceIn(0,(incoming.size-1).coerceAtLeast(0))}}
@@ -102,23 +107,32 @@ import kotlinx.coroutines.delay
         lifecycle.addObserver(observer);onDispose {lifecycle.removeObserver(observer)}
     }
     val visible by remember {derivedStateOf {list.firstVisibleItemIndex==0 && list.firstVisibleItemScrollOffset==0}}
-    LaunchedEffect(heroFocused,paused,resumed,visible,model.busy,model.message,model.settings.reduceMotion,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
-        if(Presentation.canRotate(heroFocused,paused,resumed,visible,model.busy,model.message.isNotEmpty(),model.settings.reduceMotion,candidates.size)) {
+    LaunchedEffect(heroFocused,paused,resumed,visible,model.busy,model.message,motion.enabled,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
+        if(Presentation.canRotate(heroFocused,paused,resumed,visible,model.busy,model.message.isNotEmpty(),!motion.enabled,candidates.size)) {
             delay(model.settings.heroIntervalSeconds*1000L);selected=Presentation.next(selected,1,candidates.size,true)
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val viewport=maxHeight
-        LazyColumn(state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        val heroHeight=viewport.coerceAtLeast(if(compact) 630.dp else 400.dp)
+        val heroExtentPx=with(LocalDensity.current) {(heroHeight+6.dp).toPx()}
+        StableVerticalViewport(hold={!compact && heroFocused}) {
+        LazyColumn(modifier=Modifier.testTag("home:vertical"),state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             if(embySources.isEmpty()) item {
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
                 item(key="home-hero") {
                     val darkPalette=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
                     CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(viewport.coerceAtLeast(if(LocalCompact.current) 630.dp else 400.dp)).onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
+                        Box(Modifier.fillMaxWidth().height(heroHeight).testTag("home:hero").onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
                             if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
                                 scope.launch {list.scrollToItem(0);bridge?.enterNavigation()};true
+                            } else if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {
+                                scope.launch {
+                                    // Only explicit vertical input moves the full hero viewport.
+                                    list.moveHomePage(1,heroExtentPx,motion)
+                                    withFrameNanos {};librariesFocus.requestFocus()
+                                };true
                             } else false
                         }.focusGroup()) {
                             CinemaBackdrop(hero)
@@ -129,9 +143,13 @@ import kotlinx.coroutines.delay
                     }
                 }
                 item {
-                    Column(Modifier.padding(horizontal=30.dp)) {
+                    Column(Modifier.padding(horizontal=30.dp).padding(top=if(compact) 0.dp else 68.dp).onPreviewKeyEvent {
+                        if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
+                            scope.launch {list.moveHomePage(0,heroExtentPx,motion);withFrameNanos {};bridge?.enterContent()};true
+                        } else false
+                    }.focusGroup()) {
                     SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
-                    LazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp)) {
+                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp)) {
                         items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
                     }
                     }
@@ -142,9 +160,10 @@ import kotlinx.coroutines.delay
                 }
                 embySources.forEach { source ->
                     model.errors["feed:${source.id}"]?.let { error -> item { EmptyState(source.name,error,"重试") {model.refresh()} } }
-                    model.feeds[source.id]?.warnings?.forEach { warning -> item {Text(warning,color=SunnyColors.Secondary,fontSize=12.sp)} }
+                    if(compact) model.feeds[source.id]?.warnings?.forEach { warning -> item {Text(warning,color=SunnyColors.Secondary,fontSize=12.sp)} }
                 }
             }
+        }
         }
     }
 }
@@ -182,7 +201,7 @@ import kotlinx.coroutines.delay
     LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
     Box(Modifier.fillMaxSize()) {
         Backdrop(hero ?: library)
-        LazyVerticalGrid(state=gridState,columns=GridCells.Adaptive(if(episodeContainer && episodeLayout=="numbers") 68.dp else if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
+        LazyVerticalGrid(modifier=Modifier.testTag("library:grid"),state=gridState,columns=GridCells.Adaptive(if(episodeContainer && episodeLayout=="numbers") 68.dp else if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp),
             horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
             contentPadding=PaddingValues(start=pageSidePadding,end=pageSidePadding,top=pageTopPadding,bottom=40.dp)) {
             item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Box(Modifier.onPreviewKeyEvent {
@@ -195,7 +214,7 @@ import kotlinx.coroutines.delay
             item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
-                    LazyRow(Modifier.focusRequester(toolsEntry).focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
+                    StableLazyRow(Modifier.focusRequester(toolsEntry).focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
                         item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
                         item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==subtitlePreference}?.second ?: "媒体默认"}") {chooser="subtitle"}}
                         if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout)}
