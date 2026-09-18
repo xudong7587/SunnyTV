@@ -30,7 +30,25 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     ).toString(Charsets.UTF_8)
 
     suspend fun views(): List<MediaEntry> = parsePage(get("Users/${config.userId}/Views")).items
-    suspend fun item(id: String): MediaEntry = withContext(Dispatchers.Default) {parseItem(JSONObject(get("Users/${config.userId}/Items/$id")))}
+    suspend fun item(id: String): MediaEntry = withContext(Dispatchers.Default) {
+        parseItem(JSONObject(get("Users/${config.userId}/Items/$id",
+            mapOf("Fields" to "$fields,Chapters,People,MediaSources,MediaStreams"))))
+    }
+    suspend fun playerContext(id:String):PlayerMediaContext {
+        val current=item(id)
+        var previous:MediaEntry?=null
+        var next:MediaEntry?=null
+        if(current.type=="Episode" && current.seriesId.isNotBlank()) {
+            val episodes=parsePage(get("Shows/${current.seriesId}/Episodes",
+                mapOf("UserId" to config.userId,"Fields" to fields,"ImageTypeLimit" to "1"))).items.filter {it.isPlayable}
+            val index=episodes.indexOfFirst {it.id==current.id}
+            if(index>=0) {
+                previous=episodes.getOrNull(index-1)
+                next=episodes.getOrNull(index+1)
+            }
+        }
+        return PlayerMediaContext(current,previous,next,SegmentLogic.segments(current.chapters,current.durationMs))
+    }
     suspend fun resume(parent: String = ""): List<MediaEntry> = parsePage(get("Users/${config.userId}/Items/Resume",
         mapOf("Limit" to "16", "MediaTypes" to "Video", "Fields" to fields, "ImageTypeLimit" to "1") + optionalParent(parent))).items
     suspend fun latest(parent: String = "", limit:Int=18): List<MediaEntry> {
@@ -214,7 +232,11 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             lastPlayedAtMs=parseLastPlayed(j.optJSONObject("UserData")?.text("LastPlayedDate")),
             officialRating=j.text("OfficialRating").orEmpty(),externalLinks=j.optJSONArray("ExternalUrls").objects().mapNotNull {l->
                 val link=l.text("Url") ?: return@mapNotNull null
-                if(link.startsWith("https://")) MediaLink(l.optString("Name","更多信息"),link) else null})
+                if(link.startsWith("https://")) MediaLink(l.optString("Name","更多信息"),link) else null},
+            chapters=j.optJSONArray("Chapters").objects().map {chapter->
+                MediaChapter(chapter.optString("Name","章节"),chapter.optLong("StartPositionTicks")/10_000,
+                    chapter.optString("MarkerType","Chapter"))
+            })
     }
     companion object {
         private fun parseLastPlayed(value:String?):Long {

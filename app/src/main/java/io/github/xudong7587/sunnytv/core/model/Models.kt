@@ -21,7 +21,8 @@ data class MediaEntry(
     val banner: Artwork? = null, val collectionType: String = "",
     val people: List<MediaPerson> = emptyList(), val versions: List<MediaVersion> = emptyList(),
     val officialRating: String = "", val externalLinks: List<MediaLink> = emptyList(),
-    val tracks:List<MediaTrack> = emptyList(), val lastPlayedAtMs:Long = 0
+    val tracks:List<MediaTrack> = emptyList(), val lastPlayedAtMs:Long = 0,
+    val chapters:List<MediaChapter> = emptyList()
 ) : Serializable {
     val key: String get() = "$sourceId:$id"
     val isPlayable: Boolean get() = !isFolder && type in setOf("Movie", "Episode", "Video", "File")
@@ -37,6 +38,10 @@ data class MediaTrack(val index:Int, val type:String, val language:String, val t
 data class MediaVersion(val id:String, val name:String, val width:Int, val height:Int, val range:String,
     val size:Long, val bitrate:Long, val container:String, val tracks:List<MediaTrack>) : Serializable
 data class MediaLink(val name:String, val url:String) : Serializable
+data class MediaChapter(val name:String,val startMs:Long,val markerType:String="Chapter") : Serializable
+data class SkipSegment(val id:String,val type:String,val startMs:Long,val endMs:Long) : Serializable
+data class PlayerMediaContext(val item:MediaEntry,val previous:MediaEntry?=null,val next:MediaEntry?=null,
+    val skipSegments:List<SkipSegment> = emptyList())
 data class HomeFeed(
     val libraries: List<MediaEntry> = emptyList(), val resume: List<MediaEntry> = emptyList(),
     val latest: List<MediaEntry> = emptyList(), val nextUp: List<MediaEntry> = emptyList(),
