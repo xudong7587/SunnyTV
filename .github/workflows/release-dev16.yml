@@ -38,6 +38,7 @@ jobs:
           certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
           printf 'keystoreCertificateSha256=%s\n' "$certificate" | tee build-logs/keystore-certificate.txt
           echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
+          echo "SUNNYTV_SIGNING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
       - name: Build and validate
         run: |
           set -euo pipefail

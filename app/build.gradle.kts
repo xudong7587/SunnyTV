@@ -23,6 +23,11 @@ android {
             // No release key in this repository. Use your own signing config.
         }
     }
+    providers.environmentVariable("SUNNYTV_SIGNING_KEYSTORE").orNull?.let { path ->
+        val existingKey = file(path)
+        check(existingKey.isFile) { "Selected existing signing keystore is missing" }
+        signingConfigs.getByName("debug").storeFile = existingKey
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
