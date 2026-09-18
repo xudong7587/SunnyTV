@@ -82,3 +82,20 @@ import io.github.xudong7587.sunnytv.feature.ui.*
         PlayerControl("暂不","close",onClick=onDismiss)
     }
 }
+
+
+@Composable internal fun NextEpisodePrompt(title:String,remainingSeconds:Long,onPlay:()->Unit,onDismiss:()->Unit,
+    modifier:Modifier=Modifier) {
+    Column(modifier.testTag("player:next-prompt")
+        .background(Color.Black.copy(.84f),RoundedCornerShape(20.dp))
+        .border(1.dp,Color.White.copy(.18f),RoundedCornerShape(20.dp)).padding(16.dp),
+        verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Text("即将播放下一集",color=Color.White.copy(.68f),fontSize=11.sp,letterSpacing=1.sp)
+        Text(title,color=Color.White,fontSize=17.sp,fontWeight=FontWeight.SemiBold,maxLines=2)
+        Text("$remainingSeconds 秒后进入片尾结束区",color=Color.White.copy(.58f),fontSize=11.sp)
+        Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) {
+            PlayerControl("播放下一集","next",initial=true,onClick=onPlay)
+            PlayerControl("稍后","close",onClick=onDismiss)
+        }
+    }
+}

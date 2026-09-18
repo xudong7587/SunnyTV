@@ -92,6 +92,7 @@ class PlayerActivity: ComponentActivity() {
     private var sleepJob:Job?=null
     private var sleepMinutes by mutableStateOf<Int?>(null)
     private var switchingEpisode by mutableStateOf(false)
+    private var nextUpDismissed by mutableStateOf(false)
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -345,6 +346,9 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun PlayerContent() {
         val context=mediaContext
         val activeSkip=SegmentLogic.active(context?.skipSegments.orEmpty(),position,dismissedSegments)
+        val remainingMs=(duration-position).coerceAtLeast(0)
+        val showNextUp=context?.next!=null && !nextUpDismissed && rendered && duration>0 &&
+            remainingMs in 1..90_000 && activeSkip==null
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             AndroidView(factory={androidContext->PlayerView(androidContext).apply {
                 useController=false;keepScreenOn=true
@@ -426,6 +430,12 @@ class PlayerActivity: ComponentActivity() {
                     dismissedSegments=dismissedSegments+activeSkip.id
                 },onDismiss={dismissedSegments=dismissedSegments+activeSkip.id},
                     modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
+            } else if(showNextUp && panel.isBlank() && error.isBlank()) {
+                val next=context?.next
+                if(next!=null) NextEpisodePrompt(next.title,(remainingMs/1000).coerceAtLeast(1),
+                    onPlay={switchEpisode(next)},onDismiss={nextUpDismissed=true},
+                    modifier=Modifier.align(Alignment.BottomEnd).widthIn(max=340.dp)
+                        .padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
             }
 
             if(controls && panel.isBlank() && error.isBlank()) {
