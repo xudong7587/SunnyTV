@@ -5,6 +5,7 @@ import ast
 import json
 import subprocess
 import shutil
+import hashlib
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[1]
@@ -27,11 +28,22 @@ if shutil.which('bash'):
 if shutil.which('node') and (root/'preview/ui.js').exists():
     check('JavaScript syntax', lambda: subprocess.run(['node','--check',str(root/'preview/ui.js')],check=True,capture_output=True))
 
-def no_packaged_demo():
-    forbidden = ('.jpg','.jpeg','.png','.woff','.woff2','.ttf','.otf')
-    # User screenshot and prototype illustrations belong outside the native APK tree.
-    assert not [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden]
-check('No preview imagery or redistributed fonts in native app', no_packaged_demo)
+FONT_HASHES = {
+    'app/src/main/assets/fonts/fz_zhenghei.ttf': 'a92f243f92a8af7b1b9b0f31782b965bd9882a7331e88b10d3b2100d0941fd94',
+    'app/src/main/assets/fonts/fz_youhei.ttf': '2050762a1c6478d1ef85208013cd2d72cf3248c8f50b02ef91ec3d4570a0f03a',
+    'app/src/main/assets/fonts/coca_cola_care.ttf': '2c1075fddb3445501e9f7b3fd4ed01c796f2ac90cffe55059b45003ad3701192',
+}
+
+def safe_native_assets():
+    forbidden_images = ('.jpg','.jpeg','.png','.woff','.woff2','.otf')
+    assert not [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden_images]
+    for path in (root/'app/src/main').rglob('*.ttf'):
+        rel=str(path.relative_to(root)).replace('\\','/')
+        expected=FONT_HASHES.get(rel)
+        assert expected, f'Unexpected bundled font: {rel}'
+        actual=hashlib.sha256(path.read_bytes()).hexdigest()
+        assert actual==expected, f'Bundled font checksum mismatch: {rel}'
+check('No preview imagery; bundled font assets are explicitly allow-listed', safe_native_assets)
 
 result = {'scope':'source/XML/script sanity only; not Android compile', 'checks':checks}
 (root/'docs/project-check-results.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
