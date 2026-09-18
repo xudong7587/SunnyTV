@@ -506,7 +506,7 @@ class PlayerActivity: ComponentActivity() {
                 panel=""
             }
             if(groups.isEmpty()) Text("此媒体没有可选择的轨道",color=Color.White.copy(.7f),fontSize=14.sp)
-            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.heightIn(max=500.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 groups.forEach {group->
                     for(i in 0 until group.length) {
                         val format=group.getTrackFormat(i)
@@ -528,7 +528,7 @@ class PlayerActivity: ComponentActivity() {
         val chapters=mediaContext?.item?.chapters.orEmpty().filter {it.startMs>=0}
         PlayerSheet("章节",{panel=""}) {
             if(chapters.isEmpty()) Text("此媒体没有章节",color=Color.White.copy(.7f))
-            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.heightIn(max=500.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 items(chapters.size) {index->
                     val chapter=chapters[index]
                     PlayerOption("${clock(chapter.startMs)}  ·  ${chapter.name}") {
@@ -542,7 +542,7 @@ class PlayerActivity: ComponentActivity() {
         val people=mediaContext?.item?.people.orEmpty()
         PlayerSheet("演职员",{panel=""}) {
             if(people.isEmpty()) Text("没有可显示的演职员信息",color=Color.White.copy(.7f))
-            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.heightIn(max=500.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 items(people.size) {index->
                     val person=people[index]
                     PlayerOption(listOf(person.name,person.role).filter {it.isNotBlank()}.joinToString(" · ")) {}

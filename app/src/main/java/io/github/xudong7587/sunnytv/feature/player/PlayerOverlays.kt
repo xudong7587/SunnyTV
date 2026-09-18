@@ -41,7 +41,7 @@ import io.github.xudong7587.sunnytv.feature.ui.*
 @Composable internal fun PlayerProgress(position:Long,duration:Long,stepMs:Long,onSeek:(Long)->Unit) {
     var focused by remember {mutableStateOf(false)}
     val progress=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f
-    Box(Modifier.fillMaxWidth().height(24.dp).testTag("player:progress").semantics {contentDescription="播放进度"}
+    BoxWithConstraints(Modifier.fillMaxWidth().height(24.dp).testTag("player:progress").semantics {contentDescription="播放进度"}
         .onFocusChanged {focused=it.isFocused}.focusable()
         .onPreviewKeyEvent {event->
             if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
@@ -53,7 +53,7 @@ import io.github.xudong7587.sunnytv.feature.ui.*
         Box(Modifier.fillMaxWidth().height(if(focused) 5.dp else 3.dp).clip(RoundedCornerShape(99.dp)).background(Color.White.copy(.24f))) {
             Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(SunnyColors.Accent))
         }
-        if(focused) Box(Modifier.offset(x=((progress*100).coerceIn(1f,99f)).dp).size(10.dp).background(Color.White,androidx.compose.foundation.shape.CircleShape))
+        if(focused) Box(Modifier.offset(x=(maxWidth-10.dp)*progress).size(10.dp).background(Color.White,androidx.compose.foundation.shape.CircleShape))
     }
 }
 
