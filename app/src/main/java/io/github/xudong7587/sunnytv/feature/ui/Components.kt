@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.*
@@ -40,11 +41,11 @@ import coil.request.ImageRequest
 import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.delay
 
-fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else drawWithCache {
-    val outline=shape.createOutline(size,layoutDirection,this)
-    val offset=2.dp.toPx()
-    onDrawBehind {translate(offset,offset) {drawOutline(outline,Color(0x26333333))}}
-}
+/** Soft TV focus elevation for the light theme. Parent rows reserve a gutter so it is not clipped. */
+fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else shadow(
+    elevation=10.dp, shape=shape, clip=false,
+    ambientColor=Color(0x24000000), spotColor=Color(0x36000000)
+)
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
@@ -67,8 +68,11 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
     val fill=animateColorAsState(if(selected) base.focusBackground else base.raised.copy(.72f),motion.fade(240),label="focus-fill")
     val bottom=animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(.70f),motion.fade(240),label="focus-gradient")
     val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
-    val outline=if(model.settings.darkTheme) base.focusContent else base.focusBackground
-    val showShadow=model.settings.shadowsEnabled && (!model.settings.darkTheme || button) && focused
+    val dark=model.settings.darkTheme
+    val outline=if(dark) base.focusContent else base.focusBackground
+    val outlineWidth=if(dark) 3.5.dp else 1.5.dp
+    // Dark mode stays flat and uses a stronger outline. Light mode gets one soft elevation layer.
+    val showShadow=model.settings.shadowsEnabled && !dark && focused
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45); runCatching { requester.requestFocus() }
@@ -82,9 +86,10 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
         .drawWithCache {
             val edge=shape.createOutline(size,layoutDirection,this)
             onDrawWithContent {
-                drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
+                if(dark) drawOutline(edge,fill.value)
+                else drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
                 drawContent()
-                if(focused && focusOutline) drawOutline(edge,outline,style=Stroke(2.dp.toPx()))
+                if(focused && focusOutline) drawOutline(edge,outline,style=Stroke(outlineWidth.toPx()))
             }
         }
         .onPreviewKeyEvent {event->event.type==KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount>0 &&
@@ -206,7 +211,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
     if(list.isEmpty()) return
     Column {
         SectionTitle(title)
-        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp),
+        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp),
             modifier=Modifier.fillMaxWidth().focusGroup()) {
             items(list,key={ it.key }) { entry -> MediaCard(entry,wide,onFocus={onFocus(entry)},onClick={onClick(entry)},focusId="shelf:$title:${entry.key}") }
         }

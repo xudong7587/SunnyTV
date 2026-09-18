@@ -99,7 +99,6 @@ import kotlinx.coroutines.delay
     DisposableEffect(bridge,list) {bridge?.revealTop={list.scrollToItem(0)};onDispose {bridge?.revealTop=null}}
     var heroFocused by remember {mutableStateOf(false)}
     LaunchedEffect(incoming,heroFocused,model.busy) {if(!heroFocused && !model.busy) {candidates=incoming;selected=selected.coerceIn(0,(incoming.size-1).coerceAtLeast(0))}}
-    var paused by rememberSaveable {mutableStateOf(false)}
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     var resumed by remember {mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
     DisposableEffect(lifecycle) {
@@ -107,8 +106,8 @@ import kotlinx.coroutines.delay
         lifecycle.addObserver(observer);onDispose {lifecycle.removeObserver(observer)}
     }
     val visible by remember {derivedStateOf {list.firstVisibleItemIndex==0 && list.firstVisibleItemScrollOffset==0}}
-    LaunchedEffect(heroFocused,paused,resumed,visible,model.busy,model.message,motion.enabled,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
-        if(Presentation.canRotate(heroFocused,paused,resumed,visible,model.busy,model.message.isNotEmpty(),!motion.enabled,candidates.size)) {
+    LaunchedEffect(heroFocused,resumed,visible,model.busy,model.message,motion.enabled,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
+        if(Presentation.canRotate(heroFocused,false,resumed,visible,model.busy,model.message.isNotEmpty(),!motion.enabled,candidates.size)) {
             delay(model.settings.heroIntervalSeconds*1000L);selected=Presentation.next(selected,1,candidates.size,true)
         }
     }
@@ -127,20 +126,16 @@ import kotlinx.coroutines.delay
                     Column {
                     val darkPalette=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
                     CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero").onFocusChanged {heroFocused=it.hasFocus}.onPreviewKeyEvent {
-                            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
-                                scope.launch {list.scrollToItem(0);bridge?.enterNavigation()};true
-                            } else if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {
-                                scope.launch {
-                                    // Only explicit vertical input moves the full hero viewport.
-                                    list.moveHomePage(1,heroExtentPx,motion)
-                                    withFrameNanos {};librariesFocus.requestFocus()
-                                };true
-                            } else false
-                        }.focusGroup()) {
+                        Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero")
+                            .onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
                             CinemaBackdrop(hero)
                             HomeHeroContent(hero,candidates,selected,{selected=it},
-                                if(model.settings.showResume) resume else emptyList(),paused,{paused=!paused},onPlay)
+                                if(model.settings.showResume) resume else emptyList(),onExitDown={
+                                    scope.launch {
+                                        list.moveHomePage(1,heroExtentPx,motion)
+                                        withFrameNanos {};librariesFocus.requestFocus()
+                                    }
+                                },onPlay=onPlay)
 
                         }
                     }
@@ -151,7 +146,7 @@ import kotlinx.coroutines.delay
                         } else false
                     }.focusGroup()) {
                     SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
-                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(3.dp)) {
+                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp)) {
                         items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
                     }
                     }
@@ -178,7 +173,7 @@ import kotlinx.coroutines.delay
         SectionTitle("所有媒体库")
         if(libs.isEmpty()) EmptyState("这里还没有媒体库","添加 Emby 后，这里会显示你的原生媒体库封面。","管理来源") {model.navigate(Route.Settings)}
         LazyVerticalGrid(columns=GridCells.Adaptive(if(LocalCompact.current) 145.dp else 235.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),
-            verticalArrangement=Arrangement.spacedBy(20.dp),contentPadding=PaddingValues(vertical=10.dp)) {
+            verticalArrangement=Arrangement.spacedBy(20.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp)) {
             items(libs,key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
         }
     }

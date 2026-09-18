@@ -10,6 +10,17 @@ import java.net.SocketTimeoutException
 import javax.net.ssl.SSLHandshakeException
 
 class PlaybackFailureTest {
+    private class UnexpectedLoaderException(cause:Throwable):IOException(cause)
+
+    @Test fun mp4UnexpectedLoaderBoundsFailureEnablesOnlyTheNarrowFallback() {
+        val error=PlaybackException("hidden",UnexpectedLoaderException(IndexOutOfBoundsException("private path")),2000)
+        assertTrue(PlaybackFailure.isMp4IndexFailure(error,"video/mp4"))
+        assertFalse(PlaybackFailure.isMp4IndexFailure(error,"video/x-matroska"))
+        assertFalse(PlaybackFailure.isMp4IndexFailure(PlaybackException("hidden",IOException("other"),2000),"video/mp4"))
+        val text=PlaybackFailure.describe(error,"首帧前读取","video/mp4")
+        assertTrue(text.contains("MP4 索引"));assertFalse(text.contains("private path"))
+    }
+
     @Test fun generic2000ShowsTheActualCauseWithoutLeakingPrivateAddresses() {
         val error=PlaybackException("request https://private.test/video?token=secret",
             IOException("Authorization: private",EOFException("/nas/private/movie.mp4")),2000)

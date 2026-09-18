@@ -33,6 +33,8 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.*
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
@@ -69,6 +71,7 @@ class PlayerActivity: ComponentActivity() {
     private var lastPosition=0L
     private var resizeMode by mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT)
     private var retryUsed=false
+    private var mp4EditListFallbackUsed=false
     private var progressJob: Job?=null
     private var reporter: PlaybackReporter? = null
     private var resumePlayWhenReady = true
@@ -117,7 +120,7 @@ class PlayerActivity: ComponentActivity() {
         player=null; rendered=false; progressJob?.cancel(); reporter=null
         super.onStop()
     }
-    private fun createPlayer() {
+    private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
         rendered=false;error="";firstFrameMs=-1;headerMs=-1;totalStartupMs=-1;sourceStartupMs=-1
         val includeSourceTime = originalLaunch
         originalLaunch = false
@@ -130,7 +133,10 @@ class PlayerActivity: ComponentActivity() {
                 response
             }).build()
         val dataSource=OkHttpDataSource.Factory(client).setUserAgent(io.github.xudong7587.sunnytv.core.network.HttpPolicy.USER_AGENT)
-        val sourceFactory=DefaultMediaSourceFactory(dataSource)
+        val extractors=DefaultExtractorsFactory().apply {
+            if(ignoreMp4EditLists) setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
+        }
+        val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors)
             // No unbounded engine/source/HTTP retries: one explicit retry button below.
             .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) {
                 override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET
@@ -212,6 +218,22 @@ class PlayerActivity: ComponentActivity() {
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
             }
             override fun onPlayerError(e:PlaybackException) {
+                if(!rendered && !mp4EditListFallbackUsed && PlaybackFailure.isMp4IndexFailure(e,request.mimeHint)) {
+                    mp4EditListFallbackUsed=true
+                    status="正在使用 MP4 兼容模式重试…"
+                    error=""
+                    lastPosition=p.currentPosition.coerceAtLeast(0)
+                    resumePlayWhenReady=p.playWhenReady
+                    progressJob?.cancel();progressJob=null
+                    reporter=null
+                    player=null
+                    app.store.savePlaybackDiagnostic("检测到 MP4 索引异常，已启用一次忽略 edit list 的兼容重试。\n错误码 ${e.errorCode} · 首帧前读取 · video/mp4")
+                    window.decorView.post {
+                        p.release()
+                        if(!isFinishing && !isDestroyed && player==null) createPlayer(true)
+                    }
+                    return
+                }
                 error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint)
                 app.store.savePlaybackDiagnostic(error)
                 controls=true
