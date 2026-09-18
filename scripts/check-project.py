@@ -29,7 +29,7 @@ if shutil.which('node') and (root/'preview/ui.js').exists():
 
 def no_packaged_demo():
     forbidden = ('.jpg','.jpeg','.png','.woff','.woff2','.ttf','.otf')
-    # User screenshot and prototype illustrations belong outside the native APK tree.
+    # User screenshots, prototype illustrations and redistributable font binaries stay outside the APK tree.
     assert not [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden]
 check('No preview imagery or redistributed fonts in native app', no_packaged_demo)
 

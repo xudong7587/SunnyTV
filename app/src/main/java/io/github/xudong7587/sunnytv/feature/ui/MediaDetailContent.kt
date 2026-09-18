@@ -84,7 +84,6 @@ import kotlinx.coroutines.withContext
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
                         ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
                         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.55f),Color.Transparent))))
-                        Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start=pageSidePadding,top=12.dp)) {Action("返回",id="detail-back",icon="back") {model.back()}}
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,tint.copy(.3f),tint))))
                         Column(Modifier.align(Alignment.BottomStart).padding(start=pageSidePadding,end=pageSidePadding,bottom=4.dp).widthIn(max=680.dp),
                             verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -97,18 +96,18 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    StableLazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    StableLazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=18.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
-                            if(item.positionMs>0) item {Action("从头播放") {onPlay(item,true)}}
+                            if(item.positionMs>0) item {Action("从头播放",icon="restart") {onPlay(item,true)}}
                             item {Action("≋  音频") {panel="audio"}}
                             item {Action("▱  版本") {panel="version"}}
                             item {Action("CC  字幕") {panel="subtitle"}}
                         }
                         if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played) {panel="played"}}
                         if(item.type in setOf("Series","Season")) {
-                            item {Action("从头播放",id="detail-start",primary=true,autoFocus=true) {onPlay(item,true)}}
-                            item {Action("继续播放",id="detail-resume",primary=true) {onPlay(item,false)}}
+                            item {Action("从头播放",id="detail-start",primary=false,autoFocus=true,icon="restart") {onPlay(item,true)}}
+                            item {Action("继续播放",id="detail-resume",primary=true,icon="play") {onPlay(item,false)}}
                         }
                         item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season")) {model.favorite(item)}}
                         item {Action("返回") {model.back()}}
@@ -119,7 +118,7 @@ import kotlinx.coroutines.withContext
                 if(item.versions.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("播放资源", "${item.versions.size} 个版本")
-                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(3.dp)) {
+                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(horizontal=18.dp,vertical=18.dp)) {
                             items(item.versions,key={it.id}) {v->
                                 FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {

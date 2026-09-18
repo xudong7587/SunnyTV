@@ -41,7 +41,6 @@ import kotlinx.coroutines.delay
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     if(item.isPlayable || item.type in setOf("Series","Season")) Action("播放",id="hero-play",primary=true) {onPlay(item,false)}
                     Action("查看详情",id="hero-detail") {model.navigate(Route.Detail(item))}
-                    if(!LocalNavVisible.current) Action("返回",id="library-back",icon="back") {model.back()}
                 }
             }
             if(tall) StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(4.dp)) {
@@ -65,7 +64,6 @@ import kotlinx.coroutines.delay
                         if(item.isPlayable || item.type in setOf("Series","Season")) Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="hero-play",primary=true,
                             onClick={onPlay(item,false)})
                         Action("查看详情",id="hero-detail",onClick={model.navigate(Route.Detail(item))})
-                        if(!LocalNavVisible.current) Action("返回",id="library-back",icon="back") {model.back()}
                     }
                 }
             }
@@ -146,7 +144,7 @@ import kotlinx.coroutines.delay
                         } else false
                     }.focusGroup()) {
                     SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
-                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp)) {
+                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=22.dp,vertical=22.dp)) {
                         items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
                     }
                     }
@@ -173,7 +171,7 @@ import kotlinx.coroutines.delay
         SectionTitle("所有媒体库")
         if(libs.isEmpty()) EmptyState("这里还没有媒体库","添加 Emby 后，这里会显示你的原生媒体库封面。","管理来源") {model.navigate(Route.Settings)}
         LazyVerticalGrid(columns=GridCells.Adaptive(if(LocalCompact.current) 145.dp else 235.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),
-            verticalArrangement=Arrangement.spacedBy(20.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp)) {
+            verticalArrangement=Arrangement.spacedBy(20.dp),contentPadding=PaddingValues(horizontal=22.dp,vertical=22.dp)) {
             items(libs,key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
         }
     }

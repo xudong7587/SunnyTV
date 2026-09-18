@@ -97,6 +97,33 @@ class TvMotionTest {
         rule.mainClock.autoAdvance=true
         rule.onNodeWithTag("slow:fixture:1").assertIsFocused()
     }
+    @Test fun playerLoadingUsesSunnyBrandWithoutLegacyMessageCard() {
+        mount {
+            io.github.xudong7587.sunnytv.feature.player.SunnyLoadingOverlay(true)
+        }
+        rule.onNodeWithTag("player:loading").assertIsDisplayed()
+        rule.onNodeWithText("L O A D I N G").assertIsDisplayed()
+    }
+
+    @Test fun skipAndNextPromptsHaveRemoteConfirmActions() {
+        var skipped=false
+        var next=false
+        mount {
+            Column {
+                io.github.xudong7587.sunnytv.feature.player.SkipSegmentPrompt(
+                    SkipSegment("intro:0","intro",0,60_000),onSkip={skipped=true},onDismiss={})
+                io.github.xudong7587.sunnytv.feature.player.NextEpisodePrompt(
+                    "下一集",45,onPlay={next=true},onDismiss={})
+            }
+        }
+        rule.onNodeWithTag("player:skip-prompt").assertIsDisplayed()
+        rule.onNodeWithTag("player:skip").performClick()
+        rule.runOnIdle {assertTrue(skipped)}
+        rule.onNodeWithTag("player:next-prompt").assertIsDisplayed()
+        rule.onNodeWithTag("player:next").performClick()
+        rule.runOnIdle {assertTrue(next)}
+    }
+
     @Test fun playerCircularControlsSupportDpadFocusLabelsAndActivation() {
         var clicks=0
         mount {

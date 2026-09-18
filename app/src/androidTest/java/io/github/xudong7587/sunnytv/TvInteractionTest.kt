@@ -205,6 +205,29 @@ class TvInteractionTest {
         focus("outside-row")
         rule.runOnIdle {assertEquals(0,selected)}
     }
+    @Test fun detailAndLibraryDoNotExposeTopLeftBackButtons() {
+        lateinit var model:AppModel
+        val library=MediaEntry("library-back-test","fixture","测试媒体库","CollectionFolder",isFolder=true)
+        rule.activityRule.scenario.onActivity {activity->
+            model=AppModel(activity.application,false)
+            model.pages[library.key]=MediaPage(entries,entries.size)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    LibraryScreen(library) {_,_->}
+                }}
+            }
+        }
+        rule.onNodeWithTag("library-back").assertDoesNotExist()
+        rule.activityRule.scenario.onActivity {activity->
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    MediaDetailContent(entries.first()) {_,_->}
+                }}
+            }
+        }
+        rule.onNodeWithTag("detail-back").assertDoesNotExist()
+    }
+
     @Test fun detailHidesPinnedNavigation() {
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)

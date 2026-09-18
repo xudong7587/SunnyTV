@@ -201,7 +201,7 @@ import kotlinx.coroutines.*
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
                     item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
-                    item {ToggleRow("阴影效果","使用轻微右下偏移阴影；深色模式仅用于按钮",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
+                    item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
                     item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
                     item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
                     item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -215,13 +215,7 @@ import kotlinx.coroutines.*
                             }
                         }
                     }}
-                    item {SettingChoiceRow("自定义字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统字体"}) {
-                        if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
-                        catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器，然后从 U 盘或本地存储选择字体。"}
-                    }}
-                    if(model.settings.customFontFile.isNotBlank()) item {Action("恢复系统字体") {
-                        model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
-                    }}
+                    item {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"}) {chooser="font"}}
                     item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
                     item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
                     item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
@@ -250,15 +244,21 @@ import kotlinx.coroutines.*
             }
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";else->"字幕优先级（未匹配时跟随媒体默认）"},
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"字体";else->"字幕优先级（未匹配时跟随媒体默认）"},
         when(chooser) {"artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
             "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
+            "font"->listOf("system" to "系统默认字体","custom" to "用户自定义上传…")
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();else->model.settings.subtitlePreference},
+        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->if(model.settings.customFontFile.isBlank()) "system" else "custom";else->model.settings.subtitlePreference},
         onDismiss={chooser=""}) {value ->
-        model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
+        if(chooser=="font") {
+            if(value=="custom") {
+                if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
+                catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器。"}
+            } else model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
+        } else model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
             "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
         chooser=""
     }
