@@ -71,7 +71,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             }
                         }) {event,amount->event.consume();drag+=amount}
                     }
-                FocusTile("$id:featured",focusModifier,shape=RoundedCornerShape(18.dp),
+                FocusTile("$id:featured",focusModifier,shape=RoundedCornerShape(18.dp),focusLift=false,
                     onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,transitionSpec={
                         (fadeIn(motion.fade(320))+slideInHorizontally(motion.fade(320)) {it/8*direction}) togetherWith
@@ -89,11 +89,11 @@ import io.github.xudong7587.sunnytv.feature.Route
             }
             val following=(1 until items.size).map {items[(index+it)%items.size]}
             val stripWidth=if(LocalCompact.current) 52.dp else ((containerWidth-side-9.dp-7.dp*(following.size-1).coerceAtLeast(0))/following.size.coerceAtLeast(1)).coerceAtLeast(20.dp)
-            StableLazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+            StableLazyRow(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(7.dp),reserveFocusSpace=false) {
                 items(following,key={it.key}) {media->
                     Column(Modifier.width(stripWidth).animateItem(fadeInSpec=motion.fade(300),placementSpec=motion.spring(),fadeOutSpec=motion.fade(300))) {
                         FocusTile("$id:strip:${media.key}",Modifier.fillMaxWidth().height(side).focusProperties {canFocus=false},
-                            shape=RoundedCornerShape(13.dp),focusOutline=false,onClick={direction=1;leftTravel=0;choose(items.indexOf(media))}) {
+                            shape=RoundedCornerShape(13.dp),focusOutline=false,focusLift=false,onClick={direction=1;leftTravel=0;choose(items.indexOf(media))}) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),320)
                         }
                         Text(media.year.takeIf {it>0}?.toString().orEmpty(),color=SunnyColors.Secondary,fontSize=10.sp,modifier=Modifier.padding(top=8.dp))

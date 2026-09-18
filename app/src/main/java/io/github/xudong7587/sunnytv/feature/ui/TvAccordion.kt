@@ -110,7 +110,7 @@ import kotlinx.coroutines.delay
                         val delta=if(event.key==Key.DirectionRight) 1 else -1
                         select(index+delta);true
                     } else false
-                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),restoreFocus=false,onFocus={
+                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),focusLift=false,restoreFocus=false,onFocus={
                     if(selectedIndex!=index) select(index)
                 },onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,contentKey={it.key},transitionSpec={

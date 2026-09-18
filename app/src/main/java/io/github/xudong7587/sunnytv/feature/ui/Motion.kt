@@ -78,9 +78,9 @@ private class HorizontalReveal(private val gutter:Float):BringIntoViewSpec {
 
 @Composable fun StableLazyRow(modifier:Modifier=Modifier,state:LazyListState=rememberLazyListState(),
     contentPadding:PaddingValues=PaddingValues(0.dp),horizontalArrangement:Arrangement.Horizontal=Arrangement.Start,
-    verticalAlignment:Alignment.Vertical=Alignment.Top,content:LazyListScope.()->Unit) {
+    verticalAlignment:Alignment.Vertical=Alignment.Top,reserveFocusSpace:Boolean=true,content:LazyListScope.()->Unit) {
     val direction=LocalLayoutDirection.current
-    val safePadding=PaddingValues(
+    val safePadding=if(!reserveFocusSpace) contentPadding else PaddingValues(
         start=maxOf(24.dp,contentPadding.calculateStartPadding(direction)),
         end=maxOf(24.dp,contentPadding.calculateEndPadding(direction)),
         top=maxOf(18.dp,contentPadding.calculateTopPadding()),

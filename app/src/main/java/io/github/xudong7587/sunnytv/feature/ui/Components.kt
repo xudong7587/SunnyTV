@@ -46,7 +46,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
-    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
+    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,focusLift:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
     val pageActive=LocalPageActive.current
@@ -81,7 +81,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             delay(45); if(homeNavigator?.moving!=true) runCatching { requester.requestFocus() }
         }
     }
-    Box(modifier.testTag(id).focusElevation(shape,showShadow)
+    Box(modifier.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
             if(it.isFocused && pageActive) { model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }

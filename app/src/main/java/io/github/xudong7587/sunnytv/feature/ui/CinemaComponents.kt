@@ -87,7 +87,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             if(next!=index) requesters[next].requestFocus()
                             true
                         } else false
-                    },active=active,shape=RoundedCornerShape(if(hero) 20.dp else 15.dp),
+                    },active=active,focusLift=false,shape=RoundedCornerShape(if(hero) 20.dp else 15.dp),
                     onFocus={onSelect(index)},onClick={if(entry==null) onMore?.invoke() else model.navigate(Route.Detail(entry))}) {focused ->
                     if(entry==null) {
                         Column(Modifier.fillMaxSize().padding(10.dp),verticalArrangement=Arrangement.Center,
