@@ -42,10 +42,10 @@ import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.delay
 
 /** Soft TV focus elevation for the light theme. Parent rows reserve a gutter so it is not clipped. */
-fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else shadow(
-    elevation=10.dp, shape=shape, clip=false,
-    ambientColor=Color(0x24000000), spotColor=Color(0x36000000)
-)
+fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else
+    shadow(18.dp,shape,clip=false,ambientColor=Color(0x44000000),spotColor=Color(0x52000000))
+        .shadow(4.dp,shape,clip=false,ambientColor=Color(0x24000000),spotColor=Color(0x32000000))
+        .graphicsLayer {translationY=-2.dp.toPx();scaleX=1.018f;scaleY=1.018f}
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
@@ -70,7 +70,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
     val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
     val dark=model.settings.darkTheme
     val outline=if(dark) base.focusContent else base.focusBackground
-    val outlineWidth=if(dark) 3.5.dp else 1.5.dp
+    val outlineWidth=if(dark) 5.dp else 2.5.dp
     // Dark mode stays flat and uses a stronger outline. Light mode gets one soft elevation layer.
     val showShadow=model.settings.shadowsEnabled && !dark && focused
     LaunchedEffect(page,id,pageActive) {
@@ -211,7 +211,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
     if(list.isEmpty()) return
     Column {
         SectionTitle(title)
-        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=12.dp,vertical=12.dp),
+        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=22.dp,vertical=22.dp),
             modifier=Modifier.fillMaxWidth().focusGroup()) {
             items(list,key={ it.key }) { entry -> MediaCard(entry,wide,onFocus={onFocus(entry)},onClick={onClick(entry)},focusId="shelf:$title:${entry.key}") }
         }

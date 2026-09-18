@@ -11,7 +11,7 @@ import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.LocalTextStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
+import io.github.xudong7587.sunnytv.core.storage.FontCatalog
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import androidx.tv.material3.lightColorScheme
@@ -57,17 +57,8 @@ val LocalPageActive=staticCompositionLocalOf {true}
     val p=SunnyPalette(blend(target.background),blend(target.surface),blend(target.raised),blend(target.accent),
         blend(target.ink),blend(target.text),blend(target.secondary),blend(target.border),blend(target.focusBackground),blend(target.focusContent))
     val context=LocalContext.current
-    val font by produceState<FontFamily>(FontFamily.SansSerif,settings.customFontFile) {
-        value=withContext(Dispatchers.IO) {
-            runCatching {
-                if(settings.customFontFile.isBlank()) FontFamily.SansSerif else {
-                    val folder=File(context.filesDir,"fonts").canonicalFile
-                    val file=File(folder,settings.customFontFile).canonicalFile
-                    require(file.parentFile==folder && file.isFile)
-                    FontFamily(android.graphics.Typeface.createFromFile(file))
-                }
-            }.getOrDefault(FontFamily.SansSerif)
-        }
+    val font by produceState<FontFamily>(FontFamily.SansSerif,settings.fontPreset,settings.customFontFile) {
+        value=withContext(Dispatchers.IO) {FontCatalog.resolve(context,settings)}
     }
     CompositionLocalProvider(LocalSunnyPalette provides p,LocalMotion provides motion) {
         val scheme=if(settings.darkTheme) darkColorScheme(primary=p.accent,onPrimary=p.ink,

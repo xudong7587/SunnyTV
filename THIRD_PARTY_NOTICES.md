@@ -11,3 +11,7 @@ SunnyTV 原创部分采用 [GPL-3.0-only](LICENSE)。第三方组件遵循各自
 README 内的太阳标识和界面示意图为本项目原创矢量图。示例片名、海报图形、简介、年份及播放进度均为虚构数据，可由 `scripts/generate-readme-art.py` 重建。它们不是实际媒体截图，也不进入应用作为影视内容分发。
 
 应用运行时展示用户自行连接的 Emby 内容。此次 GitHub 发布没有包含用户真实媒体、账号、截图、签名密钥或网络地址。未复制 Moonfin 或 LumiPlayer 源码和品牌资产。
+
+
+## User-supplied fonts (dev13)
+SunnyTV contains integration slots for three user-supplied fonts. Binary font files are not committed by this change. See docs/FONT-ASSETS.md for names, checksums and the redistribution note.
