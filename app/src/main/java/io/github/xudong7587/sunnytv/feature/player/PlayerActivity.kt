@@ -86,6 +86,12 @@ class PlayerActivity: ComponentActivity() {
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
     private var subtitleManuallySelected=false
+    private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
+    private var dismissedSegments by mutableStateOf<Set<String>>(emptySet())
+    private var metadataJob:Job?=null
+    private var sleepJob:Job?=null
+    private var sleepMinutes by mutableStateOf<Int?>(null)
+    private var switchingEpisode by mutableStateOf(false)
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,6 +124,8 @@ class PlayerActivity: ComponentActivity() {
             p.release()
         }
         player=null; rendered=false; progressJob?.cancel(); reporter=null
+        metadataJob?.cancel();metadataJob=null
+        sleepJob?.cancel();sleepJob=null
         super.onStop()
     }
     private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
@@ -257,13 +265,14 @@ class PlayerActivity: ComponentActivity() {
             }
         })
         startReporter()
+        loadPlayerMetadata()
         p.setMediaItem(media.build(),lastPosition);p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
             while(isActive) {
                 delay(500)
-                // Updating these states does not rebuild the Android PlayerView (factory is retained).
-                if(controls || settings.diagnostics) {position=p.currentPosition;duration=p.duration.coerceAtLeast(0)}
+                // Segment prompts also need position while the OSD is hidden.
+                position=p.currentPosition;duration=p.duration.coerceAtLeast(0)
                 tick++
                 if(tick%20==0 && rendered) {
                     reporter?.progress(p.currentPosition, !p.isPlaying)
@@ -271,6 +280,38 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
         }
+    }
+    private fun loadPlayerMetadata() {
+        if(request.embyItemId.isBlank() || mediaContext?.item?.id==request.embyItemId) return
+        metadataJob?.cancel()
+        metadataJob=lifecycleScope.launch {
+            val context=withContext(Dispatchers.IO) {
+                val config=runCatching {app.store.sources().firstOrNull {it.id==request.sourceId}}.getOrNull()
+                    ?: return@withContext null
+                runCatching {app.emby(config).playerContext(request.embyItemId)}.getOrNull()
+            }
+            if(context!=null) mediaContext=context
+        }
+    }
+    private fun switchEpisode(item:MediaEntry) {
+        if(switchingEpisode) return
+        lifecycleScope.launch {
+            switchingEpisode=true
+            try {
+                val started=SystemClock.elapsedRealtime()
+                val next=withContext(Dispatchers.IO) {
+                    val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
+                    app.emby(config).playback(item,false)
+                }.copy(requestedAtMs=started,sourceReadyAtMs=SystemClock.elapsedRealtime())
+                startActivity(intent(this@PlayerActivity,next));finish()
+            } catch(_:CancellationException) {throw CancellationException()}
+            catch(_:Exception) {error="无法打开相邻剧集，请返回详情页重试。";controls=true}
+            finally {switchingEpisode=false}
+        }
+    }
+    private fun setSleepTimer(minutes:Int?) {
+        sleepJob?.cancel();sleepJob=null;sleepMinutes=minutes
+        if(minutes!=null) sleepJob=lifecycleScope.launch {delay(minutes*60_000L);finish()}
     }
     private fun startReporter() {
         if (request.embyItemId.isBlank()) return
@@ -302,107 +343,134 @@ class PlayerActivity: ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
     @Composable private fun PlayerContent() {
+        val context=mediaContext
+        val activeSkip=SegmentLogic.active(context?.skipSegments.orEmpty(),position,dismissedSegments)
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            AndroidView(factory={context->PlayerView(context).apply {
+            AndroidView(factory={androidContext->PlayerView(androidContext).apply {
                 useController=false;keepScreenOn=true
                 isFocusable=false
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            }},
-                update={view->view.player=player;view.resizeMode=resizeMode},modifier=Modifier.fillMaxSize())
+            }},update={view->view.player=player;view.resizeMode=resizeMode},modifier=Modifier.fillMaxSize())
+
             if(panel.isBlank()) PlayerTouchSurface(
-                onTap = { controls = !controls },
-                onDoubleTap = { region ->
-                    player?.let { p ->
-                        if(region == 1) {
-                            if(p.isPlaying) { p.pause(); gestureNotice="已暂停" }
-                            else { p.play(); gestureNotice="继续播放" }
-                        } else if(p.isCurrentMediaItemSeekable && p.duration > 0) {
-                            seek(if(region == 0) -30_000 else 30_000)
-                            gestureNotice=if(region == 0) "后退 30 秒" else "前进 30 秒"
+                onTap={controls=!controls},
+                onDoubleTap={region->
+                    player?.let {p->
+                        if(region==1) {
+                            if(p.isPlaying) {p.pause();gestureNotice="已暂停"} else {p.play();gestureNotice="继续播放"}
+                        } else if(p.isCurrentMediaItemSeekable && p.duration>0) {
+                            seek(if(region==0) -30_000 else 30_000)
+                            gestureNotice=if(region==0) "后退 30 秒" else "前进 30 秒"
                         } else gestureNotice="当前媒体暂不支持快进"
                     }
                 },
-                onStart = {
-                    gestureActive=true
-                    gestureSeekTarget=null
+                onStart={
+                    gestureActive=true;gestureSeekTarget=null
                     gestureStartPosition=player?.currentPosition ?: 0
-                    gestureStartBrightness=window.attributes.screenBrightness.takeIf { it >= 0 }
+                    gestureStartBrightness=window.attributes.screenBrightness.takeIf {it>=0}
                         ?: (Settings.System.getInt(contentResolver,Settings.System.SCREEN_BRIGHTNESS,128)/255f)
                     gestureStartVolume=audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 },
-                onDrag = { region, dx, dy ->
+                onDrag={region,dx,dy->
                     when(region) {
                         0 -> {
                             val level=(gestureStartBrightness+dy).coerceIn(.01f,1f)
-                            window.attributes=window.attributes.apply { screenBrightness=level }
+                            window.attributes=window.attributes.apply {screenBrightness=level}
                             gestureNotice="亮度 ${(level*100).toInt()}%"
                         }
                         2 -> {
-                            val audio=audioManager
-                            val max=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                            val max=audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                             val level=(gestureStartVolume+dy*max).toInt().coerceIn(0,max)
-                            if(!audio.isVolumeFixed) audio.setStreamVolume(AudioManager.STREAM_MUSIC,level,0)
-                            gestureNotice=if(audio.isVolumeFixed) "此设备音量固定" else "音量 ${level*100/max}%"
+                            if(!audioManager.isVolumeFixed) audioManager.setStreamVolume(AudioManager.STREAM_MUSIC,level,0)
+                            gestureNotice=if(audioManager.isVolumeFixed) "此设备音量固定" else "音量 ${level*100/max}%"
                         }
-                        else -> player?.let { p ->
-                            if(p.isCurrentMediaItemSeekable && p.duration > 0) {
+                        else -> player?.let {p->
+                            if(p.isCurrentMediaItemSeekable && p.duration>0) {
                                 gestureSeekTarget=PlayerGesturePolicy.seekTarget(gestureStartPosition,dx,p.duration)
                                 gestureNotice="跳转至 ${clock(gestureSeekTarget!!)} / ${clock(p.duration)}"
                             } else gestureNotice="当前媒体暂不支持快进"
                         }
                     }
                 },
-                onEnd = { commit ->
-                    if(commit) gestureSeekTarget?.let { target -> player?.seekTo(target); position=target }
-                    gestureSeekTarget=null
-                    gestureActive=false
-                },
-            )
+                onEnd={commit->
+                    if(commit) gestureSeekTarget?.let {target->player?.seekTo(target);position=target}
+                    gestureSeekTarget=null;gestureActive=false
+                })
+
             LaunchedEffect(gestureNotice,gestureActive) {
-                if(!gestureActive && gestureNotice.isNotBlank()) { delay(1200); gestureNotice="" }
+                if(!gestureActive && gestureNotice.isNotBlank()) {delay(1200);gestureNotice=""}
             }
             if(gestureNotice.isNotBlank()) Text(gestureNotice,color=Color.White,fontSize=20.sp,
-                modifier=Modifier.align(Alignment.Center).background(Color.Black.copy(.75f),RoundedCornerShape(12.dp)).padding(20.dp))
-            if(status.isNotBlank() || error.isNotBlank()) {
-                Text(error.ifBlank {status},color=SunnyColors.Text,fontSize=16.sp,
-                    modifier=Modifier.align(Alignment.Center).widthIn(max=650.dp).background(Color.Black.copy(.75f)).padding(20.dp))
+                modifier=Modifier.align(Alignment.Center).background(Color.Black.copy(.72f),RoundedCornerShape(12.dp)).padding(18.dp))
+
+            SunnyLoadingOverlay(error.isBlank() && (switchingEpisode || !rendered || status=="正在缓冲…"))
+
+            if(error.isNotBlank()) {
+                Column(Modifier.align(Alignment.Center).widthIn(max=650.dp).background(Color.Black.copy(.82f),RoundedCornerShape(18.dp)).padding(24.dp),
+                    verticalArrangement=Arrangement.spacedBy(14.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                    Text(error,color=Color.White,fontSize=15.sp,lineHeight=23.sp)
+                    if(!retryUsed) PlayerControl("重试此播放入口一次","repeat",initial=true) {
+                        retryUsed=true;lastPosition=player?.currentPosition ?: lastPosition
+                        player?.release();player=null;progressJob?.cancel()
+                        reporter?.close(lastPosition,rendered);reporter=null;createPlayer()
+                    }
+                }
             }
-            if(settings.diagnostics) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3 · 恢复或重试仅统计本次引擎，未取得的指标显示 —",
-                color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopStart).padding(25.dp).background(Color.Black.copy(.7f)).padding(12.dp))
-            if(controls && panel.isBlank()) {
-                Box(Modifier.align(Alignment.TopStart).padding(start=36.dp,top=26.dp).width(250.dp).height(70.dp)) {PlayerMediaTitle()}
+
+            if(settings.diagnostics) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3",
+                color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopEnd).padding(25.dp).background(Color.Black.copy(.62f),RoundedCornerShape(10.dp)).padding(12.dp))
+
+            if(activeSkip!=null && rendered && error.isBlank() && panel.isBlank()) {
+                SkipSegmentPrompt(activeSkip,onSkip={
+                    player?.seekTo(activeSkip.endMs.coerceAtMost(duration.takeIf {it>0} ?: activeSkip.endMs))
+                    dismissedSegments=dismissedSegments+activeSkip.id
+                },onDismiss={dismissedSegments=dismissedSegments+activeSkip.id},
+                    modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
+            }
+
+            if(controls && panel.isBlank() && error.isBlank()) {
+                Box(Modifier.align(Alignment.TopStart).padding(start=40.dp,top=30.dp).width(300.dp).height(82.dp)) {PlayerMediaTitle()}
                 LaunchedEffect(controls,playing,panel,error,gestureActive) {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.95f))))
-                    .padding(start=40.dp,end=40.dp,top=45.dp,bottom=27.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                    Text(request.title,color=SunnyColors.Text,fontSize=25.sp,lineHeight=31.sp,maxLines=2,fontWeight=FontWeight.Bold)
-                    if(selectionNotice.isNotBlank()) Text(selectionNotice,color=SunnyColors.Secondary,fontSize=12.sp)
-                    Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(.22f))) {
-                        Box(Modifier.fillMaxWidth(MediaLogic.progress(position,duration)).fillMaxHeight().background(SunnyColors.Accent))
+                    .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
+                    .padding(start=42.dp,end=42.dp,top=70.dp,bottom=30.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
+                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L) {seek(it)}
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                        Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
+                        Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
-                        PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=true) {player?.let {if(it.isPlaying) it.pause() else it.play()}}
-                        PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
-                        Text("${clock(position)} / ${clock(duration)}",color=SunnyColors.Secondary,fontSize=13.sp,modifier=Modifier.weight(1f))
-                        PlayerControl("音轨","audio") {panel="audio"}
-                        PlayerControl("字幕","subtitle") {panel="subtitles"}
-                        PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}}
-                        PlayerControl("退出播放","close") {finish()}
-                    }
-                    if(error.isNotBlank() && !retryUsed) PlayerControl("重试此播放入口一次","repeat") {
-                        retryUsed=true;lastPosition=player?.currentPosition ?: lastPosition
-                        player?.release();player=null;progressJob?.cancel()
-                        reporter?.close(lastPosition, rendered)
-                        reporter=null; createPlayer()
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(9.dp),verticalAlignment=Alignment.CenterVertically) {
+                            context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
+                            PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
+                            PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=true) {
+                                player?.let {if(it.isPlaying) it.pause() else it.play()}
+                            }
+                            PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
+                            context?.next?.let {next->PlayerControl("下一集","next") {switchEpisode(next)}}
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(horizontalArrangement=Arrangement.spacedBy(7.dp),verticalAlignment=Alignment.CenterVertically) {
+                            if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters") {panel="chapters"}
+                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle") {panel="subtitles"}
+                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio") {panel="audio"}
+                            if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast") {panel="cast"}
+                            PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
+                                resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}
+                            }
+                            PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep") {panel="sleep"}
+                            PlayerControl("播放信息","info") {panel="info"}
+                        }
                     }
                 }
             }
-            if(panel.isNotBlank()) TrackPanel()
+            if(panel.isNotBlank()) PlayerPanel()
         }
     }
+
     @Composable private fun PlayerMediaTitle() {
         val logo=request.mediaLogo
         val source by produceState<SourceConfig?>(null,request.sourceId) {
@@ -419,18 +487,26 @@ class PlayerActivity: ComponentActivity() {
                 alignment=Alignment.CenterStart,modifier=Modifier.fillMaxSize(),onSuccess={loaded=true},onError={failed=true})
         }
     }
+    @Composable private fun PlayerPanel() {
+        when(panel) {
+            "audio","subtitles" -> TrackPanel()
+            "chapters" -> ChapterPanel()
+            "cast" -> CastPanel()
+            "sleep" -> SleepPanel()
+            "info" -> InfoPanel()
+        }
+    }
     @Composable private fun TrackPanel() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(.5f)),contentAlignment=Alignment.CenterEnd) {
-            LazyColumn(Modifier.width(360.dp).fillMaxHeight().background(SunnyColors.Surface).padding(25.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                item {Text(if(type==C.TRACK_TYPE_AUDIO) "选择音轨" else "选择字幕",color=SunnyColors.Text,fontSize=24.sp,fontWeight=FontWeight.Bold)}
-                item {PlayerControl("关闭面板","close",initial=true) {panel=""}}
-                if(type==C.TRACK_TYPE_TEXT) item {PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
-                    subtitleManuallySelected=true
-                    player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()};panel=""
-                }}
-                if(groups.isEmpty()) item {Text("此媒体没有可选择的轨道",color=SunnyColors.Secondary,fontSize=14.sp)}
+        PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
+            if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
+                subtitleManuallySelected=true
+                player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
+                panel=""
+            }
+            if(groups.isEmpty()) Text("此媒体没有可选择的轨道",color=Color.White.copy(.7f),fontSize=14.sp)
+            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 groups.forEach {group->
                     for(i in 0 until group.length) {
                         val format=group.getTrackFormat(i)
@@ -446,6 +522,55 @@ class PlayerActivity: ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+    @Composable private fun ChapterPanel() {
+        val chapters=mediaContext?.item?.chapters.orEmpty().filter {it.startMs>=0}
+        PlayerSheet("章节",{panel=""}) {
+            if(chapters.isEmpty()) Text("此媒体没有章节",color=Color.White.copy(.7f))
+            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                items(chapters.size) {index->
+                    val chapter=chapters[index]
+                    PlayerOption("${clock(chapter.startMs)}  ·  ${chapter.name}") {
+                        player?.seekTo(chapter.startMs);position=chapter.startMs;panel=""
+                    }
+                }
+            }
+        }
+    }
+    @Composable private fun CastPanel() {
+        val people=mediaContext?.item?.people.orEmpty()
+        PlayerSheet("演职员",{panel=""}) {
+            if(people.isEmpty()) Text("没有可显示的演职员信息",color=Color.White.copy(.7f))
+            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                items(people.size) {index->
+                    val person=people[index]
+                    PlayerOption(listOf(person.name,person.role).filter {it.isNotBlank()}.joinToString(" · ")) {}
+                }
+            }
+        }
+    }
+    @Composable private fun SleepPanel() {
+        PlayerSheet("睡眠定时",{panel=""}) {
+            PlayerOption("关闭睡眠定时",selected=sleepMinutes==null) {setSleepTimer(null);panel=""}
+            listOf(15,30,60,90).forEach {minutes->
+                PlayerOption("$minutes 分钟",selected=sleepMinutes==minutes) {setSleepTimer(minutes);panel=""}
+            }
+        }
+    }
+    @Composable private fun InfoPanel() {
+        val video=availableTracks.groups.firstOrNull {it.type==C.TRACK_TYPE_VIDEO}?.let {g->
+            (0 until g.length).firstOrNull {g.isTrackSelected(it)}?.let {g.getTrackFormat(it)}
+        }
+        val audio=availableTracks.groups.firstOrNull {it.type==C.TRACK_TYPE_AUDIO}?.let {g->
+            (0 until g.length).firstOrNull {g.isTrackSelected(it)}?.let {g.getTrackFormat(it)}
+        }
+        PlayerSheet("播放信息",{panel=""}) {
+            Text("${request.playMethod} · ${request.mimeHint ?: "自动识别"}",color=Color.White,fontSize=17.sp)
+            video?.let {Text("视频 · ${it.sampleMimeType ?: it.codecs ?: "未知"} · ${it.width}×${it.height}",color=Color.White.copy(.76f),fontSize=14.sp)}
+            audio?.let {Text("音频 · ${it.sampleMimeType ?: it.codecs ?: "未知"} · ${it.channelCount} 声道",color=Color.White.copy(.76f),fontSize=14.sp)}
+            Text("Media3 · 原画直放 / Direct Stream 优先\n本面板不提供码率/质量切换按钮。",color=Color.White.copy(.62f),fontSize=13.sp,lineHeight=21.sp)
+            if(settings.diagnostics) Text("首帧 ${millis(firstFrameMs)} · 首响应头 ${millis(headerMs)}",color=SunnyColors.Accent,fontSize=12.sp)
         }
     }
     companion object {
