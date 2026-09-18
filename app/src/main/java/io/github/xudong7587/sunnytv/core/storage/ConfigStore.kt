@@ -83,8 +83,7 @@ class ConfigStore(context: Context) {
         }.toMap(),
         prefs.getFloat("animationSpeed",1f).takeIf {it in MotionPolicy.speeds} ?: 1f,
         prefs.getInt("fontScale",2).coerceIn(0,4),
-        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true),
-        prefs.getString("fontPreset","system").orEmpty().takeIf {it in setOf("system","fz_zhenghei","fz_youhei","coca_cola_care","custom")} ?: "system"
+        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true)
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -99,7 +98,7 @@ class ConfigStore(context: Context) {
         .putString("subtitle",s.subtitlePreference).putString("heroMode",s.heroMode)
         .putStringSet("heroLibraries",s.heroLibraryKeys).putBoolean("heroAll",s.heroAllLibraries)
         .putFloat("animationSpeed",s.animationSpeed).putInt("fontScale",s.fontScaleLevel.coerceIn(0,4))
-        .putString("customFontFile",s.customFontFile).putString("customFontName",s.customFontName).putString("fontPreset",s.fontPreset)
+        .putString("customFontFile",s.customFontFile).putString("customFontName",s.customFontName)
         .putInt("heroInterval",s.heroIntervalSeconds.coerceIn(3,60)).putInt("uiScale",s.uiScaleLevel.coerceIn(0,4)).apply() }
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }

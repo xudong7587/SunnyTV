@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import io.github.xudong7587.sunnytv.core.storage.FontStore
-import io.github.xudong7587.sunnytv.core.storage.FontCatalog
 import io.github.xudong7587.sunnytv.BuildConfig
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -122,7 +121,7 @@ import kotlinx.coroutines.*
             importingFont=true
             try {
                 val (file,label)=withContext(Dispatchers.IO) {FontStore.import(context,uri)}
-                model.saveSettings(model.settings.copy(customFontFile=file,customFontName=label,fontPreset="custom"))
+                model.saveSettings(model.settings.copy(customFontFile=file,customFontName=label))
             } catch(e:CancellationException) {throw e}
             catch(_:Exception) {model.message="字体导入失败，请选择有效的 TTF / OTF / TTC 字体（不超过 64 MB）"}
             finally {importingFont=false}
@@ -216,7 +215,7 @@ import kotlinx.coroutines.*
                             }
                         }
                     }}
-                    item {SettingChoiceRow("字体",if(importingFont) "正在导入…" else FontCatalog.label(model.settings)) {chooser="font"}}
+                    item {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"}) {chooser="font"}}
                     item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
                     item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
                     item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
@@ -250,18 +249,15 @@ import kotlinx.coroutines.*
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
             "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
-            "font"->FontCatalog.presets.map {preset->preset.id to (preset.label + if(FontCatalog.available(context,preset)) "" else " · 待内置")} + ("custom" to "用户自定义上传…")
+            "font"->listOf("system" to "系统默认字体","custom" to "用户自定义上传…")
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->model.settings.fontPreset;else->model.settings.subtitlePreference},
+        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->if(model.settings.customFontFile.isBlank()) "system" else "custom";else->model.settings.subtitlePreference},
         onDismiss={chooser=""}) {value ->
         if(chooser=="font") {
-            val preset=FontCatalog.preset(value)
-            when {
-                value=="custom" -> if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
-                    catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器。"}
-                preset.assetPath!=null && !FontCatalog.available(context,preset) -> model.message="当前 APK 尚未包含该字体资源，请使用系统字体或用户自定义上传。"
-                else -> model.saveSettings(model.settings.copy(fontPreset=value))
-            }
+            if(value=="custom") {
+                if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
+                catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器。"}
+            } else model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
         } else model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
             "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
         chooser=""
