@@ -42,10 +42,7 @@ import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.delay
 
 /** Soft TV focus elevation for the light theme. Parent rows reserve a gutter so it is not clipped. */
-fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) this else
-    shadow(18.dp,shape,clip=false,ambientColor=Color(0x44000000),spotColor=Color(0x52000000))
-        .shadow(4.dp,shape,clip=false,ambientColor=Color(0x24000000),spotColor=Color(0x32000000))
-        .graphicsLayer {translationY=-2.dp.toPx();scaleX=1.018f;scaleY=1.018f}
+fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(shape,enabled)
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
@@ -60,6 +57,12 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
         targets?.put(id,requester)
         onDispose {targets?.remove(id)}
     }
+    val homeNavigator=LocalHomeFocusNavigator.current
+    val homeSection=LocalHomeFocusSection.current
+    DisposableEffect(homeNavigator,homeSection,id,requester) {
+        if(homeSection!=null) homeNavigator?.register(homeSection,id,requester)
+        onDispose {homeNavigator?.unregister(id,requester)}
+    }
     var focused by remember { mutableStateOf(false) }
     val motion=LocalMotion.current
     val selected=focused || active
@@ -70,26 +73,31 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = if(!enabled) thi
     val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
     val dark=model.settings.darkTheme
     val outline=if(dark) base.focusContent else base.focusBackground
-    val outlineWidth=if(dark) 5.dp else 2.5.dp
+    val outlineWidth=if(dark) 5.dp else 1.5.dp
     // Dark mode stays flat and uses a stronger outline. Light mode gets one soft elevation layer.
     val showShadow=model.settings.shadowsEnabled && !dark && focused
     LaunchedEffect(page,id,pageActive) {
-        if(pageActive && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
-            delay(45); runCatching { requester.requestFocus() }
+        if(pageActive && homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
+            delay(45); if(homeNavigator?.moving!=true) runCatching { requester.requestFocus() }
         }
     }
-    Box(modifier.testTag(id).flatShadow(shape,showShadow)
+    Box(modifier.testTag(id).focusElevation(shape,showShadow)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
-            if(it.isFocused && pageActive) { model.focusMemory[page]=id; onFocus() }
+            if(it.isFocused && pageActive) { model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
         }.clip(shape)
         .drawWithCache {
             val edge=shape.createOutline(size,layoutDirection,this)
+            val stroke=outlineWidth.toPx()
+            val innerSize=androidx.compose.ui.geometry.Size((size.width-stroke).coerceAtLeast(0f),(size.height-stroke).coerceAtLeast(0f))
+            val focusEdge=shape.createOutline(innerSize,layoutDirection,this)
             onDrawWithContent {
                 if(dark) drawOutline(edge,fill.value)
                 else drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
                 drawContent()
-                if(focused && focusOutline) drawOutline(edge,outline,style=Stroke(outlineWidth.toPx()))
+                if(focused && focusOutline) translate(stroke/2f,stroke/2f) {
+                    drawOutline(focusEdge,outline,style=Stroke(stroke))
+                }
             }
         }
         .onPreviewKeyEvent {event->event.type==KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount>0 &&

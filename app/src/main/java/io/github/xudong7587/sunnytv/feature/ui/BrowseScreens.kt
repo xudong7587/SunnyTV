@@ -82,8 +82,10 @@ import kotlinx.coroutines.delay
     val model=LocalAppModel.current
     val embySources=model.sources.filter { it.kind==SourceKind.EMBY }
     val feeds=embySources.mapNotNull { model.feeds[it.id] }
+    val libraries=feeds.flatMap { it.libraries }.distinctBy { it.key }
     val resume=feeds.flatMap { it.resume }
     val latest=feeds.flatMap { it.latest }
+    val nextUp=if(model.settings.showNextUp) feeds.flatMap { it.nextUp }.distinctBy {it.key} else emptyList()
     val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates;else->latest}.distinctBy {it.key}.take(7)
     var candidates by remember {mutableStateOf(incoming)}
     var selected by rememberSaveable {mutableIntStateOf(0)}
@@ -94,6 +96,11 @@ import kotlinx.coroutines.delay
     val compact=LocalCompact.current
     val librariesFocus=remember {FocusRequester()}
     val motion=LocalMotion.current
+    val axis=LocalTvFocusMotion.current
+    val navigation=remember(list,scope,axis) {HomeFocusNavigator(list,scope,axis)}
+    val sections=remember(libraries.map {it.key},nextUp.isNotEmpty()) {
+        HomeFocusPlan.sections(libraries.map {it.key},nextUp.isNotEmpty())
+    }
     DisposableEffect(bridge,list) {bridge?.revealTop={list.scrollToItem(0)};onDispose {bridge?.revealTop=null}}
     var heroFocused by remember {mutableStateOf(false)}
     LaunchedEffect(incoming,heroFocused,model.busy) {if(!heroFocused && !model.busy) {candidates=incoming;selected=selected.coerceIn(0,(incoming.size-1).coerceAtLeast(0))}}
@@ -113,52 +120,67 @@ import kotlinx.coroutines.delay
         val viewport=maxHeight
         val heroHeight=viewport.coerceAtLeast(if(compact) 630.dp else 400.dp)
         val heroExtentPx=with(LocalDensity.current) {(heroHeight+6.dp).toPx()}
-        StableVerticalViewport(hold={!compact && heroFocused}) {
+        val navigationInset=with(LocalDensity.current) {if(LocalNavVisible.current) 84.dp.roundToPx() else 8.dp.roundToPx()}
+        SideEffect {
+            navigation.sections=sections
+            navigation.motion=motion
+            navigation.topInsetPx=navigationInset
+            navigation.revealLibraries={list.moveHomePage(1,heroExtentPx,motion)}
+            navigation.revealHero={list.moveHomePage(0,heroExtentPx,motion);withFrameNanos {};bridge?.enterContent()}
+        }
+        CompositionLocalProvider(LocalHomeFocusNavigator provides navigation) {
+        StableVerticalViewport(hold={!compact && (heroFocused || navigation.moving)}) {
         LazyColumn(modifier=Modifier.testTag("home:vertical"),state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             if(embySources.isEmpty()) item {
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
                 item(key="home-stage") {
-                    // Compose the first media-library row before scrolling starts, so entering it
-                    // does not inflate/decode a new lazy item in the middle of a transition.
+                    // Keep the first row composed while crossing the hero boundary.
                     Column {
-                    val darkPalette=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
-                    CompositionLocalProvider(LocalSunnyPalette provides darkPalette) {
-                        Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero")
-                            .onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
-                            CinemaBackdrop(hero)
-                            HomeHeroContent(hero,candidates,selected,{selected=it},
-                                if(model.settings.showResume) resume else emptyList(),onExitDown={
-                                    scope.launch {
-                                        list.moveHomePage(1,heroExtentPx,motion)
-                                        withFrameNanos {};librariesFocus.requestFocus()
-                                    }
-                                },onPlay=onPlay)
-
+                        val colors=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
+                        CompositionLocalProvider(LocalSunnyPalette provides colors) {
+                            Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero")
+                                .onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
+                                CinemaBackdrop(hero)
+                                HomeHeroContent(hero,candidates,selected,{selected=it},
+                                    if(model.settings.showResume) resume else emptyList(),onExitDown={
+                                        scope.launch {
+                                            axis.horizontal=false
+                                            list.moveHomePage(1,heroExtentPx,motion)
+                                            withFrameNanos {};librariesFocus.requestFocus()
+                                        }
+                                    },onPlay=onPlay)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        HomeFocusRegion(HomeFocusPlan.LIBRARIES) {
+                            Column(Modifier.padding(horizontal=30.dp).padding(top=if(compact) 0.dp else 68.dp).focusGroup()) {
+                                SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
+                                StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),
+                                    horizontalArrangement=Arrangement.spacedBy(16.dp),
+                                    contentPadding=PaddingValues(horizontal=32.dp,vertical=28.dp)) {
+                                    items(libraries,key={it.key}) {lib->LibraryCard(lib) {model.navigate(Route.Library(lib))}}
+                                }
+                            }
                         }
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Column(Modifier.padding(horizontal=30.dp).padding(top=if(compact) 0.dp else 68.dp).onPreviewKeyEvent {
-                        if(!compact && it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
-                            scope.launch {list.moveHomePage(0,heroExtentPx,motion);withFrameNanos {};bridge?.enterContent()};true
-                        } else false
-                    }.focusGroup()) {
-                    SectionTitle("我的媒体库","查看全部  ›") {model.navigate(Route.Libraries,root=true)}
-                    StableLazyRow(modifier=Modifier.focusRequester(librariesFocus).focusGroup(),horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=22.dp,vertical=22.dp)) {
-                        items(feeds.flatMap { it.libraries },key={it.key}) { lib -> LibraryCard(lib) {model.navigate(Route.Library(lib))} }
-                    }
-                    }
+                }
+                if(nextUp.isNotEmpty()) item(key="home-next-up") {
+                    HomeFocusRegion(HomeFocusPlan.NEXT_UP) {
+                        Box(Modifier.padding(horizontal=30.dp)) {MediaShelf("接着看下一集",nextUp,true,onClick={model.navigate(Route.Detail(it))})}
                     }
                 }
-                if(model.settings.showNextUp) item { Box(Modifier.padding(horizontal=30.dp)) {MediaShelf("接着看下一集",feeds.flatMap { it.nextUp },true,onClick={model.navigate(Route.Detail(it))})} }
-                items(feeds.flatMap {it.libraries}.distinctBy {it.key},key={"library-latest:${it.key}"}) {library ->
-                    Box(Modifier.padding(horizontal=30.dp)) {LibraryLatestRow(library)}
+                items(libraries,key={"library-latest:${it.key}"}) {library ->
+                    HomeFocusRegion(HomeFocusPlan.latest(library.key)) {
+                        Box(Modifier.padding(horizontal=30.dp)) {LibraryLatestRow(library)}
+                    }
                 }
-                embySources.forEach { source ->
-                    model.errors["feed:${source.id}"]?.let { error -> item { EmptyState(source.name,error,"重试") {model.refresh()} } }
-                    if(compact) model.feeds[source.id]?.warnings?.forEach { warning -> item {Text(warning,color=SunnyColors.Secondary,fontSize=12.sp)} }
+                embySources.forEach {source->
+                    model.errors["feed:${source.id}"]?.let {error->item {EmptyState(source.name,error,"重试") {model.refresh()}}}
+                    if(compact) model.feeds[source.id]?.warnings?.forEach {warning->item {Text(warning,color=SunnyColors.Secondary,fontSize=12.sp)}}
                 }
             }
+        }
         }
         }
     }

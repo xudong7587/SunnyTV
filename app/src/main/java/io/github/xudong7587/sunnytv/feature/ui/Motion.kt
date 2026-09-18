@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.xudong7587.sunnytv.core.model.MotionPolicy
 
@@ -58,23 +59,34 @@ val LocalTvFocusMotion=staticCompositionLocalOf {TvFocusMotion()}
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private val HorizontalReveal=object:BringIntoViewSpec {
-    override fun calculateScrollDistance(offset:Float,size:Float,containerSize:Float):Float = when {
-        offset<0 -> offset
-        offset+size>containerSize -> offset+size-containerSize
-        else -> 0f
+private class HorizontalReveal(private val gutter:Float):BringIntoViewSpec {
+    override fun calculateScrollDistance(offset:Float,size:Float,containerSize:Float):Float {
+        val inset=gutter.coerceAtMost(((containerSize-size)/2f).coerceAtLeast(0f))
+        return when {
+            offset<inset -> offset-inset
+            offset+size>containerSize-inset -> offset+size-containerSize+inset
+            else -> 0f
+        }
     }
 }
 @OptIn(ExperimentalFoundationApi::class)
 @Composable fun HorizontalViewport(content:@Composable ()->Unit) {
-    CompositionLocalProvider(LocalBringIntoViewSpec provides HorizontalReveal,content=content)
+    val gutter=with(LocalDensity.current) {24.dp.toPx()}
+    val spec=remember(gutter) {HorizontalReveal(gutter)}
+    CompositionLocalProvider(LocalBringIntoViewSpec provides spec,content=content)
 }
 
 @Composable fun StableLazyRow(modifier:Modifier=Modifier,state:LazyListState=rememberLazyListState(),
     contentPadding:PaddingValues=PaddingValues(0.dp),horizontalArrangement:Arrangement.Horizontal=Arrangement.Start,
     verticalAlignment:Alignment.Vertical=Alignment.Top,content:LazyListScope.()->Unit) {
+    val direction=LocalLayoutDirection.current
+    val safePadding=PaddingValues(
+        start=maxOf(24.dp,contentPadding.calculateStartPadding(direction)),
+        end=maxOf(24.dp,contentPadding.calculateEndPadding(direction)),
+        top=maxOf(18.dp,contentPadding.calculateTopPadding()),
+        bottom=maxOf(18.dp,contentPadding.calculateBottomPadding()))
     HorizontalViewport {
-        LazyRow(modifier,state=state,contentPadding=contentPadding,horizontalArrangement=horizontalArrangement,
+        LazyRow(modifier,state=state,contentPadding=safePadding,horizontalArrangement=horizontalArrangement,
             verticalAlignment=verticalAlignment,content=content)
     }
 }

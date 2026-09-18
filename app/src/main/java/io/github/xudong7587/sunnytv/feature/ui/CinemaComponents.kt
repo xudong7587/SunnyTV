@@ -128,13 +128,14 @@ import io.github.xudong7587.sunnytv.feature.Route
     val reveal=remember {BringIntoViewRequester()}
     val scope=rememberCoroutineScope()
     val axis=LocalTvFocusMotion.current
+    val homeNavigator=LocalHomeFocusNavigator.current
     Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=14.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(if(folder) library.title else "${library.title} · 最新入库",color=SunnyColors.Text,fontSize=19.sp,
                 fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
             Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.onFocusChanged {
-                if(it.isFocused) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
+                if(it.isFocused && homeNavigator==null) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
             }) {model.navigate(Route.Library(library))}
         }
         if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},id="latest:${library.key}",

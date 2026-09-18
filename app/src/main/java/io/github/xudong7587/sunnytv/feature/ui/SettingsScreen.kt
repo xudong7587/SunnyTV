@@ -239,7 +239,7 @@ import kotlinx.coroutines.*
                 }
                 "关于" -> {
                     item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
-                    item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n原创实现；本轮没有复制 Moonfin 源码或 LumiPlayer 品牌资产。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
+                    item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n针对电视遥控器操作与流畅浏览设计。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                 }
             }
         }
