@@ -35,6 +35,21 @@ class LibraryApiTest {
             assertEquals("library-A",url.queryParameter("ParentId"));assertEquals("10",url.queryParameter("Limit"))
         }
     }
+    @Test fun homeShelfReleaseAndRandomSortUseWholeLibraryScope()=runBlocking {
+        MockWebServer().use {server->
+            listOf("PremiereDate","Random").forEach {sort->
+                server.enqueue(MockResponse().setBody("{\"Items\":[],\"TotalRecordCount\":200}"))
+                source(server).library("library-A",sort=sort,ascending=false,limit=10)
+                val url=server.takeRequest().requestUrl!!
+                assertEquals("library-A",url.queryParameter("ParentId"))
+                assertEquals(sort,url.queryParameter("SortBy"))
+                assertEquals("Descending",url.queryParameter("SortOrder"))
+                assertEquals("true",url.queryParameter("Recursive"))
+                assertEquals("0",url.queryParameter("StartIndex"))
+                assertEquals("10",url.queryParameter("Limit"))
+            }
+        }
+    }
     @Test fun sortingAndFoldersAreServerSideAndPaged()=runBlocking {
         MockWebServer().use {server->
             val api=source(server)

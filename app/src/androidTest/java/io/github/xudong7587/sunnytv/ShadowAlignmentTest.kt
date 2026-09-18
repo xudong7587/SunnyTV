@@ -97,13 +97,13 @@ class ShadowAlignmentTest {
         focus("shadow-card");rule.waitForIdle()
         rule.onNodeWithTag("shadow-card").assertIsFocused()
         val after=snapshot();save("shadow-focused.png",after)
-        val near=meanBelow(after,6f,12f);val far=meanBelow(after,32f,36f)
-        assertTrue("The actual outer shadow must visibly darken white; got $near",near<.94)
+        val near=meanBelow(after,4f,8f);val far=meanBelow(after,22f,26f)
+        assertTrue("The compact shadow must visibly darken white; got $near",near<.97)
         assertTrue("Falloff must approach the original surface; near=$near far=$far",far>.99 && far-near>.06)
         File(rule.activity.getExternalFilesDir(null),"visual-dev15/pixel-metrics.txt")
             .writeText("nearShadowBrightness=$near\nfarSurfaceBrightness=$far\n")
         focus("outside");rule.waitForIdle()
-        assertTrue("No stale shadow after focus leaves",meanBelow(snapshot(),6f,12f)>.99)
+        assertTrue("No stale shadow after focus leaves",meanBelow(snapshot(),4f,8f)>.99)
     }
     @Test fun shadowSwitchAndDarkModeRemainRespected() {
         mount()

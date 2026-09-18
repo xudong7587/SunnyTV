@@ -15,13 +15,10 @@ object HomeFocusPlan {
             add(HomeFocusSection(latest(key), 1 + (if (hasNextUp) 1 else 0) + index, "more:$key", "latest:$key:"))
         }
     }
+    @Suppress("UNUSED_PARAMETER")
     fun down(sections: List<HomeFocusSection>, current: String, focusedId: String?): String? {
         // NextUp is a real region, not a zero-height phantom row and never skipped by D-pad.
         if (current == LIBRARIES && sections.any { it.key == NEXT_UP }) return NEXT_UP
-        if (current in setOf(LIBRARIES, NEXT_UP) && focusedId?.startsWith("library:") == true) {
-            val selected = latest(focusedId.removePrefix("library:"))
-            if (sections.any { it.key == selected }) return selected
-        }
         val index = sections.indexOfFirst { it.key == current }
         return if (index < 0) null else sections.getOrNull(index + 1)?.key
     }

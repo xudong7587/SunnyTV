@@ -61,6 +61,8 @@ fun actionIcon(text:String):String=when {
         "forward"->"M2 4 L11 12 L2 20 Z M13 4 L22 12 L13 20 Z"
         "frame"->"M9 3 L3 3 L3 9 M15 3 L21 3 L21 9 M21 15 L21 21 L15 21 M9 21 L3 21 L3 15"
         "close"->"M5 5 L19 19 M19 5 L5 19"
+        "exit"->"M10 3 L3 3 L3 21 L10 21 M10 12 L22 12 M17 7 L22 12 L17 17"
+        "speed"->"M3 19 C-1 3 25 3 21 19 M12 15 L17 8 M5 17 L6 17 M18 17 L19 17"
         "repeat"->"M3 10 C3 2 17 0 21 7 M21 2 L21 7 L16 7 M21 14 C21 22 7 24 3 17 M3 22 L3 17 L8 17"
         "restart"->"M20 8 C17 2 7 2 4 9 M4 4 L4 9 L9 9 M5 14 C7 21 18 22 21 14 M10 8 L17 12 L10 16 Z"
         "previous"->"M5 4 L5 20 M19 5 L8 12 L19 19 Z"

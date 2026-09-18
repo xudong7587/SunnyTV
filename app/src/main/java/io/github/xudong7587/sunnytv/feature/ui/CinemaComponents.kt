@@ -120,29 +120,59 @@ import io.github.xudong7587.sunnytv.feature.Route
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-@Composable fun LibraryLatestRow(library:MediaEntry,folder:Boolean=false) {
+@Composable fun LibraryLatestRow(library:MediaEntry,folder:Boolean=false,headingFocusRequester:FocusRequester?=null,
+    onUp:(()->Unit)?=null,onDown:(()->Unit)?=null) {
     val model=LocalAppModel.current
     LaunchedEffect(library.key,folder) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
     val entries=(if(folder) model.folderPreviews[library.key] else model.libraryLatest[library.key])
     var selected by rememberSaveable(library.key,folder) {mutableIntStateOf(0)}
+    LaunchedEffect(model.libraryLatestModes[library.key]) {if(!folder) selected=0}
     val reveal=remember {BringIntoViewRequester()}
     val scope=rememberCoroutineScope()
     val axis=LocalTvFocusMotion.current
     val homeNavigator=LocalHomeFocusNavigator.current
+    val headingFocus=headingFocusRequester ?: remember(library.key) {FocusRequester()}
+    val mediaFocus=remember(library.key) {FocusRequester()}
+    val emptyNavigation=Modifier.onPreviewKeyEvent {event->
+        if(!folder || event.type!=KeyEventType.KeyDown) false else when(event.key) {
+            Key.DirectionUp -> {headingFocus.requestFocus();true}
+            Key.DirectionDown -> if(onDown!=null) {onDown();true} else false
+            else -> false
+        }
+    }
     Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=14.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Text(if(folder) library.title else "${library.title} · 最新入库",color=SunnyColors.Text,fontSize=19.sp,
+            Text(library.title,color=SunnyColors.Text,fontSize=19.sp,
                 fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
-            Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.onFocusChanged {
+            if(!folder) {
+                val sorts=listOf("DateCreated" to "最新入库","PremiereDate" to "最新上映","Random" to "随机")
+                val index=sorts.indexOfFirst {it.first==(model.libraryLatestModes[library.key] ?: "DateCreated")}.coerceAtLeast(0)
+                Action(sorts[index].second,id="shelf-sort:${library.key}",modifier=Modifier.onFocusChanged {
+                    if(it.isFocused && homeNavigator==null) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
+                }) {model.loadLatest(library,sorts[(index+1)%sorts.size].first)}
+            }
+            Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.focusRequester(headingFocus).onPreviewKeyEvent {event->
+                if(!folder || event.type!=KeyEventType.KeyDown) false else when(event.key) {
+                    Key.DirectionUp -> if(onUp!=null) {onUp();true} else false
+                    Key.DirectionDown -> if(!entries.isNullOrEmpty()) {mediaFocus.requestFocus();true} else if(onDown!=null) {onDown();true} else false
+                    else -> false
+                }
+            }.onFocusChanged {
                 if(it.isFocused && homeNavigator==null) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
             }) {model.navigate(Route.Library(library))}
         }
-        if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},id="latest:${library.key}",
+        if(entries!=null && entries.isNotEmpty()) AccordionCards(entries,selected,{selected=it},modifier=Modifier.focusRequester(mediaFocus).onPreviewKeyEvent {event->
+            if(!folder || event.type!=KeyEventType.KeyDown) false else when(event.key) {
+                Key.DirectionUp -> {headingFocus.requestFocus();true}
+                Key.DirectionDown -> if(onDown!=null) {onDown();true} else false
+                else -> false
+            }
+        },id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})
         else if(model.errors["${if(folder) "folder-preview" else "latest"}:${library.key}"]!=null) {
-            Action("读取失败 · 重试") {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
+            Action("读取失败 · 重试",modifier=emptyNavigation) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
         } else if(entries==null) Text("正在读取…",color=SunnyColors.Secondary,fontSize=13.sp,modifier=Modifier.padding(vertical=20.dp))
-        else Action("暂无媒体 · 查看媒体库") {model.navigate(Route.Library(library))}
+        else Action("暂无媒体 · 查看媒体库",modifier=emptyNavigation) {model.navigate(Route.Library(library))}
     }
 }

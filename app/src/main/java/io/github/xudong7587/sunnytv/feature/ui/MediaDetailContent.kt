@@ -10,6 +10,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.launch
@@ -74,12 +77,34 @@ import kotlinx.coroutines.withContext
     val tracks=version?.tracks ?: item.tracks
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
+    val lowerContentFocus=remember(item.key) {FocusRequester()}
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
     val episodeLayout=model.settings.episodeLayouts[item.key] ?: "horizontal"
     val numberColumns=if(LocalCompact.current) 4 else 10
+    val children=model.children[item.key].orEmpty()
+    val similar=model.similar[item.key].orEmpty()
+    // One requester is attached to exactly one first reachable control below the action row.
+    val lowerTarget=when {
+        item.versions.isNotEmpty() -> "versions"
+        children.any {it.type=="Episode"} -> "episodes"
+        children.isNotEmpty() -> "seasons"
+        item.people.isNotEmpty() -> "people"
+        similar.isNotEmpty() -> "similar"
+        else -> ""
+    }
+    val similarFocus=remember(item.key) {FocusRequester()}
+    val peopleFocus=remember(item.key) {FocusRequester()}
+    val peopleEntryFocus=if(lowerTarget=="people") lowerContentFocus else peopleFocus
+    val similarEntryFocus=if(lowerTarget=="similar") lowerContentFocus else similarFocus
+    val childRows=if(children.isEmpty()) 0 else if(children.none {it.type=="Episode"}) 1 else 1+when(episodeLayout) {
+        "vertical" -> children.size
+        "numbers" -> (children.size+numberColumns-1)/numberColumns
+        else -> 1
+    }
+    val similarIndex=3+(if(item.versions.isNotEmpty()) 1 else 0)+childRows+(if(item.people.isNotEmpty()) 1 else 0)
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
         Box(Modifier.fillMaxSize().background(tint)) {
-            LazyColumn(state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            LazyColumn(modifier=Modifier.testTag("detail:viewport"),state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 item(key="detail-header") {
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
                         ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
@@ -96,21 +121,31 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
-                    StableLazyRow(modifier=Modifier.onPreviewKeyEvent {if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {scope.launch {list.scrollToItem(0)};false} else false}.focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=18.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    val moveIntoContent:Modifier.()->Modifier={onPreviewKeyEvent {
+                        if(it.type!=KeyEventType.KeyDown) false else when(it.key) {
+                            Key.DirectionUp -> {scope.launch {list.scrollToItem(0)};false}
+                            Key.DirectionDown -> if(lowerTarget.isNotEmpty()) {
+                                scope.launch {list.scrollToItem(3);withFrameNanos {};withFrameNanos {};runCatching {lowerContentFocus.requestFocus()}}
+                                true
+                            } else false
+                            else -> false
+                        }
+                    }}
+                    StableLazyRow(modifier=Modifier.moveIntoContent().focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=18.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
-                            item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true) {onPlay(item,false)}}
-                            if(item.positionMs>0) item {Action("从头播放",icon="restart") {onPlay(item,true)}}
-                            item {Action("≋  音频") {panel="audio"}}
-                            item {Action("▱  版本") {panel="version"}}
-                            item {Action("CC  字幕") {panel="subtitle"}}
+                            item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true,modifier=Modifier.moveIntoContent()) {onPlay(item,false)}}
+                            if(item.positionMs>0) item {Action("从头播放",icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
+                            item {Action("≋  音频",modifier=Modifier.moveIntoContent()) {panel="audio"}}
+                            item {Action("▱  版本",modifier=Modifier.moveIntoContent()) {panel="version"}}
+                            item {Action("CC  字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle"}}
                         }
-                        if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played) {panel="played"}}
+                        if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played,modifier=Modifier.moveIntoContent()) {panel="played"}}
                         if(item.type in setOf("Series","Season")) {
-                            item {Action("从头播放",id="detail-start",primary=false,autoFocus=true,icon="restart") {onPlay(item,true)}}
-                            item {Action("继续播放",id="detail-resume",primary=true,icon="play") {onPlay(item,false)}}
+                            item {Action("从头播放",id="detail-start",primary=false,autoFocus=true,icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
+                            item {Action("继续播放",id="detail-resume",primary=true,icon="play",modifier=Modifier.moveIntoContent()) {onPlay(item,false)}}
                         }
-                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season")) {model.favorite(item)}}
-                        item {Action("返回") {model.back()}}
+                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),modifier=Modifier.moveIntoContent()) {model.favorite(item)}}
+                        item {Action("返回",modifier=Modifier.moveIntoContent()) {model.back()}}
                     }
                 }
                 item {Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=23.sp,
@@ -119,8 +154,8 @@ import kotlinx.coroutines.withContext
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("播放资源", "${item.versions.size} 个版本")
                         StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(horizontal=18.dp,vertical=18.dp)) {
-                            items(item.versions,key={it.id}) {v->
-                                FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp),active=v.id==version?.id,
+                            itemsIndexed(item.versions,key={ _,v->v.id}) {index,v->
+                                FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp).then(if(lowerTarget=="versions" && index==0) Modifier.focusRequester(lowerContentFocus) else Modifier),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {
                                     Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                         Text(v.name.ifBlank {"媒体版本"},color=SunnyColors.Text,fontSize=16.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -132,15 +167,14 @@ import kotlinx.coroutines.withContext
                         }
                     }
                 }
-                val children=model.children[item.key] ?: emptyList()
                 if(children.isNotEmpty()) {
                     if(children.any {it.type=="Episode"}) {
                         item {Column(Modifier.padding(horizontal=pageSidePadding),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             SectionTitle("剧集")
-                            EpisodeLayoutButtons(item,episodeLayout)
+                            EpisodeLayoutButtons(item,episodeLayout,if(lowerTarget=="episodes") lowerContentFocus else null)
                         }}
                         when(episodeLayout) {
-                            "vertical" -> items(children,key={"episode:${it.key}"}) {entry->Box(Modifier.padding(horizontal=pageSidePadding)) {EpisodeListCard(entry)}}
+                            "vertical" -> items(children,key={entry->"episode:${entry.key}"}) {entry->Box(Modifier.padding(horizontal=pageSidePadding)) {EpisodeListCard(entry)}}
                             "numbers" -> items(children.chunked(numberColumns),key={"numbers:${it.first().key}"}) {row->
                                 Row(Modifier.padding(horizontal=pageSidePadding).fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                     row.forEach {entry->EpisodeNumber(entry,children.indexOf(entry),Modifier.weight(1f))}
@@ -151,17 +185,21 @@ import kotlinx.coroutines.withContext
                         }
                     } else item {Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("选择季","查看全部") {model.navigate(Route.Library(item))}
-                        AccordionCards(children,childSelected,{childSelected=it},id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
+                        AccordionCards(children,childSelected,{childSelected=it},if(lowerTarget=="seasons") Modifier.focusRequester(lowerContentFocus) else Modifier,id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
                     }}
                 }
                 if(item.people.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("演员表")
-                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                            items(item.people,key={"${it.id}:${it.name}:${it.role}"}) {person ->
+                        StableLazyRow(modifier=Modifier.onPreviewKeyEvent {event->
+                            if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && similar.isNotEmpty()) {
+                                scope.launch {list.scrollToItem(similarIndex);withFrameNanos {};withFrameNanos {};similarEntryFocus.requestFocus()};true
+                            } else false
+                        },horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                            itemsIndexed(item.people,key={ _,person->"${person.id}:${person.name}:${person.role}"}) {index,person ->
                                 Column(Modifier.width(104.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     val actor=MediaEntry(person.id.ifBlank {"person:${person.name}"},item.sourceId,person.name,"Person",primary=person.primary)
-                                    FocusTile("person:${actor.key}",Modifier.size(88.dp),shape=CircleShape,onClick={model.navigate(Route.Detail(actor))}) {
+                                    FocusTile("person:${actor.key}",Modifier.size(88.dp).then(if(index==0) Modifier.focusRequester(peopleEntryFocus) else Modifier),shape=CircleShape,onClick={model.navigate(Route.Detail(actor))}) {
                                         ArtworkView(actor,person.primary,Modifier.fillMaxSize(),180,fit=false,fallbackText=person.name.take(1))
                                     }
                                     Text(person.name,color=SunnyColors.Text,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(top=9.dp))
@@ -171,7 +209,11 @@ import kotlinx.coroutines.withContext
                         }
                     }
                 }
-                item {Box(Modifier.padding(horizontal=pageSidePadding)) {MediaShelf("相似推荐",model.similar[item.key] ?: emptyList(),onClick={model.navigate(Route.Detail(it))})}}
+                item {Box(Modifier.padding(horizontal=pageSidePadding).onPreviewKeyEvent {event->
+                    if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && item.people.isNotEmpty()) {
+                        scope.launch {list.scrollToItem(similarIndex-1);withFrameNanos {};withFrameNanos {};peopleEntryFocus.requestFocus()};true
+                    } else false
+                }) {MediaShelf("相似推荐",similar,firstFocusRequester=similarEntryFocus,onClick={model.navigate(Route.Detail(it))})}}
                 model.errors["detail:${item.key}"]?.let {error->item {Box(Modifier.padding(horizontal=pageSidePadding)) {EmptyState("详情暂不可用",error,"重试") {model.loadDetail(item)}}}}
                 listOf("played","favorite").forEach {operation->model.errors["$operation:${item.key}"]?.let {error->item {Text(error,color=SunnyColors.Secondary,modifier=Modifier.padding(horizontal=pageSidePadding))}}}
             }
