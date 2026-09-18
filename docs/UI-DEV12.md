@@ -13,7 +13,7 @@
 - 深色聚焦描边由 2dp 调整为 3.5dp；焦点底板不再使用上下渐变，降低视觉和合成复杂度。
 - 首页不再由最外层 hero preview handler 抢占所有上下方向键。播放按钮向下先进入快速续播；快速续播再次向下才滚动至媒体库。
 - 轮播卡在向左移动满一整个候选数量后保持焦点，下一次向左才回到播放按钮，防止刚进入轮播就意外退出。
-- Media3 五个模块统一从 1.6.1 升到 1.10.1。AndroidX 官方在 1.9.0/1.10.1 已修复多个 Mp4Extractor ArrayIndexOutOfBounds 问题。
+- Media3 五个模块统一从 1.6.1 升到 1.9.4。AndroidX 官方在 1.9.0 已修复 MP4 edit list 的 ArrayIndexOutOfBoundsException；1.9.4 保留该修复且不要求本项目升级 compileSdk 35。
 - 对仍匹配同一异常签名的 MP4，仅自动重试一次，并为 Mp4Extractor 设置 FLAG_WORKAROUND_IGNORE_EDIT_LISTS。其他格式、其他错误不进入此回退。
 
 ## 边界

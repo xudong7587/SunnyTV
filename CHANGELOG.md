@@ -4,7 +4,7 @@
 
 - 浅色主题焦点改为柔和悬浮阴影，并为横向行/网格预留阴影安全边距；深色主题取消焦点阴影、描边加粗并改成更扁平的填色。
 - 首页移除“查看详情/暂停轮播”两个冗余按钮，建立播放 → 快速续播 → 媒体库的纵向焦点路径；右侧轮播向左完整循环一轮后可再按左回到播放按钮。
-- Media3 从 1.6.1 定向升级至 1.10.1；针对 dev11 实机记录的 MP4 错误 2000（UnexpectedLoaderException → IndexOutOfBoundsException）增加一次忽略 edit list 的有界兼容重试。
+- Media3 从 1.6.1 定向升级至 1.9.4；针对 dev11 实机记录的 MP4 错误 2000（UnexpectedLoaderException → IndexOutOfBoundsException）增加一次忽略 edit list 的有界兼容重试。
 - 不改变 Emby、CloudDrive2、MediaIndex STRM 的鉴权与网络边界；真实故障 MP4 仍需电视复测。
 
 

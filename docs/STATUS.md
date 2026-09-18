@@ -2,7 +2,7 @@
 
 ## 2026-09-18 dev12 候选
 
-已针对实机反馈提交焦点阴影/描边、首页 D-pad 焦点路径和 MP4 错误 2000 的定向修复。Media3 由 1.6.1 升至 1.10.1，并仅在首帧前检测到 video/mp4 + UnexpectedLoaderException + IndexOutOfBoundsException 时启用一次忽略 edit list 的兼容重试。该重试不启用转码、不修改媒体文件、不无限重试。
+已针对实机反馈提交焦点阴影/描边、首页 D-pad 焦点路径和 MP4 错误 2000 的定向修复。Media3 由 1.6.1 升至 1.9.4，并仅在首帧前检测到 video/mp4 + UnexpectedLoaderException + IndexOutOfBoundsException 时启用一次忽略 edit list 的兼容重试。该重试不启用转码、不修改媒体文件、不无限重试。
 
 本段在 PR 创建时只代表源码已修改；CI 结果与真实电视复测需要分别记录，不能据此宣称故障 MP4 已修复。
 
