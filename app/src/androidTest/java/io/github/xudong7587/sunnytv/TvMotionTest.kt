@@ -70,7 +70,7 @@ class TvMotionTest {
         rule.onNodeWithTag("outside").assertIsFocused()
         rule.waitForIdle()
         assertEquals(110f,width("idle:fixture:0"),1f)
-        assertEquals(8f,bounds("idle:fixture:0").left.value,1f)
+        assertEquals(14f,bounds("idle:fixture:0").left.value,1f)
         key("outside",Key.DirectionDown)
         rule.onNodeWithTag("idle:fixture:0").assertIsFocused()
         assertTrue(width("idle:fixture:0")>290f)
@@ -172,7 +172,7 @@ class TvMotionTest {
         assertEquals(edge.left.value,bounds("motion-shelf:fixture:9").left.value,1f)
         for(index in 9 downTo 1) key("motion-shelf:fixture:$index",Key.DirectionLeft)
         rule.onNodeWithTag("motion-shelf:fixture:0").assertIsFocused()
-        assertEquals(8f,bounds("motion-shelf:fixture:0").left.value,1f)
+        assertEquals(14f,bounds("motion-shelf:fixture:0").left.value,1f)
     }
     @Test fun anUnfinishedWidthAnimationCanReverseWithoutLosingFocusOrMovingY() {
         shelf();focus("motion-shelf:fixture:0")
@@ -208,7 +208,7 @@ class TvMotionTest {
             val model=AppModel(activity.application,false,listOf(config))
             model.saveSettings(model.settings.copy(heroMode="latest",showNextUp=false))
             val libraries=(0..3).map {MediaEntry("lib$it","fixture","测试媒体库 $it","CollectionFolder",isFolder=true)}
-            model.feeds[config.id]=HomeFeed(libraries=libraries,latest=entries,warnings=listOf("接着看 暂时不可用","最新入库 暂时不可用"))
+            model.feeds[config.id]=HomeFeed(libraries=libraries,resume=entries.take(2),latest=entries,warnings=listOf("接着看 暂时不可用","最新入库 暂时不可用"))
             libraries.forEach {model.libraryLatest[it.key]=entries}
             activity.setContent {
                 val input=LocalInputModeManager.current
@@ -225,8 +225,15 @@ class TvMotionTest {
         rule.onNodeWithTag("home-carousel:featured").assertIsFocused()
         key("home-carousel:featured",Key.DirectionRight)
         assertEquals(hero.top.value,bounds("home:hero").top.value,.1f)
-        saveScreenshot("dev10-home-hero.png")
-        key("home-carousel:featured",Key.DirectionDown)
+        saveScreenshot("dev12-home-hero.png")
+        repeat(7) {key("home-carousel:featured",Key.DirectionLeft)}
+        rule.onNodeWithTag("home-carousel:featured").assertIsFocused()
+        key("home-carousel:featured",Key.DirectionLeft)
+        rule.onNodeWithTag("home-play").assertIsFocused()
+        key("home-play",Key.DirectionDown)
+        rule.onNodeWithTag("quick-resume:fixture:0").assertIsFocused()
+        assertEquals(hero.top.value,bounds("home:hero").top.value,.1f)
+        key("quick-resume:fixture:0",Key.DirectionDown)
         rule.onNodeWithTag("library:fixture:lib0").assertIsFocused()
         val y=bounds("library:fixture:lib0").top.value
         key("library:fixture:lib0",Key.DirectionRight)
@@ -236,7 +243,7 @@ class TvMotionTest {
         assertEquals(y,bounds("library:fixture:lib0").top.value,.1f)
         rule.onNodeWithText("接着看 暂时不可用").assertDoesNotExist()
         rule.onNodeWithText("最新入库 暂时不可用").assertDoesNotExist()
-        saveScreenshot("dev10-home-libraries.png")
+        saveScreenshot("dev12-home-libraries.png")
     }
     @Test fun seriesOffersBothPlaybackActionsBeforeFavorite() {
         var played:Pair<String,Boolean>?=null

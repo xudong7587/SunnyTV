@@ -48,8 +48,8 @@ import kotlinx.coroutines.delay
     val selectedIndex=selected.coerceIn(0,entries.lastIndex+if(onMore!=null) 1 else 0)
     val expanded=selectedIndex.coerceAtMost(entries.lastIndex)
     val safeStart=start.coerceIn(0,expanded)
-    BoxWithConstraints(modifier.fillMaxWidth().height(181.dp).clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
-        val inset=8.dp
+    BoxWithConstraints(modifier.fillMaxWidth().height(193.dp).clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
+        val inset=14.dp
         val height=165.dp
         val gap=8.dp
         val viewport=(maxWidth-inset*2).coerceAtLeast(1.dp)

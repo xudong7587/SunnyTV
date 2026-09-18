@@ -165,7 +165,7 @@ class TvInteractionTest {
             val model=AppModel(activity.application,false)
             activity.setContentForTest {
                 CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides true) {SunnyTheme {
-                    Box(Modifier.fillMaxSize()) {HomeHeroContent(entries[0],entries,0,{},emptyList(),false,{}, {_,_->})}
+                    Box(Modifier.fillMaxSize()) {HomeHeroContent(entries[0],entries,0,{},emptyList(),{}, {_,_->})}
                 }}
             }
         }

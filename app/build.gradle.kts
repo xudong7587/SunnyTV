@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.1.0-dev11"
+        versionCode = 12
+        versionName = "0.1.0-dev12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -46,11 +46,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("androidx.media3:media3-exoplayer:1.6.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.6.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.6.1")
-    implementation("androidx.media3:media3-datasource-okhttp:1.6.1")
-    implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("androidx.media3:media3-exoplayer:1.10.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.10.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
+    implementation("androidx.media3:media3-ui:1.10.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.json:json:20240303")
