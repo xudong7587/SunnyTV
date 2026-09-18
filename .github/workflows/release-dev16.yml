@@ -34,6 +34,11 @@ jobs:
           test -n "$KEY_B64" || { echo 'Signing secret missing; replacement keys are forbidden.' >&2; exit 1; }
           mkdir -p "$HOME/.android" previous build-logs
           printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          # Hash only the public certificate; never print or upload the private key.
+          certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          printf 'keystoreCertificateSha256=%s\n' "$certificate" | tee build-logs/keystore-certificate.txt
+          test "$certificate" = 'ef7722f0f4b20ca675eef8a8a4f14b0035c727152faea5d26b1f855eddafaa30' || { echo 'Existing signing Secret certificate differs from dev14; publishing is blocked.' >&2; exit 1; }
+          echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
           gh release download v0.1.0-dev14 --repo "$GITHUB_REPOSITORY" --pattern SunnyTV-v0.1.0-dev14.apk --dir previous
           printf '%s  %s\n' '6f798dae3c4b3d3dd9dbd969859a6e190d49fc642d4fa41fe346eb1325538b04' previous/SunnyTV-v0.1.0-dev14.apk | sha256sum --check -
       - name: Build and validate
