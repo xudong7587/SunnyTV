@@ -23,13 +23,13 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
     initial:Boolean=false,onClick:()->Unit) {
     val requester=remember {FocusRequester()}
     var focused by remember {mutableStateOf(false)}
-    LaunchedEffect(Unit) {if(initial) {withFrameNanos {};requester.requestFocus()}}
-    Box(modifier.size(54.dp).testTag("player:$icon").semantics {contentDescription=label}
+    LaunchedEffect(initial) {if(initial) {withFrameNanos {};requester.requestFocus()}}
+    Box(modifier.size(48.dp).testTag("player:$icon").semantics {contentDescription=label}
         .focusRequester(requester).onFocusChanged {focused=it.isFocused}
         .background(if(focused) Color.White.copy(.18f) else Color.Transparent,CircleShape)
-        .border(3.5.dp,if(focused) Color.White else Color.Transparent,CircleShape)
+        .border(1.5.dp,if(focused) Color.White else Color.Transparent,CircleShape)
         .clickable(onClick=onClick),contentAlignment=Alignment.Center) {
-        LineIcon(icon,Color.White,Modifier.size(26.dp))
+        LineIcon(icon,Color.White,Modifier.size(22.dp))
         if(focused) Text(label,color=Color.White,fontSize=12.sp,maxLines=1,
             modifier=Modifier.align(Alignment.TopCenter).offset(y=(-34).dp).wrapContentSize(unbounded=true)
                 .background(Color.Black.copy(.8f),RoundedCornerShape(8.dp)).padding(horizontal=10.dp,vertical=6.dp))

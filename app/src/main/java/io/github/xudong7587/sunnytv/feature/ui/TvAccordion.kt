@@ -49,7 +49,7 @@ import kotlinx.coroutines.delay
     val expanded=selectedIndex.coerceAtMost(entries.lastIndex)
     val safeStart=start.coerceIn(0,expanded)
     BoxWithConstraints(modifier.fillMaxWidth().height(213.dp).clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
-        val inset=24.dp
+        val inset=0.dp
         val height=165.dp
         val gap=8.dp
         val viewport=(maxWidth-inset*2).coerceAtLeast(1.dp)
@@ -110,7 +110,7 @@ import kotlinx.coroutines.delay
                         val delta=if(event.key==Key.DirectionRight) 1 else -1
                         select(index+delta);true
                     } else false
-                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),restoreFocus=false,onFocus={
+                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),focusLift=false,restoreFocus=false,onFocus={
                     if(selectedIndex!=index) select(index)
                 },onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,contentKey={it.key},transitionSpec={

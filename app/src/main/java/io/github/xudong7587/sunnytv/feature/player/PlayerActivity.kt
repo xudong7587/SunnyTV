@@ -2,6 +2,8 @@ package io.github.xudong7587.sunnytv.feature.player
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.view.Display
 import android.media.AudioManager
 import android.provider.Settings
 import android.os.Bundle
@@ -93,6 +95,9 @@ class PlayerActivity: ComponentActivity() {
     private var sleepMinutes by mutableStateOf<Int?>(null)
     private var switchingEpisode by mutableStateOf(false)
     private var nextUpDismissed by mutableStateOf(false)
+    private var playbackSpeed by mutableFloatStateOf(1f)
+    private var tvPlayback = false
+    private var returnControl by mutableStateOf("transport")
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,6 +106,13 @@ class PlayerActivity: ComponentActivity() {
         val payload=intent.getSerializableExtra("request") as? PlaybackRequest
         if(payload==null) {finish();return}
         request=payload
+        val config=resources.configuration
+        @Suppress("DEPRECATION")
+        val playbackDisplayId=windowManager.defaultDisplay.displayId
+        tvPlayback=(config.uiMode and Configuration.UI_MODE_TYPE_MASK)==Configuration.UI_MODE_TYPE_TELEVISION ||
+            config.smallestScreenWidthDp>=600 || playbackDisplayId!=Display.DEFAULT_DISPLAY
+        requestedOrientation=playerOrientation(tvPlayback)
+        playbackSpeed=savedInstanceState?.getFloat("speed",1f) ?: 1f
         // Activity recreation and resume must not count time spent in the background.
         originalLaunch = savedInstanceState == null
         lastPosition=savedInstanceState?.getLong("position",request.startMs) ?: request.startMs
@@ -116,7 +128,7 @@ class PlayerActivity: ComponentActivity() {
         setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
     }
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) createPlayer()}
-    override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
     override fun onStop() {
         player?.let {p ->
             lastPosition=p.currentPosition; app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
@@ -157,6 +169,7 @@ class PlayerActivity: ComponentActivity() {
         p.setAudioAttributes(AudioAttributes.DEFAULT,true)
         p.setHandleAudioBecomingNoisy(true)
         player=p
+        p.setPlaybackSpeed(playbackSpeed)
         selectionNotice=""
         var audioPreferenceApplied=false
         var subtitlePreferenceApplied=false
@@ -175,6 +188,11 @@ class PlayerActivity: ComponentActivity() {
                 .setSelectionFlags(if(sub.isDefault) C.SELECTION_FLAG_DEFAULT else 0).build()
         })
         p.addListener(object:Player.Listener {
+            override fun onVideoSizeChanged(videoSize:VideoSize) {
+                if(!tvPlayback && videoSize.width>0 && videoSize.height>0) {
+                    requestedOrientation=playerOrientation(false,videoSize.width,videoSize.height,videoSize.pixelWidthHeightRatio)
+                }
+            }
             override fun onTracksChanged(tracks:Tracks) {
                 availableTracks=tracks
                 fun choose(type:Int,title:String,language:String):Boolean {
@@ -418,6 +436,7 @@ class PlayerActivity: ComponentActivity() {
                         player?.release();player=null;progressJob?.cancel()
                         reporter?.close(lastPosition,rendered);reporter=null;createPlayer()
                     }
+                    PlayerControl("退出播放","exit",initial=retryUsed) {finish()}
                 }
             }
 
@@ -445,34 +464,36 @@ class PlayerActivity: ComponentActivity() {
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
-                    .padding(start=42.dp,end=42.dp,top=70.dp,bottom=30.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    .padding(start=18.dp,end=18.dp,top=44.dp,bottom=10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
                     PlayerProgress(position,duration,settings.seekStepSeconds*1000L) {seek(it)}
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                         Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
                         Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                        Row(horizontalArrangement=Arrangement.spacedBy(9.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
                             PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
-                            PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=true) {
+                            PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=returnControl=="transport") {
                                 player?.let {if(it.isPlaying) it.pause() else it.play()}
                             }
                             PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
                             context?.next?.let {next->PlayerControl("下一集","next") {switchEpisode(next)}}
                         }
-                        Spacer(Modifier.weight(1f))
-                        Row(horizontalArrangement=Arrangement.spacedBy(7.dp),verticalAlignment=Alignment.CenterVertically) {
-                            if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters") {panel="chapters"}
-                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle") {panel="subtitles"}
-                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio") {panel="audio"}
-                            if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast") {panel="cast"}
+                        Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))
+                        Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
+                            PlayerControl("倍速 ${playbackSpeed}x","speed",initial=returnControl=="speed") {returnControl="speed";panel="speed"}
+                            if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
+                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
+                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
+                            if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
                                 resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}
                             }
-                            PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep") {panel="sleep"}
-                            PlayerControl("播放信息","info") {panel="info"}
+                            PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep",initial=returnControl=="sleep") {returnControl="sleep";panel="sleep"}
+                            PlayerControl("播放信息","info",initial=returnControl=="info") {returnControl="info";panel="info"}
+                            PlayerControl("退出播放","exit") {finish()}
                         }
                     }
                 }
@@ -503,7 +524,19 @@ class PlayerActivity: ComponentActivity() {
             "chapters" -> ChapterPanel()
             "cast" -> CastPanel()
             "sleep" -> SleepPanel()
+            "speed" -> SpeedPanel()
             "info" -> InfoPanel()
+        }
+    }
+    @Composable private fun SpeedPanel() {
+        PlayerSheet("播放倍速",{panel=""}) {
+            listOf(1f,1.25f,1.5f,2f).forEach {speed->
+                PlayerOption(if(speed==1f) "1x" else if(speed==2f) "2x" else "${speed}x",selected=playbackSpeed==speed) {
+                    playbackSpeed=speed
+                    player?.setPlaybackSpeed(speed)
+                    panel=""
+                }
+            }
         }
     }
     @Composable private fun TrackPanel() {

@@ -49,6 +49,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     val loading = mutableStateMapOf<String, Boolean>()
     val libraryResume = mutableStateMapOf<String, List<MediaEntry>>()
     val libraryLatest = mutableStateMapOf<String, List<MediaEntry>>()
+    val libraryLatestModes = mutableStateMapOf<String, String>()
     var heroCandidates by mutableStateOf<List<MediaEntry>>(emptyList());private set
     private val artworkFeedSlots=Semaphore(3)
     val folderPages = mutableStateMapOf<String, MediaPage>()
@@ -128,10 +129,20 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         }
     }
 
-    fun loadLatest(item:MediaEntry) {
-        if(libraryLatest.containsKey(item.key)) return
-        launchLoad("latest:${item.key}") {
-            val entries=artworkFeedSlots.withPermit {app.emby(source(item.sourceId)).latest(item.id,10)}
+    fun loadLatest(item:MediaEntry, sort:String=libraryLatestModes[item.key] ?: "DateCreated") {
+        require(sort in listOf("DateCreated","PremiereDate","Random"))
+        val changed=(libraryLatestModes[item.key] ?: "DateCreated")!=sort
+        libraryLatestModes[item.key]=sort
+        if(changed) libraryLatest.remove(item.key)
+        if(!changed && libraryLatest.containsKey(item.key)) return
+        launchLoad("latest:${item.key}",replace=changed) {
+            val entries=artworkFeedSlots.withPermit {
+                val source=app.emby(source(item.sourceId))
+                if(sort=="DateCreated") source.latest(item.id,10)
+                else source.library(item.id,sort=sort,ascending=false,limit=10,
+                    mixed=item.collectionType.lowercase() in setOf("mixed","homevideos")).items
+            }
+            if(libraryLatestModes[item.key]!=sort) return@launchLoad
             entries.forEach {mediaLibraries[it.key]=item.key};libraryLatest[item.key]=entries
         }
     }
@@ -385,7 +396,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     private fun clearMediaState() {
         feeds.clear(); errors.clear(); pages.clear(); libraryResume.clear()
         details.clear(); children.clear(); folders.clear(); librarySort.clear(); focusMemory.clear()
-        libraryLatest.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
+        libraryLatest.clear(); libraryLatestModes.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
         selectedVersion.clear(); selectedAudio.clear(); selectedSubtitle.clear(); selectedSubtitleTrack.clear()
         heroCandidates=emptyList()
     }

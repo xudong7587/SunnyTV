@@ -13,6 +13,7 @@ import io.github.xudong7587.sunnytv.BuildConfig
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -108,6 +109,10 @@ import kotlinx.coroutines.*
     val compact=LocalCompact.current
     val context=LocalContext.current
     val motion=LocalMotion.current
+    val settingsList=rememberLazyListState()
+    val accentFocus=remember {List(Presentation.accents.size) {FocusRequester()}}
+    val heroFocus=remember {FocusRequester()}
+    val fontChoiceFocus=remember {FocusRequester()}
     var directUrl by remember {mutableStateOf("")}
     var resetConfirm by remember {mutableStateOf(false)}
     var category by rememberSaveable {mutableStateOf("媒体来源")}
@@ -128,7 +133,7 @@ import kotlinx.coroutines.*
         }
     }
     SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
-        LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
+        LazyColumn(Modifier.fillMaxSize().testTag("settings:viewport"),state=settingsList,verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
             when(category) {
                 "媒体来源" -> {
@@ -163,7 +168,19 @@ import kotlinx.coroutines.*
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             pairs.forEachIndexed { col, pair ->
                                 val index=row*columns+col
-                                FocusTile("accent:$index",Modifier.weight(1f),active=model.settings.accentIndex==index,
+                                FocusTile("accent:$index",Modifier.weight(1f).focusRequester(accentFocus[index]).onPreviewKeyEvent {event->
+                                    if(event.type==KeyEventType.KeyDown && (event.key==Key.DirectionDown || (event.key==Key.DirectionUp && index>=columns))) {
+                                        val target=if(event.key==Key.DirectionDown) {
+                                            if(index/columns<Presentation.accents.lastIndex/columns) (index+columns).coerceAtMost(Presentation.accents.lastIndex) else Presentation.accents.size
+                                        } else index-columns
+                                        coroutine.launch {
+                                            val rowCount=(Presentation.accents.size+columns-1)/columns
+                                            settingsList.scrollToItem(4+if(target<Presentation.accents.size) target/columns else rowCount)
+                                            withFrameNanos {};withFrameNanos {}
+                                            (accentFocus.getOrNull(target) ?: heroFocus).requestFocus()
+                                        };true
+                                    } else false
+                                },active=model.settings.accentIndex==index,
                                     onClick={model.saveSettings(model.settings.copy(accentIndex=index))}) {
                                     Column(Modifier.padding(9.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                         Row { Box(Modifier.weight(1f).height(22.dp).background(androidx.compose.ui.graphics.Color(pair.second)))
@@ -174,7 +191,7 @@ import kotlinx.coroutines.*
                             }
                         }
                     } }
-                    item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"}) {chooser="hero"}}
+                    item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"},Modifier.focusRequester(heroFocus)) {chooser="hero"}}
                     item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
                     item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup(),verticalArrangement=Arrangement.spacedBy(13.dp)) {
                     ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
@@ -204,7 +221,15 @@ import kotlinx.coroutines.*
                     item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
                     item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
                     item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
-                    item {Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    item(key="font-size") {Column(Modifier.onPreviewKeyEvent {event->
+                        if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
+                            val index=settingsList.layoutInfo.visibleItemsInfo.firstOrNull {it.key=="font-size"}?.index
+                            if(index!=null) {
+                                coroutine.launch {settingsList.scrollToItem(index+1);withFrameNanos {};withFrameNanos {};fontChoiceFocus.requestFocus()}
+                                true
+                            } else false
+                        } else false
+                    },verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         SectionTitle("字体大小",Presentation.uiScaleNames[model.settings.fontScaleLevel.coerceIn(0,4)])
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                             Presentation.uiScaleNames.forEachIndexed {index,label->
@@ -215,7 +240,7 @@ import kotlinx.coroutines.*
                             }
                         }
                     }}
-                    item {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"}) {chooser="font"}}
+                    item(key="font-choice") {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"},Modifier.focusRequester(fontChoiceFocus)) {chooser="font"}}
                     item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
                     item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
                     item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
@@ -285,11 +310,15 @@ import kotlinx.coroutines.*
 }
 
 @Composable private fun SettingsLayout(navigation:@Composable ()->Unit,content:@Composable ()->Unit) {
+    val base=LocalSunnyPalette.current
+    val light=LocalAppModel.current.settings.darkTheme.not()
+    CompositionLocalProvider(LocalSunnyPalette provides if(light) base.copy(surface=base.ink,raised=base.ink) else base,LocalSettingsTiles provides true) {
     val modifier=Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)
     if(LocalCompact.current) Column(modifier,verticalArrangement=Arrangement.spacedBy(14.dp)) {
         navigation();Box(Modifier.weight(1f)) {content()}
     } else Row(modifier,horizontalArrangement=Arrangement.spacedBy(28.dp)) {
         Box(Modifier.width(165.dp)) {navigation()};Box(Modifier.weight(1f)) {content()}
+    }
     }
 }
 
@@ -349,8 +378,8 @@ import kotlinx.coroutines.*
     }
 }
 
-@Composable private fun SettingChoiceRow(title:String,value:String,onClick:()->Unit) {
-    FocusTile("setting:$title",Modifier.fillMaxWidth(),onClick=onClick) {
+@Composable private fun SettingChoiceRow(title:String,value:String,modifier:Modifier=Modifier,onClick:()->Unit) {
+    FocusTile("setting:$title",Modifier.fillMaxWidth().then(modifier),onClick=onClick) {
         Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
             Text(title,color=SunnyColors.Text,fontSize=16.sp,modifier=Modifier.weight(1f))
             Text(value,color=SunnyColors.Secondary,fontSize=13.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -41,12 +42,14 @@ import coil.request.ImageRequest
 import io.github.xudong7587.sunnytv.core.model.*
 import kotlinx.coroutines.delay
 
+internal val LocalSettingsTiles=staticCompositionLocalOf {false}
+
 /** Soft TV focus elevation for the light theme. Parent rows reserve a gutter so it is not clipped. */
 fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(shape,enabled)
 
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
-    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
+    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,focusLift:Boolean=true,onFocus:()->Unit={}, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
     val pageActive=LocalPageActive.current
@@ -68,20 +71,26 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     val selected=focused || active
     val base=LocalSunnyPalette.current
     // Read transition values only during draw; media and text stay out of per-frame recomposition.
-    val fill=animateColorAsState(if(selected) base.focusBackground else base.raised.copy(.72f),motion.fade(240),label="focus-fill")
-    val bottom=animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(.70f),motion.fade(240),label="focus-gradient")
+    val settingsTile=LocalSettingsTiles.current && !model.settings.darkTheme
+    val fill=animateColorAsState(if(selected) base.focusBackground else base.raised.copy(if(settingsTile) 1f else .72f),motion.fade(240),label="focus-fill")
+    val bottom=animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(if(settingsTile) 1f else .70f),motion.fade(240),label="focus-gradient")
     val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
     val dark=model.settings.darkTheme
     val outline=if(dark) base.focusContent else base.focusBackground
-    val outlineWidth=if(dark) 5.dp else 1.5.dp
-    // Dark mode stays flat and uses a stronger outline. Light mode gets one soft elevation layer.
+    val outlineWidth=if(dark) 1.67.dp else .5.dp
+    // In light mode, elevation and a border compete for the same visual job. Use one at a time.
     val showShadow=model.settings.shadowsEnabled && !dark && focused
+    val showOutline=focused && focusOutline && (dark || !model.settings.shadowsEnabled)
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
-            delay(45); if(homeNavigator?.moving!=true) runCatching { requester.requestFocus() }
+            delay(45)
+            if(homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) ||
+                (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
+                runCatching {requester.requestFocus()}
+            }
         }
     }
-    Box(modifier.testTag(id).focusElevation(shape,showShadow)
+    Box(modifier.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
             if(it.isFocused && pageActive) { model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
@@ -95,7 +104,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
                 if(dark) drawOutline(edge,fill.value)
                 else drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
                 drawContent()
-                if(focused && focusOutline) translate(stroke/2f,stroke/2f) {
+                if(showOutline) translate(stroke/2f,stroke/2f) {
                     drawOutline(focusEdge,outline,style=Stroke(stroke))
                 }
             }
@@ -185,20 +194,21 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     }
 }
 
-@Composable fun LibraryCard(item:MediaEntry,onClick:()->Unit) {
+@Composable fun LibraryCard(item:MediaEntry,modifier:Modifier=Modifier,onClick:()->Unit) {
     Column(Modifier.width(240.dp)) {
-        FocusTile("library:${item.key}",Modifier.fillMaxWidth().aspectRatio(16f/9),onClick=onClick) {
-            // Keep the server's native library picture intact, including lettering in the art.
-            ArtworkView(item,MediaLogic.libraryArtwork(item),Modifier.fillMaxSize(),640,fit=true)
+        FocusTile("library:${item.key}",modifier.fillMaxWidth().aspectRatio(16f/9),onClick=onClick) {
+            // Reuse the native library picture; crop to fill the banner at the user's request.
+            ArtworkView(item,MediaLogic.libraryArtwork(item),Modifier.fillMaxSize(),640,fit=false)
         }
         Text(item.title,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.padding(top=8.dp),maxLines=1)
     }
 }
 
-@Composable fun MediaCard(item:MediaEntry,wide:Boolean=false,autoFocus:Boolean=false,onFocus:()->Unit={},onClick:()->Unit,focusId:String="media:${item.key}") {
+@Composable fun MediaCard(item:MediaEntry,wide:Boolean=false,autoFocus:Boolean=false,onFocus:()->Unit={},onClick:()->Unit,
+    focusId:String="media:${item.key}",modifier:Modifier=Modifier) {
     val width=if(wide) 240.dp else 132.dp
     Column(Modifier.width(width)) {
-        FocusTile(id=focusId,modifier=Modifier.fillMaxWidth().aspectRatio(if(wide) 16f/9 else 2f/3),autoFocus=autoFocus,onFocus=onFocus,onClick=onClick) {
+        FocusTile(id=focusId,modifier=Modifier.fillMaxWidth().aspectRatio(if(wide) 16f/9 else 2f/3).then(modifier),autoFocus=autoFocus,onFocus=onFocus,onClick=onClick) {
             ArtworkView(item,if(wide) MediaLogic.wideArtwork(item) else item.primary,Modifier.fillMaxSize(),if(wide) 640 else 400)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.1f),Color.Black.copy(.5f)))))
             if(item.rating>0) Text("★ %.1f".format(item.rating),color=SunnyColors.Text,fontSize=10.sp,
@@ -215,13 +225,17 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     }
 }
 
-@Composable fun MediaShelf(title:String,list:List<MediaEntry>,wide:Boolean=false,onFocus:(MediaEntry)->Unit={},onClick:(MediaEntry)->Unit) {
+@Composable fun MediaShelf(title:String,list:List<MediaEntry>,wide:Boolean=false,onFocus:(MediaEntry)->Unit={},
+    firstFocusRequester:FocusRequester?=null,onClick:(MediaEntry)->Unit) {
     if(list.isEmpty()) return
     Column {
         SectionTitle(title)
         StableLazyRow(horizontalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(horizontal=22.dp,vertical=22.dp),
             modifier=Modifier.fillMaxWidth().focusGroup()) {
-            items(list,key={ it.key }) { entry -> MediaCard(entry,wide,onFocus={onFocus(entry)},onClick={onClick(entry)},focusId="shelf:$title:${entry.key}") }
+            itemsIndexed(list,key={ _,entry->entry.key }) { index,entry ->
+                MediaCard(entry,wide,onFocus={onFocus(entry)},onClick={onClick(entry)},focusId="shelf:$title:${entry.key}",
+                    modifier=if(index==0 && firstFocusRequester!=null) Modifier.focusRequester(firstFocusRequester) else Modifier)
+            }
         }
     }
 }

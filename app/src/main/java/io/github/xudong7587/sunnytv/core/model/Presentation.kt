@@ -15,7 +15,7 @@ object Presentation {
         Triple("青瓷绿",0xFFBFD8C9,0xFF29483D), Triple("雾青",0xFFADCBC5,0xFF284744),
         Triple("云水蓝",0xFFC6D5E3,0xFF30495F), Triple("淡藤紫",0xFFD7CAE0,0xFF4C3C5B),
         Triple("胭脂粉",0xFFE0BEC1,0xFF603B40), Triple("暖褐",0xFFC9B59F,0xFF4F4033),
-        Triple("深黛蓝",0xFF435A70,0xFFF2EEE4), Triple("墨绿色",0xFF61776A,0xFFF3EFE2))
+        Triple("深黛蓝",0xFFF2EEE4,0xFF435A70), Triple("墨绿色",0xFF61776A,0xFFF3EFE2))
     fun next(index:Int, delta:Int, count:Int, loop:Boolean):Int = if(count<=0) 0
         else if(loop) ((index+delta)%count+count)%count else (index+delta).coerceIn(0,count-1)
     fun canRotate(focused:Boolean,paused:Boolean,resumed:Boolean,visible:Boolean,busy:Boolean,dialog:Boolean,reduceMotion:Boolean,count:Int):Boolean =

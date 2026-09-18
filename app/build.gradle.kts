@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.1.0-dev14"
+        versionCode = 16
+        versionName = "0.1.0-dev16"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

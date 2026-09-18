@@ -157,6 +157,153 @@ class TvInteractionTest {
         rule.onNodeWithTag("detail-played").assertDoesNotExist()
         rule.onNodeWithTag("detail-favorite").assertExists()
     }
+    @Test fun detailPlaybackActionsMoveDownIntoEpisodeControls() {
+        val series=MediaEntry("series-down","fixture","可继续播放的剧集","Series")
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.children[series.key]=listOf(MediaEntry("episode-1","fixture","第一集","Episode",seriesId=series.id,episode=1))
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    MediaDetailContent(series) {_,_->}
+                }}
+            }
+        }
+        focus("detail-resume")
+        rule.onNodeWithTag("detail-resume").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.waitForIdle()
+        rule.onNodeWithTag("episode-layout:horizontal").assertIsFocused()
+    }
+    @Test fun offscreenAccentRowsMoveDownThroughPartialRowAndIntoNextSetting() {
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides true) {SunnyTheme {
+                    Box(Modifier.width(560.dp).height(300.dp)) {SettingsScreen()}
+                }}
+            }
+        }
+        rule.onNodeWithTag("settings:首页与外观").performClick()
+        rule.onNodeWithTag("settings:viewport").performScrollToIndex(4)
+        focus("accent:2")
+        listOf("accent:5","accent:8","accent:9","setting:首页轮播").fold("accent:2") {current,next->
+            rule.onNodeWithTag(current).performKeyInput {pressKey(Key.DirectionDown)}
+            rule.waitForIdle()
+            rule.onNodeWithTag(next).assertIsFocused()
+            next
+        }
+    }
+    @Test fun posterGridTraversesOffscreenRowsPartialLastRowAndPagination() {
+        val library=MediaEntry("poster-root","fixture","综艺","CollectionFolder",isFolder=true)
+        val posters=(0..27).map {MediaEntry("poster-$it","fixture","节目 $it","Series")}
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.pages[library.key]=MediaPage(posters,40)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides false) {SunnyTheme {
+                    Box(Modifier.width(560.dp).height(280.dp)) {LibraryScreen(library) {_,_->}}
+                }}
+            }
+        }
+        rule.onNodeWithTag("library:grid").performScrollToIndex(1)
+        focus("library-sort")
+        rule.onNodeWithTag("library-sort").performKeyInput {pressKey(Key.DirectionDown)}
+        (0..27 step 3).forEach {index->
+            rule.onNodeWithTag("grid:fixture:poster-$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
+        }
+        rule.onNodeWithTag("library-more").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        (27 downTo 0 step 3).forEach {index->
+            rule.onNodeWithTag("grid:fixture:poster-$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        }
+        rule.onNodeWithTag("library-sort").assertIsFocused()
+    }
+    @Test fun shelfSortCyclesIndependentlyWithoutMovingItsButton() {
+        val libraries=(0..1).map {MediaEntry("sort-$it","fixture","媒体库 $it","CollectionFolder",isFolder=true)}
+        lateinit var model:AppModel
+        rule.activityRule.scenario.onActivity {activity->
+            model=AppModel(activity.application,false)
+            libraries.forEach {model.libraryLatest[it.key]=entries}
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    Column {libraries.forEach {LibraryLatestRow(it)}}
+                }}
+            }
+        }
+        val tag="shelf-sort:${libraries.first().key}"
+        focus(tag)
+        val bounds=rule.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+        listOf("最新上映","随机","最新入库").forEach {label->
+            rule.onNodeWithTag(tag).performClick()
+            rule.onNodeWithTag(tag).assertIsFocused().assertTextContains(label)
+            assertEquals(bounds.top,rule.onNodeWithTag(tag).getUnclippedBoundsInRoot().top)
+        }
+        rule.onNodeWithTag("shelf-sort:${libraries.last().key}").assertContentDescriptionEquals("最新入库")
+    }
+    @Test fun folderAccordionMovesBetweenToolsHeadingsAndOffscreenRows() {
+        val library=MediaEntry("folders-root","fixture","文件夹媒体库","CollectionFolder",isFolder=true)
+        val folders=(0..2).map {MediaEntry("folder-$it","fixture","文件夹 $it","Folder",isFolder=true)}
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.pages[library.key]=MediaPage(emptyList(),0)
+            model.folderPages[library.key]=MediaPage(folders,folders.size)
+            folders.forEachIndexed {index,folder->model.folderPreviews[folder.key]=if(index==1) emptyList() else entries}
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides false) {SunnyTheme {
+                    LibraryScreen(library) {_,_->}
+                }}
+            }
+        }
+        rule.onNodeWithTag("library:grid").performScrollToIndex(1)
+        rule.onNodeWithTag("library-folder-mode").performClick()
+        focus("library-sort")
+        rule.onNodeWithTag("library-sort").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("more:fixture:folder-0").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("latest:fixture:folder-0:fixture:0").assertIsFocused().performKeyInput {pressKey(Key.DirectionRight)}
+        rule.onNodeWithTag("latest:fixture:folder-0:fixture:1").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        rule.onNodeWithTag("more:fixture:folder-0").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("latest:fixture:folder-0:fixture:0").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("more:fixture:folder-1").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
+        rule.onNodeWithTag("more:fixture:folder-2").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        rule.onNodeWithTag("more:fixture:folder-1").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        rule.onNodeWithTag("more:fixture:folder-0").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        rule.onNodeWithTag("library-sort").assertIsFocused()
+    }
+    @Test fun allFontSizeButtonsMoveDownToOffscreenFontSetting() {
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides true) {SunnyTheme {
+                    Box(Modifier.width(560.dp).height(300.dp)) {SettingsScreen()}
+                }}
+            }
+        }
+        rule.onNodeWithTag("settings:首页与外观").performClick()
+        repeat(5) {index->
+            rule.onNodeWithTag("settings:viewport").performScrollToNode(hasTestTag("font-size:$index"))
+            focus("font-size:$index")
+            rule.onNodeWithTag("font-size:$index").performKeyInput {pressKey(Key.DirectionDown)}
+            rule.waitForIdle()
+            rule.onNodeWithTag("setting:字体").assertIsFocused()
+        }
+    }
+    @Test fun actorsMoveDownIntoOffscreenRecommendationsAndBackUp() {
+        val movie=MediaEntry("cast-down","fixture","影片","Movie",people=listOf(MediaPerson("actor","演员","主演",null)))
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.similar[movie.key]=entries
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {
+                    Box(Modifier.width(900.dp).height(240.dp)) {MediaDetailContent(movie) {_,_->}}
+                }}
+            }
+        }
+        rule.onNodeWithTag("detail:viewport").performScrollToIndex(3)
+        focus("person:fixture:actor")
+        rule.onNodeWithTag("person:fixture:actor").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.waitForIdle()
+        rule.onNodeWithTag("shelf:相似推荐:fixture:0").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        rule.waitForIdle()
+        rule.onNodeWithTag("person:fixture:actor").assertIsFocused()
+    }
     @Test fun portraitHomeAndSetupRemainWithinViewport() {
         rule.activityRule.scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -181,6 +328,8 @@ class TvInteractionTest {
                 }}
             }
         }
+        // Dialog placement/IME transitions use Android's clock after the portrait activity rotates.
+        rule.waitUntil(5_000) {rule.onNodeWithText("连接你的媒体库").isDisplayed()}
         rule.onNodeWithText("连接你的媒体库").assertIsDisplayed()
         rule.onNodeWithTag("source:save").assertExists()
     }

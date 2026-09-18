@@ -80,9 +80,10 @@ class HomeFocusNavigator(private val list: LazyListState, private val scope: Cor
         val spec = sections.firstOrNull { it.key == section } ?: return false
         val id = focusedId
         val down = event.key == Key.DirectionDown
-        if (down && id == spec.headingId && candidate(section, null, true) != null) {
+        val heading = id == spec.headingId || id?.startsWith("shelf-sort:") == true
+        if (down && heading && candidate(section, null, true) != null) {
             move(section, section, mediaOnly = true)
-        } else if (!down && spec.headingId != null && id != spec.headingId) {
+        } else if (!down && spec.headingId != null && !heading) {
             move(section, section, exact = spec.headingId)
         } else if (down) {
             val destination = HomeFocusPlan.down(sections, section,

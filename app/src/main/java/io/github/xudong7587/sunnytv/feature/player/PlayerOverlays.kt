@@ -59,7 +59,7 @@ import io.github.xudong7587.sunnytv.feature.ui.*
 
 @Composable internal fun PlayerSheet(title:String,onClose:()->Unit,content:@Composable ColumnScope.()->Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(.76f)),contentAlignment=Alignment.Center) {
-        Column(Modifier.widthIn(min=480.dp,max=680.dp).heightIn(max=620.dp)
+        Column(Modifier.padding(16.dp).widthIn(max=680.dp).fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState())
             .background(Color(0xF21A1B1E),RoundedCornerShape(22.dp))
             .border(1.dp,Color.White.copy(.14f),RoundedCornerShape(22.dp)).padding(26.dp),
             verticalArrangement=Arrangement.spacedBy(14.dp)) {

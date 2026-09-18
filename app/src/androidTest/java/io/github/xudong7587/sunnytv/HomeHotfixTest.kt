@@ -78,19 +78,19 @@ class HomeHotfixTest {
         key("more:fixture:lib0",Key.DirectionUp)
         awaitFocused("library:fixture:lib0")
     }
-    @Test fun selectedThirdLibraryDoesNotJumpIntoTheFirstLibrary() {
+    @Test fun selectedThirdLibraryContinuesInPageOrderAndReturnsToSelectedLibrary() {
         mount()
         key("library:fixture:lib0",Key.DirectionRight)
         awaitFocused("library:fixture:lib1")
         key("library:fixture:lib1",Key.DirectionRight)
         awaitFocused("library:fixture:lib2")
         key("library:fixture:lib2",Key.DirectionDown)
-        awaitFocused("more:fixture:lib2")
-        key("more:fixture:lib2",Key.DirectionDown)
-        awaitFocused("latest:fixture:lib2:fixture:0")
-        key("latest:fixture:lib2:fixture:0",Key.DirectionUp)
-        awaitFocused("more:fixture:lib2")
-        key("more:fixture:lib2",Key.DirectionUp)
+        awaitFocused("more:fixture:lib0")
+        key("more:fixture:lib0",Key.DirectionDown)
+        awaitFocused("latest:fixture:lib0:fixture:0")
+        key("latest:fixture:lib0:fixture:0",Key.DirectionUp)
+        awaitFocused("more:fixture:lib0")
+        key("more:fixture:lib0",Key.DirectionUp)
         awaitFocused("library:fixture:lib2")
     }
     @Test fun nextUpIsReachableAndEmptyLatestDoesNotTrapDown() {
