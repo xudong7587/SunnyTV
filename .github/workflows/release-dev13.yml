@@ -1,0 +1,84 @@
+name: Publish SunnyTV dev13 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-dev13.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Optional persistent debug signing identity
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -n "$KEY_B64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          fi
+      - name: Verify and build dev13
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          python3 scripts/check-project.py
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Package release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" dist/SunnyTV-v0.1.0-dev13.apk
+          (cd dist && sha256sum SunnyTV-v0.1.0-dev13.apk > SHA256SUMS.txt)
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG='v0.1.0-dev13'
+          TARGET='4d9db28b80e839d6daef66abef1e243270a9c2cb'
+          cat > release-notes.md <<'EOF'
+          SunnyTV 0.1.0-dev13 开发测试版
+
+          本版主要更新：
+          - 浅色模式增强柔和悬浮阴影并增加聚焦框；深色模式聚焦框加粗。
+          - 媒体库和详情页取消左上角返回按钮；剧集“从头播放 / 继续播放”视觉区分。
+          - 字体仅保留“系统默认 / 用户自定义上传”，APK 不内嵌第三方字体文件。
+          - 播放器按 Moonfin 的信息层级重做：媒体 Logo、进度、上一集/后退/播放/前进/下一集、章节、字幕、音轨、演职员、画面、睡眠、播放信息；不提供码率按钮。
+          - Loading 改为 SunnyTV Logo + LOADING 动效。
+          - 支持根据 Emby 章节 MarkerType / 常用章节名显示“跳过片头 / 跳过片尾”提示，并增加下一集提示。
+          - dev12 的纵向 4K MP4 播放问题修复继续保留。
+
+          注意：这是 Android TV 开发测试版 APK。真实电视上的焦点、片头片尾插件兼容和播放器布局仍建议继续真机验证。
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/SunnyTV-v0.1.0-dev13.apk dist/SHA256SUMS.txt --clobber
+            gh release edit "$TAG" --title 'SunnyTV v0.1.0-dev13' --notes-file release-notes.md --prerelease
+          else
+            gh release create "$TAG" dist/SunnyTV-v0.1.0-dev13.apk dist/SHA256SUMS.txt \
+              --target "$TARGET" --title 'SunnyTV v0.1.0-dev13' --notes-file release-notes.md --prerelease
+          fi
