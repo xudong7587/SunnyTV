@@ -242,7 +242,7 @@ jobs:
           set -euo pipefail
           mkdir -p .ci-logs
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain --stacktrace testDebugUnitTest lintDebug assembleDebug 2>&1 | tee .ci-logs/android-build.log
+          ./gradlew --no-daemon --console=plain --stacktrace testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee .ci-logs/android-build.log
       - name: Package only a successfully built test APK
         if: success()
         run: |
