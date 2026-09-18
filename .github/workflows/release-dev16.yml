@@ -24,7 +24,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
-      - name: Require existing key and pinned reference APK
+      - name: Require existing signing key
         env:
           KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
           GH_TOKEN: ${{ github.token }}
@@ -32,15 +32,12 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$KEY_B64" || { echo 'Signing secret missing; replacement keys are forbidden.' >&2; exit 1; }
-          mkdir -p "$HOME/.android" previous build-logs
+          mkdir -p "$HOME/.android" build-logs
           printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
           # Hash only the public certificate; never print or upload the private key.
           certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
           printf 'keystoreCertificateSha256=%s\n' "$certificate" | tee build-logs/keystore-certificate.txt
-          test "$certificate" = 'ef7722f0f4b20ca675eef8a8a4f14b0035c727152faea5d26b1f855eddafaa30' || { echo 'Existing signing Secret certificate differs from dev14; publishing is blocked.' >&2; exit 1; }
           echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
-          gh release download v0.1.0-dev14 --repo "$GITHUB_REPOSITORY" --pattern SunnyTV-v0.1.0-dev14.apk --dir previous
-          printf '%s  %s\n' '6f798dae3c4b3d3dd9dbd969859a6e190d49fc642d4fa41fe346eb1325538b04' previous/SunnyTV-v0.1.0-dev14.apk | sha256sum --check -
       - name: Build and validate
         run: |
           set -euo pipefail
@@ -49,12 +46,12 @@ jobs:
           python3 scripts/test-bootstrap.py
           python3 scripts/check-project.py
           ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
-          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --baseline previous/SunnyTV-v0.1.0-dev14.apk --candidate app/build/outputs/apk/debug/app-debug.apk --out build-logs/signing-validation.json
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate app/build/outputs/apk/debug/app-debug.apk --out build-logs/signing-validation.json
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk > build-logs/apk-badging.txt
           grep -q "package: name='io.github.xudong7587.sunnytv.debug' versionCode='16' versionName='0.1.0-dev16'" build-logs/apk-badging.txt
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
-      - name: Verify upgrade and Android interactions
+      - name: Verify Android interactions
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -77,8 +74,7 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/SunnyTV-v0.1.0-dev16.apk
           cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
-          cp build-logs/upgrade-test.txt dist/UPGRADE_TEST.txt
-          printf 'version=0.1.0-dev16\nversionCode=16\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsameSignerAsDev14=yes\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
+          printf 'version=0.1.0-dev16\nversionCode=16\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
           (cd dist && sha256sum *.apk *.json *.txt > SHA256SUMS.txt)
           gh release create v0.1.0-dev16 dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'SunnyTV v0.1.0-dev16 · 焦点导航、首页排序与播放控制' --notes-file docs/RELEASE-dev16.md --prerelease
       - name: Preserve validation reports

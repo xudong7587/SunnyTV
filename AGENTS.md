@@ -30,6 +30,6 @@ Network policies live in core/network; metadata/URLs in source adapters; UI cann
 
 优先在当前工程增量开发；GitHub 初始化器只用于新仓库，不能用内嵌老源码覆盖现有 app。每次改核心时跑纯 Kotlin 契约测试（dev2 为114项）和相关 HTTP/Android 测试；缺少工具链明确记录。工作流打包不允许包含图片评审素材、签名密钥或真实服务凭据。任何自动提交只作用于用户明确指定的 SunnyTV，不修改 MediaIndex。已具备标准 Wrapper 后保留它及校验值。
 
-## Signing baseline from dev15 onward
+## Signing policy from dev16 onward
 
-The user explicitly chose the published dev14 signing identity as the permanent upgrade baseline. Read docs/SIGNING.md. Never generate a replacement key as a fallback. Publishing an APK requires scripts/verify-release-signer.py to pass against the pinned dev14 APK; a missing secret or certificate mismatch must fail the release. Keep the current application ID and never replace an existing release tag or asset silently.
+The user explicitly removed the dev14 certificate restriction on 2026-09-18. Read docs/SIGNING.md. Use the existing repository signing Secret; never generate a replacement key as a fallback. Publishing requires a valid APK signature matching the public certificate of that existing key. No dev14 APK/certificate gate applies. Keep the current application ID and never replace an existing release tag or asset silently.
