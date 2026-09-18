@@ -106,7 +106,7 @@ import kotlinx.coroutines.delay
         lifecycle.addObserver(observer);onDispose {lifecycle.removeObserver(observer)}
     }
     val visible by remember {derivedStateOf {list.firstVisibleItemIndex==0 && list.firstVisibleItemScrollOffset==0}}
-    LaunchedEffect(heroFocused,paused,resumed,visible,model.busy,model.message,motion.enabled,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
+    LaunchedEffect(heroFocused,resumed,visible,model.busy,model.message,motion.enabled,candidates.map {it.key},selected,model.settings.heroIntervalSeconds) {
         if(Presentation.canRotate(heroFocused,false,resumed,visible,model.busy,model.message.isNotEmpty(),!motion.enabled,candidates.size)) {
             delay(model.settings.heroIntervalSeconds*1000L);selected=Presentation.next(selected,1,candidates.size,true)
         }

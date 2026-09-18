@@ -157,17 +157,17 @@ import io.github.xudong7587.sunnytv.feature.Route
             }
         }
     }
-    val carouselDown={
-        if(resume.isNotEmpty()) quickFocus.requestFocus() else exitDown()
+    val carouselDown:()->Unit={
+        if(resume.isNotEmpty()) {quickFocus.requestFocus();Unit} else exitDown()
     }
     if(compact) Column(Modifier.fillMaxSize().padding(horizontal=18.dp).padding(top=pageTopPadding,bottom=20.dp),
         verticalArrangement=Arrangement.spacedBy(18.dp,Alignment.Bottom)) {
         Copy()
-        RotatingHeroCards(candidates,selected,onSelect,onExitLeft={playFocus.requestFocus()},onExitDown=carouselDown)
+        RotatingHeroCards(candidates,selected,onSelect,onExitLeft={playFocus.requestFocus();Unit},onExitDown=carouselDown)
     } else Row(Modifier.fillMaxSize().padding(horizontal=30.dp).padding(top=pageTopPadding,bottom=28.dp),
         horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.Bottom) {
         Box(Modifier.weight(.4f)) {Copy()}
         RotatingHeroCards(candidates,selected,onSelect,Modifier.weight(.6f),requester=carouselFocus,
-            onExitLeft={playFocus.requestFocus()},onExitDown=carouselDown)
+            onExitLeft={playFocus.requestFocus();Unit},onExitDown=carouselDown)
     }
 }
