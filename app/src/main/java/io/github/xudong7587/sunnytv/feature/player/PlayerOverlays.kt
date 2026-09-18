@@ -9,6 +9,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -71,9 +72,9 @@ import io.github.xudong7587.sunnytv.feature.ui.*
     }
 }
 
-@Composable internal fun SkipSegmentPrompt(segment:SkipSegment,onSkip:()->Unit,onDismiss:()->Unit) {
+@Composable internal fun SkipSegmentPrompt(segment:SkipSegment,onSkip:()->Unit,onDismiss:()->Unit,modifier:Modifier=Modifier) {
     val label=if(segment.type=="outro") "跳过片尾" else "跳过片头"
-    Row(Modifier.testTag("player:skip-prompt").background(Color.Black.copy(.82f),RoundedCornerShape(18.dp))
+    Row(modifier.testTag("player:skip-prompt").background(Color.Black.copy(.82f),RoundedCornerShape(18.dp))
         .border(1.dp,Color.White.copy(.18f),RoundedCornerShape(18.dp)).padding(12.dp),
         horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
         PlayerControl(label,"skip",initial=true,onClick=onSkip)
