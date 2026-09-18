@@ -75,9 +75,10 @@ class ShadowAlignmentTest {
     private fun meanBelow(bitmap:Bitmap, fromDp:Float, toDp:Float):Double {
         val root=rule.onNodeWithTag("visual-root").getUnclippedBoundsInRoot()
         val card=rule.onNodeWithTag("shadow-card").getUnclippedBoundsInRoot()
-        val scale=bitmap.width/root.width.value
-        val x0=((card.left.value-root.left.value+card.width.value*.3f)*scale).roundToInt()
-        val x1=((card.left.value-root.left.value+card.width.value*.7f)*scale).roundToInt()
+        val scale=bitmap.width/(root.right.value-root.left.value)
+        val width=card.right.value-card.left.value
+        val x0=((card.left.value-root.left.value+width*.3f)*scale).roundToInt()
+        val x1=((card.left.value-root.left.value+width*.7f)*scale).roundToInt()
         val y0=((card.bottom.value-root.top.value+fromDp)*scale).roundToInt()
         val y1=((card.bottom.value-root.top.value+toDp)*scale).roundToInt()
         require(x0>=0 && y0>=0 && x1<bitmap.width && y1<bitmap.height && y1>y0)
@@ -120,9 +121,9 @@ class ShadowAlignmentTest {
             val strip=rule.onNodeWithTag("test-hero:strip:${item.key}").getUnclippedBoundsInRoot()
             assertTrue("Top edge drift: main=$main strip=$strip",abs(main.top.value-strip.top.value)<.6f)
             assertTrue("Bottom edge drift: main=$main strip=$strip",abs(main.bottom.value-strip.bottom.value)<.6f)
-            assertTrue(abs(main.height.value-strip.height.value)<.6f)
+            assertTrue(abs((main.bottom.value-main.top.value)-(strip.bottom.value-strip.top.value))<.6f)
         }
-        assertTrue("Featured card remains square",abs(main.width.value-main.height.value)<.6f)
+        assertTrue("Featured card remains square",abs((main.right.value-main.left.value)-(main.bottom.value-main.top.value))<.6f)
     }
     @Test fun heroAlignmentSurvivesFocusAnimationManualRotationAndUnfocusedRotation() {
         mount(carousel=true)
