@@ -24,12 +24,12 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
     val requester=remember {FocusRequester()}
     var focused by remember {mutableStateOf(false)}
     LaunchedEffect(Unit) {if(initial) {withFrameNanos {};requester.requestFocus()}}
-    Box(modifier.size(50.dp).testTag("player:$icon").semantics {contentDescription=label}
+    Box(modifier.size(54.dp).testTag("player:$icon").semantics {contentDescription=label}
         .focusRequester(requester).onFocusChanged {focused=it.isFocused}
         .background(if(focused) Color.White.copy(.18f) else Color.Transparent,CircleShape)
-        .border(2.dp,if(focused) SunnyColors.Accent else Color.Transparent,CircleShape)
+        .border(3.5.dp,if(focused) Color.White else Color.Transparent,CircleShape)
         .clickable(onClick=onClick),contentAlignment=Alignment.Center) {
-        LineIcon(icon,Color.White,Modifier.size(25.dp))
+        LineIcon(icon,Color.White,Modifier.size(26.dp))
         if(focused) Text(label,color=Color.White,fontSize=12.sp,maxLines=1,
             modifier=Modifier.align(Alignment.TopCenter).offset(y=(-34).dp).wrapContentSize(unbounded=true)
                 .background(Color.Black.copy(.8f),RoundedCornerShape(8.dp)).padding(horizontal=10.dp,vertical=6.dp))
@@ -42,7 +42,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
     LaunchedEffect(Unit) {if(initial) {withFrameNanos {};requester.requestFocus()}}
     Row(Modifier.fillMaxWidth().focusRequester(requester).onFocusChanged {focused=it.isFocused}
         .background(if(focused) Color.White.copy(.16f) else Color.White.copy(.05f),RoundedCornerShape(12.dp))
-        .border(2.dp,if(focused) SunnyColors.Accent else Color.Transparent,RoundedCornerShape(12.dp))
+        .border(3.dp,if(focused) Color.White else Color.Transparent,RoundedCornerShape(12.dp))
         .clickable(onClick=onClick).padding(16.dp),verticalAlignment=Alignment.CenterVertically,
         horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         LineIcon(if(selected) "check" else "audio",if(selected) SunnyColors.Accent else Color.White.copy(.6f))
