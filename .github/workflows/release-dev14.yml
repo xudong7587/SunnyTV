@@ -1,0 +1,141 @@
+name: SunnyTV dev14 focus hotfix and release
+
+on:
+  push:
+    branches: ['release/dev14-focus-hotfix']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sunnytv-dev14-release
+  cancel-in-progress: false
+
+jobs:
+  verify-and-release:
+    if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/release/dev14-focus-hotfix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Apply guarded source changes and record exact revision
+        env:
+          BRANCH: release/dev14-focus-hotfix
+        run: |
+          set -euo pipefail
+          python3 scripts/apply-dev14-hotfix.py
+          git add app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/BrowseScreens.kt \
+            app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/Components.kt \
+            app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/CinemaComponents.kt \
+            app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/Motion.kt \
+            app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/SettingsScreen.kt app/build.gradle.kts
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'fix: apply dev14 focus navigation, soft elevation and safe gutters'
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
+          echo "CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install pinned Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Reuse configured signing identity
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -n "$KEY_B64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          fi
+      - name: Unit tests, lint and APK compilation
+        run: |
+          set -euo pipefail
+          mkdir -p build-logs
+          chmod +x gradlew
+          python3 scripts/check-project.py | tee build-logs/project-check.log
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest \
+            2>&1 | tee build-logs/android-build.log
+      - name: Enable emulator acceleration
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Execute five D-pad and appearance regressions on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          ram-size: 1536M
+          heap-size: 256M
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -skin 1920x1080 -cores 2
+          script: |
+            adb shell wm size 1920x1080
+            adb shell wm density 240
+            adb shell settings put system accelerometer_rotation 0
+            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.HomeHotfixTest
+      - name: Package verified APK and signing compatibility report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist previous
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" dist/SunnyTV-v0.1.0-dev14.apk
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$SIGNER" verify --print-certs "$APK" > build-logs/apk-certificate.txt
+          CURRENT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build-logs/apk-certificate.txt)"
+          MATCH=unknown
+          if gh release download v0.1.0-dev13 --repo "$GITHUB_REPOSITORY" --pattern 'SunnyTV-v0.1.0-dev13.apk' --dir previous; then
+            "$SIGNER" verify --print-certs previous/SunnyTV-v0.1.0-dev13.apk > build-logs/previous-certificate.txt
+            OLD="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build-logs/previous-certificate.txt)"
+            if [ -n "$CURRENT" ] && [ "$CURRENT" = "$OLD" ]; then MATCH=yes; else MATCH=no; fi
+          fi
+          printf 'version=0.1.0-dev14\nversionCode=14\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsameSignerAsDev13=%s\ncertificateSha256=%s\n' \
+            "$CODE_SHA" "$MATCH" "$CURRENT" > dist/BUILD_INFO.txt
+          echo "SIGNATURE_MATCH=$MATCH" >> "$GITHUB_ENV"
+          (cd dist && sha256sum SunnyTV-v0.1.0-dev14.apk BUILD_INFO.txt > SHA256SUMS.txt)
+      - name: Publish new release only after checks succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=v0.1.0-dev14
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists: refusing to replace its source tag or APK.' >&2
+            exit 1
+          fi
+          cp docs/RELEASE-dev14.md build-logs/release-notes.md
+          printf '\n构建源码：`%s`\n\n校验：JUnit 单元测试、lint、APK 编译及 5 项 Android 模拟器交互回归通过；未替代真实电视验收。\n\n与 dev13 APK 签名一致：`%s`（yes 可尝试直接覆盖升级；no/unknown 请勿先卸载清数据）。\n' \
+            "$CODE_SHA" "$SIGNATURE_MATCH" >> build-logs/release-notes.md
+          gh release create "$TAG" dist/SunnyTV-v0.1.0-dev14.apk dist/SHA256SUMS.txt dist/BUILD_INFO.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$CODE_SHA" --title 'SunnyTV v0.1.0-dev14 · 焦点导航与柔和悬浮修复' \
+            --notes-file build-logs/release-notes.md --prerelease
+      - name: Preserve reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SunnyTV-dev14-validation
+          if-no-files-found: warn
+          path: |
+            build-logs/
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
+            docs/project-check-results.json
+            dist/BUILD_INFO.txt
