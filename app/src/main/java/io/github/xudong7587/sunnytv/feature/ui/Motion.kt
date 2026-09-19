@@ -94,6 +94,11 @@ private class HorizontalReveal(private val gutter:Float):BringIntoViewSpec {
 /** The hero and first library row are one precomposed stage; animate only its scroll offset. */
 suspend fun LazyListState.moveHomePage(index:Int,heroExtentPx:Float,motion:MotionTokens) {
     val target=if(index==0) 0 else heroExtentPx.toInt()
-    if(!motion.enabled || firstVisibleItemIndex!=0) {scrollToItem(0,target);return}
+    if(!motion.enabled) {scrollToItem(0,target);return}
+    if(firstVisibleItemIndex!=0) {
+        revealItem(0,motion,alignTop=true)
+        // Once composed, scroll the precomposed hero+libraries stage to its exact boundary.
+        if(firstVisibleItemIndex!=0) return
+    }
     animateScrollBy(target-firstVisibleItemScrollOffset.toFloat(),animationSpec=motion.fade(420))
 }

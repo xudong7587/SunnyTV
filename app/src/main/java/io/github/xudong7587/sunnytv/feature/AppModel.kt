@@ -14,6 +14,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.util.UUID
+import io.github.xudong7587.sunnytv.core.storage.StartupCache
 
 sealed interface Route {
     data object Home : Route
@@ -51,7 +52,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     val libraryLatest = mutableStateMapOf<String, List<MediaEntry>>()
     val libraryLatestModes = mutableStateMapOf<String, String>()
     var heroCandidates by mutableStateOf<List<MediaEntry>>(emptyList());private set
-    private val artworkFeedSlots=Semaphore(3)
+    private val artworkFeedSlots=Semaphore(if(app.lean(settings)) 2 else 3)
+    private val staleLatest=mutableSetOf<String>()
     val folderPages = mutableStateMapOf<String, MediaPage>()
     val folderPreviews = mutableStateMapOf<String, List<MediaEntry>>()
     val similar = mutableStateMapOf<String,List<MediaEntry>>()
@@ -76,6 +78,11 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         if(restoreSources) viewModelScope.launch {
             try {
                 sources = withContext(Dispatchers.IO) { app.store.sources() }
+                val snapshots=withContext(Dispatchers.IO) {
+                    sources.filter {it.kind==SourceKind.EMBY}.mapNotNull {config->app.startup.read(config)?.let {config.id to it}}
+                }
+                snapshots.forEach {(id,snapshot)->feeds[id]=snapshot.feed;libraryLatest.putAll(snapshot.shelves)}
+                staleLatest.addAll(libraryLatest.keys)
                 refresh()
             } catch (e: CancellationException) {
                 throw e
@@ -111,9 +118,28 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
 
     fun refresh() {
-        libraryLatest.clear()
+        staleLatest.addAll(libraryLatest.keys)
         sources.filter { it.kind == SourceKind.EMBY }.forEach { config ->
-            launchLoad("feed:${config.id}", replace = true) { feeds[config.id] = app.emby(config).home();loadHero() }
+            launchLoad("feed:${config.id}", replace = true) {
+                feeds[config.id] = app.emby(config).home()
+                cacheHome(config)
+                // Keep old artwork visible while refreshing only already requested shelves.
+                feeds[config.id]?.libraries?.filter {it.key in staleLatest}?.forEach {loadLatest(it)}
+                loadHero()
+            }
+        }
+    }
+
+    private fun cacheHome(config:SourceConfig) {
+        if(!restoreSources) return
+        val feed=feeds[config.id] ?: return
+        val snapshot=StartupCache.Snapshot(feed,libraryLatest.filterKeys {
+            it.startsWith("${config.id}:") && (libraryLatestModes[it] ?: "DateCreated")=="DateCreated"
+        }.toMap())
+        val generation=app.startup.generation
+        launchLoad("startup:${config.id}",replace=true) {
+            delay(250)
+            withContext(Dispatchers.IO) {app.startup.write(config,snapshot,generation)}
         }
     }
 
@@ -134,8 +160,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         val changed=(libraryLatestModes[item.key] ?: "DateCreated")!=sort
         libraryLatestModes[item.key]=sort
         if(changed) libraryLatest.remove(item.key)
-        if(!changed && libraryLatest.containsKey(item.key)) return
-        launchLoad("latest:${item.key}",replace=changed) {
+        if(!changed && libraryLatest.containsKey(item.key) && item.key !in staleLatest) return
+        launchLoad("latest:${item.key}",replace=changed || item.key in staleLatest) {
             val entries=artworkFeedSlots.withPermit {
                 val source=app.emby(source(item.sourceId))
                 if(sort=="DateCreated") source.latest(item.id,10)
@@ -144,6 +170,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             }
             if(libraryLatestModes[item.key]!=sort) return@launchLoad
             entries.forEach {mediaLibraries[it.key]=item.key};libraryLatest[item.key]=entries
+            staleLatest.remove(item.key);cacheHome(source(item.sourceId))
         }
     }
     fun loadHero() {
@@ -396,7 +423,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     private fun clearMediaState() {
         feeds.clear(); errors.clear(); pages.clear(); libraryResume.clear()
         details.clear(); children.clear(); folders.clear(); librarySort.clear(); focusMemory.clear()
-        libraryLatest.clear(); libraryLatestModes.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
+        libraryLatest.clear(); staleLatest.clear(); libraryLatestModes.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
         selectedVersion.clear(); selectedAudio.clear(); selectedSubtitle.clear(); selectedSubtitleTrack.clear()
         heroCandidates=emptyList()
     }

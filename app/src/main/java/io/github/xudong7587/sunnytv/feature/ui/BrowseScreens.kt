@@ -10,6 +10,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -86,7 +91,7 @@ import kotlinx.coroutines.delay
     val resume=feeds.flatMap { it.resume }
     val latest=feeds.flatMap { it.latest }
     val nextUp=if(model.settings.showNextUp) feeds.flatMap { it.nextUp }.distinctBy {it.key} else emptyList()
-    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates;else->latest}.distinctBy {it.key}.take(7)
+    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates.ifEmpty {latest};else->latest}.distinctBy {it.key}.take(7)
     var candidates by remember {mutableStateOf(incoming)}
     var selected by rememberSaveable {mutableIntStateOf(0)}
     val hero=candidates.getOrNull(selected.coerceIn(0,(candidates.size-1).coerceAtLeast(0)))
@@ -130,7 +135,9 @@ import kotlinx.coroutines.delay
         }
         CompositionLocalProvider(LocalHomeFocusNavigator provides navigation) {
         StableVerticalViewport(hold={!compact && (heroFocused || navigation.moving)}) {
-        LazyColumn(modifier=Modifier.testTag("home:vertical"),state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        LazyColumn(modifier=Modifier.onGloballyPositioned {
+            val p=it.positionInRoot();navigation.viewport=Rect(p.x,p.y,p.x+it.size.width,p.y+it.size.height)
+        }.testTag("home:vertical"),state=list,contentPadding=PaddingValues(bottom=36.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             if(embySources.isEmpty()) item {
                 Box(Modifier.padding(top=85.dp,start=40.dp,end=40.dp)) {EmptyState("每一个夜晚，都值得好好看。","添加 Emby，保留已有海报、媒体库封面和观看进度。\n连接后即可查看推荐和观看进度。","添加媒体来源") { model.navigate(Route.Settings,root=true) }}
             } else {
@@ -139,7 +146,7 @@ import kotlinx.coroutines.delay
                     Column {
                         val colors=remember(model.settings.accentIndex,model.settings.darkTheme) {palette(model.settings)}
                         CompositionLocalProvider(LocalSunnyPalette provides colors) {
-                            Box(Modifier.fillMaxWidth().height(heroHeight).graphicsLayer().testTag("home:hero")
+                            Box(Modifier.fillMaxWidth().height(heroHeight).testTag("home:hero")
                                 .onFocusChanged {heroFocused=it.hasFocus}.focusGroup()) {
                                 CinemaBackdrop(hero)
                                 HomeHeroContent(hero,candidates,selected,{selected=it},
@@ -231,15 +238,47 @@ import kotlinx.coroutines.delay
     val folderEntries=model.folderPages[library.key]?.items.orEmpty()
     val folderRequesters=remember(library.key,folderEntries.map {it.key}) {List(folderEntries.size) {FocusRequester()}}
     val moreFolders=folderEntries.size<(model.folderPages[library.key]?.total ?: 0)
+    val density=LocalDensity.current
+    val motion=LocalMotion.current
+    val pinnedTop=with(density) {pageTopPadding.toPx()}
+    val rowGap=with(density) {22.dp.toPx()}
+    var toolsHeightPx by remember(library.key) {mutableIntStateOf(with(density) {128.dp.roundToPx()})}
+    fun toolsOffset():Float {
+        val info=gridState.layoutInfo
+        val item=info.visibleItemsInfo.firstOrNull {it.index==1}
+        return if(item!=null) maxOf(pinnedTop,item.offset.y.toFloat())
+            else if(gridState.firstVisibleItemIndex>1) pinnedTop else info.viewportEndOffset.toFloat()
+    }
+    SideEffect {
+        gridFocus.topInset={pinnedTop+toolsHeightPx+rowGap}
+        gridFocus.beforeMove={index->
+            when(index) {
+                0 -> {gridState.revealItem(0,motion,pinnedTop,alignTop=true);true}
+                1 -> {
+                    if(gridState.firstVisibleItemIndex<1) gridState.revealItem(1,motion,pinnedTop,alignTop=true)
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+    var folderMoving by remember {mutableStateOf(false)}
     fun moveFolder(index:Int) {
+        if(folderMoving) return
+        folderMoving=true
         scope.launch {
-            gridState.scrollToItem(if(index<0) 1 else 2+index)
-            withFrameNanos {};withFrameNanos {}
-            when {index<0->toolsEntry;index<folderRequesters.size->folderRequesters[index];else->moreFoldersEntry}.requestFocus()
+            try {
+                if(index>=0) gridState.revealItem(2+index,motion,pinnedTop+toolsHeightPx+rowGap)
+                repeat(20) {
+                    withFrameNanos { }
+                    val target=when {index<0->toolsEntry;index<folderRequesters.size->folderRequesters[index];else->moreFoldersEntry}
+                    if(runCatching {target.requestFocus()}.getOrDefault(false)) return@launch
+                }
+            } finally {folderMoving=false}
         }
     }
     LaunchedEffect(folderMode,library.key) {if(folderMode) model.loadLibraryFolders(library)}
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         Backdrop(hero ?: library)
         val cellSize=if(episodeContainer && episodeLayout=="numbers") 68.dp else if(mode=="Poster") 132.dp else if(LocalCompact.current) 160.dp else 230.dp
         val columns=if(episodeContainer && episodeLayout=="vertical") 1 else
@@ -250,34 +289,19 @@ import kotlinx.coroutines.delay
             if(index<columns) 1 else 2+index-columns,
             if(index+columns<entries.size) 2+index+columns else
                 if(index/columns<(entries.lastIndex/columns)) 2+entries.lastIndex else if(more) 2+entries.size else null)
+        StableVerticalViewport(hold={gridFocus.moving || folderMoving}) {
         LazyVerticalGrid(modifier=Modifier.testTag("library:grid"),state=gridState,columns=GridCells.Adaptive(cellSize),
             horizontalArrangement=Arrangement.spacedBy(17.dp),verticalArrangement=Arrangement.spacedBy(22.dp),
             contentPadding=PaddingValues(start=pageSidePadding,end=pageSidePadding,top=pageTopPadding,bottom=40.dp)) {
             item(key="library-hero",span={GridItemSpan(maxLineSpan)}) {Box(Modifier.focusRequester(heroEntry).gridFocusTarget(gridFocus,0,null,1).onPreviewKeyEvent {
                 if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {
-                    scope.launch {gridState.scrollToItem(1);withFrameNanos {};toolsEntry.requestFocus()};true
+                    gridFocus.move(1);true
                 } else if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionUp) {
-                    scope.launch {gridState.scrollToItem(0)};true
+                    gridFocus.move(0);true
                 } else false
             }) {Hero(hero,"媒体库 / ${library.title}",true,page?.items ?: emptyList(),{candidate=it},onPlay)}}
             item(key="library-tools",span={GridItemSpan(maxLineSpan)}) {
-                Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                    SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
-                    StableLazyRow(Modifier.focusRequester(toolsEntry).gridFocusTarget(gridFocus,1,null,
-                        if(!folderMode && entries.isNotEmpty()) 2 else null).onPreviewKeyEvent {event->
-                        if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
-                            Key.DirectionDown -> if(folderMode && folderEntries.isNotEmpty()) {moveFolder(0);true} else false
-                            Key.DirectionUp -> if(hero!=null) {scope.launch {gridState.scrollToItem(0);withFrameNanos {};withFrameNanos {};heroEntry.requestFocus()};true} else false
-                            else -> false
-                        }
-                    }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
-                        item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
-                        item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==subtitlePreference}?.second ?: "媒体默认"}") {chooser="subtitle"}}
-                        if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout)}
-                        else item {Action("视图：$mode") {chooser="view"}}
-                        if(!episodeContainer && Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",id="library-folder-mode",active=folderMode) {folderMode=!folderMode}}
-                    }
-                }
+                Spacer(Modifier.fillMaxWidth().height(with(density) {toolsHeightPx.toDp()}))
             }
             if(folderMode) {
                 val folders=model.folderPages[library.key]
@@ -307,6 +331,29 @@ import kotlinx.coroutines.delay
                 }
             }
             model.errors["library:${library.key}"]?.let {error->item(span={GridItemSpan(maxLineSpan)}) {EmptyState("读取失败",error,"重试") {model.loadLibrary(library,sort,ascending=ascending)}}}
+        }
+        }
+        Box(Modifier.fillMaxWidth().graphicsLayer {translationY=toolsOffset()}
+            .background(SunnyColors.Background)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal=pageSidePadding)
+                    .onSizeChanged { if(toolsHeightPx!=it.height) toolsHeightPx=it.height }
+                    .testTag("library:pinned-tools"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("${library.title} · 全部内容", "${page?.total ?: 0} 个条目")
+                    StableLazyRow(Modifier.focusRequester(toolsEntry).gridFocusTarget(gridFocus,1,null,
+                        if(!folderMode && entries.isNotEmpty()) 2 else null).onPreviewKeyEvent {event->
+                        if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
+                            Key.DirectionDown -> if(folderMode && folderEntries.isNotEmpty()) {moveFolder(0);true} else false
+                            Key.DirectionUp -> if(hero!=null) {gridFocus.move(0);true} else false
+                            else -> false
+                        }
+                    }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(3.dp)) {
+                        item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",active=true,icon=if(ascending) "ascending" else "descending") {chooser="sort"}}
+                        item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==subtitlePreference}?.second ?: "媒体默认"}") {chooser="subtitle"}}
+                        if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout)}
+                        else item {Action("视图：$mode") {chooser="view"}}
+                        if(!episodeContainer && Presentation.supportsFolders(library)) item {Action(if(folderMode) "按海报" else "按文件夹",id="library-folder-mode",active=folderMode) {folderMode=!folderMode}}
+                    }
+                }
         }
     }
     if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"字幕优先级（未匹配时跟随媒体默认）";else->"展现方式"},

@@ -12,7 +12,7 @@ object HomeFocusPlan {
         add(HomeFocusSection(LIBRARIES, 0, "more:我的媒体库", "library:"))
         if (hasNextUp) add(HomeFocusSection(NEXT_UP, 1, null, "shelf:接着看下一集:"))
         libraryKeys.distinct().forEachIndexed { index, key ->
-            add(HomeFocusSection(latest(key), 1 + (if (hasNextUp) 1 else 0) + index, "more:$key", "latest:$key:"))
+            add(HomeFocusSection(latest(key), 1 + (if (hasNextUp) 1 else 0) + index, "shelf-sort:$key", "latest:$key:"))
         }
     }
     @Suppress("UNUSED_PARAMETER")

@@ -77,6 +77,21 @@ import kotlinx.coroutines.withContext
     val tracks=version?.tracks ?: item.tracks
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
+    val motion=LocalMotion.current
+    var contentMoving by remember(item.key) {mutableStateOf(false)}
+    fun moveContent(index:Int,requester:FocusRequester?=null,alignTop:Boolean=false) {
+        if(contentMoving) return
+        contentMoving=true
+        scope.launch {
+            try {
+                list.revealItem(index,motion,alignTop=alignTop)
+                if(requester!=null) repeat(20) {
+                    withFrameNanos { }
+                    if(runCatching {requester.requestFocus()}.getOrDefault(false)) return@launch
+                }
+            } finally {contentMoving=false}
+        }
+    }
     val lowerContentFocus=remember(item.key) {FocusRequester()}
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
     val episodeLayout=model.settings.episodeLayouts[item.key] ?: "horizontal"
@@ -104,6 +119,7 @@ import kotlinx.coroutines.withContext
     val similarIndex=3+(if(item.versions.isNotEmpty()) 1 else 0)+childRows+(if(item.people.isNotEmpty()) 1 else 0)
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
         Box(Modifier.fillMaxSize().background(tint)) {
+            StableVerticalViewport(hold={contentMoving}) {
             LazyColumn(modifier=Modifier.testTag("detail:viewport"),state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 item(key="detail-header") {
                     Box(Modifier.fillMaxWidth().height(320.dp)) {
@@ -123,9 +139,9 @@ import kotlinx.coroutines.withContext
                 item(key="detail-actions") {
                     val moveIntoContent:Modifier.()->Modifier={onPreviewKeyEvent {
                         if(it.type!=KeyEventType.KeyDown) false else when(it.key) {
-                            Key.DirectionUp -> {scope.launch {list.scrollToItem(0)};false}
+                            Key.DirectionUp -> {moveContent(0,alignTop=true);true}
                             Key.DirectionDown -> if(lowerTarget.isNotEmpty()) {
-                                scope.launch {list.scrollToItem(3);withFrameNanos {};withFrameNanos {};runCatching {lowerContentFocus.requestFocus()}}
+                                moveContent(3,lowerContentFocus)
                                 true
                             } else false
                             else -> false
@@ -193,7 +209,7 @@ import kotlinx.coroutines.withContext
                         SectionTitle("演员表")
                         StableLazyRow(modifier=Modifier.onPreviewKeyEvent {event->
                             if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && similar.isNotEmpty()) {
-                                scope.launch {list.scrollToItem(similarIndex);withFrameNanos {};withFrameNanos {};similarEntryFocus.requestFocus()};true
+                                moveContent(similarIndex,similarEntryFocus);true
                             } else false
                         },horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                             itemsIndexed(item.people,key={ _,person->"${person.id}:${person.name}:${person.role}"}) {index,person ->
@@ -211,11 +227,12 @@ import kotlinx.coroutines.withContext
                 }
                 item {Box(Modifier.padding(horizontal=pageSidePadding).onPreviewKeyEvent {event->
                     if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && item.people.isNotEmpty()) {
-                        scope.launch {list.scrollToItem(similarIndex-1);withFrameNanos {};withFrameNanos {};peopleEntryFocus.requestFocus()};true
+                        moveContent(similarIndex-1,peopleEntryFocus);true
                     } else false
                 }) {MediaShelf("相似推荐",similar,firstFocusRequester=similarEntryFocus,onClick={model.navigate(Route.Detail(it))})}}
                 model.errors["detail:${item.key}"]?.let {error->item {Box(Modifier.padding(horizontal=pageSidePadding)) {EmptyState("详情暂不可用",error,"重试") {model.loadDetail(item)}}}}
                 listOf("played","favorite").forEach {operation->model.errors["$operation:${item.key}"]?.let {error->item {Text(error,color=SunnyColors.Secondary,modifier=Modifier.padding(horizontal=pageSidePadding))}}}
+            }
             }
         }
         when(panel) {

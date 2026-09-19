@@ -20,7 +20,7 @@ private data class ShadowBand(val offset: Float, val color: Color, val stroke: S
  * Draw outside the casting shape, BEFORE the inner content clip, so translucent
  * buttons keep their original fill. The two layers have a real downward offset.
  */
-fun Modifier.softFocusShadow(shape: Shape, enabled: Boolean): Modifier = if (!enabled) this else
+fun Modifier.softFocusShadow(shape: Shape, enabled: Boolean, lean: Boolean = false): Modifier = if (!enabled) this else
     drawWithCache {
         val outline = shape.createOutline(size, layoutDirection, this)
         val caster = when (outline) {
@@ -41,8 +41,8 @@ fun Modifier.softFocusShadow(shape: Shape, enabled: Boolean): Modifier = if (!en
                 }
             }
             // Keep the lift compact: it suggests separation without forming a heavy second edge.
-            layer(sigmaDp = 4.3f, extentDp = 13.4f, opacity = .22f, dyDp = 3.6f, steps = 18)
-            layer(sigmaDp = 1.2f, extentDp = 3.6f, opacity = .16f, dyDp = 1.2f, steps = 8)
+            layer(sigmaDp = 4.3f, extentDp = 13.4f, opacity = .22f, dyDp = 3.6f, steps = if(lean) 6 else 18)
+            layer(sigmaDp = 1.2f, extentDp = 3.6f, opacity = .16f, dyDp = 1.2f, steps = if(lean) 3 else 8)
         }
         onDrawBehind {
             clipPath(caster, clipOp = ClipOp.Difference) {
@@ -57,5 +57,6 @@ fun Modifier.softFocusShadow(shape: Shape, enabled: Boolean): Modifier = if (!en
 @Composable
 @Suppress("UNUSED_PARAMETER")
 fun Modifier.focusElevation(shape: Shape, elevated: Boolean, liftEnabled: Boolean = true): Modifier {
-    return softFocusShadow(shape, elevated)
+    val model=LocalAppModel.current
+    return softFocusShadow(shape, elevated, model.app.lean(model.settings))
 }
