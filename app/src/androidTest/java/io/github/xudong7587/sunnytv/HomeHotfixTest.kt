@@ -53,44 +53,31 @@ class HomeHotfixTest {
         }
         focus("nav:首页")
         key("nav:首页",Key.DirectionDown)
-        awaitFocused("home-play")
-        key("home-play",Key.DirectionDown)
+        awaitFocused("home-carousel:featured")
+        key("home-carousel:featured",Key.DirectionDown)
         awaitFocused("library:fixture:lib0")
     }
     @Test fun downTraversesFourLazyShelvesAndUpRestoresLibrarySelection() {
         mount()
         key("library:fixture:lib0",Key.DirectionDown)
-        awaitFocused("more:fixture:lib0")
-        for (i in 0..3) {
-            key("more:fixture:lib$i",Key.DirectionDown)
+        for(i in 0..3) {
             awaitFocused("latest:fixture:lib$i:fixture:0")
-            if(i<3) {
-                key("latest:fixture:lib$i:fixture:0",Key.DirectionDown)
-                awaitFocused("more:fixture:lib${i+1}")
-            }
+            if(i<3) key("latest:fixture:lib$i:fixture:0",Key.DirectionDown)
         }
-        key("latest:fixture:lib3:fixture:0",Key.DirectionUp)
-        awaitFocused("more:fixture:lib3")
         for(i in 3 downTo 1) {
-            key("more:fixture:lib$i",Key.DirectionUp)
-            awaitFocused("more:fixture:lib${i-1}")
+            key("latest:fixture:lib$i:fixture:0",Key.DirectionUp)
+            awaitFocused("latest:fixture:lib${i-1}:fixture:0")
         }
-        key("more:fixture:lib0",Key.DirectionUp)
+        key("latest:fixture:lib0:fixture:0",Key.DirectionUp)
         awaitFocused("library:fixture:lib0")
     }
     @Test fun selectedThirdLibraryContinuesInPageOrderAndReturnsToSelectedLibrary() {
         mount()
-        key("library:fixture:lib0",Key.DirectionRight)
-        awaitFocused("library:fixture:lib1")
-        key("library:fixture:lib1",Key.DirectionRight)
-        awaitFocused("library:fixture:lib2")
+        key("library:fixture:lib0",Key.DirectionRight);awaitFocused("library:fixture:lib1")
+        key("library:fixture:lib1",Key.DirectionRight);awaitFocused("library:fixture:lib2")
         key("library:fixture:lib2",Key.DirectionDown)
-        awaitFocused("more:fixture:lib0")
-        key("more:fixture:lib0",Key.DirectionDown)
         awaitFocused("latest:fixture:lib0:fixture:0")
         key("latest:fixture:lib0:fixture:0",Key.DirectionUp)
-        awaitFocused("more:fixture:lib0")
-        key("more:fixture:lib0",Key.DirectionUp)
         awaitFocused("library:fixture:lib2")
     }
     @Test fun nextUpIsReachableAndEmptyLatestDoesNotTrapDown() {
@@ -98,10 +85,8 @@ class HomeHotfixTest {
         key("library:fixture:lib0",Key.DirectionDown)
         awaitFocused("shelf:接着看下一集:fixture:0")
         key("shelf:接着看下一集:fixture:0",Key.DirectionDown)
-        awaitFocused("more:fixture:lib0")
-        key("more:fixture:lib0",Key.DirectionDown)
-        awaitFocused("more:fixture:lib1")
-        key("more:fixture:lib1",Key.DirectionDown)
+        awaitFocused("shelf-empty:fixture:lib0")
+        key("shelf-empty:fixture:lib0",Key.DirectionDown)
         awaitFocused("latest:fixture:lib1:fixture:0")
     }
     @Test fun horizontalLibraryEdgesKeepSpaceForFocusAndShadow() {
@@ -126,6 +111,7 @@ class HomeHotfixTest {
                 }
             }
         }
+        rule.onNodeWithTag("settings:categories").performScrollToNode(hasTestTag("settings:关于"))
         rule.onNodeWithTag("settings:关于").performClick()
         rule.onNodeWithText("针对电视遥控器操作与流畅浏览设计。",substring=true).assertExists()
         rule.onAllNodes(hasText("Moonfin",substring=true,ignoreCase=true)).assertCountEquals(0)

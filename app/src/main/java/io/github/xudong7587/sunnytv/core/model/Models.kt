@@ -78,5 +78,6 @@ data class AppSettings(
     val episodeLayouts:Map<String,String> = emptyMap(),
     val librarySubtitlePreferences:Map<String,String> = emptyMap(),
     val animationSpeed:Float = 1f, val fontScaleLevel:Int = 2,
-    val customFontFile:String = "", val customFontName:String = "", val shadowsEnabled:Boolean = true
+    val customFontFile:String = "", val customFontName:String = "", val shadowsEnabled:Boolean = true,
+    val artworkCacheMiB:Int = 512, val performanceMode:String = "auto"
 )

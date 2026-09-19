@@ -73,8 +73,8 @@ import io.github.xudong7587.sunnytv.feature.Route
         val selectedWidth=if(hero) height else height*16/9
         val smallWidth=if(count==1) available else ((available-selectedWidth)/(count-1)).coerceAtLeast(26.dp)
         @Composable fun Card(index:Int) {
-                val active=selected.coerceIn(0,count-1)==index
-                val target=if(!hero) {if(active && index<entries.size) selectedWidth else height*2/3}
+                val active=(hero || rowFocused) && selected.coerceIn(0,count-1)==index
+                val target=if(!hero) {if(active && !LocalCompact.current && index<entries.size) selectedWidth else height*2/3}
                     else if(count==1) available else if(active) (available-smallWidth*(count-1)).coerceAtLeast(smallWidth) else smallWidth
                 val width by animateDpAsState(target,
                     LocalMotion.current.spring(),label="accordion-width")
@@ -97,13 +97,13 @@ import io.github.xudong7587.sunnytv.feature.Route
                                 Text("进入媒体库",color=SunnyColors.Secondary,fontSize=11.sp,modifier=Modifier.padding(top=8.dp)) }
                         }
                     } else {
-                        ArtworkView(entry,if(!hero && active) MediaLogic.wideArtwork(entry) else entry.primary,
+                        ArtworkView(entry,if(!hero && active && !LocalCompact.current) MediaLogic.wideArtwork(entry) else entry.primary,
                             Modifier.fillMaxSize(),if(hero) 700 else 640)
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.05f),Color.Black.copy(.85f)))))
                         if(entry.rating>0) Text("★ %.1f".format(entry.rating),color=Color.White,fontSize=9.sp,
                             modifier=Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(.6f)).padding(4.dp))
                         Column(Modifier.align(Alignment.BottomStart).padding(if(active) 13.dp else 6.dp)) {
-                            Text(entry.title,color=Color.White,fontSize=if(active) 19.sp else 10.sp,lineHeight=if(active) 24.sp else 14.sp,fontWeight=FontWeight.SemiBold,
+                            Text(entry.title,color=Color.White,fontSize=if(active && !LocalCompact.current) 19.sp else 11.sp,lineHeight=if(active && !LocalCompact.current) 24.sp else 15.sp,fontWeight=FontWeight.SemiBold,
                                 maxLines=if(active) 2 else 3,overflow=TextOverflow.Ellipsis)
                             if(active) Text(entry.subtitle,color=Color.White.copy(.8f),fontSize=10.sp,modifier=Modifier.padding(top=5.dp),maxLines=1)
                         }
@@ -113,7 +113,7 @@ import io.github.xudong7587.sunnytv.feature.Route
         }
         if(hero) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(gap),verticalAlignment=Alignment.CenterVertically) {
             repeat(count) {index->key(entries.getOrNull(index)?.key ?: "all") {Card(index)}}
-        } else StableLazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
+        } else StableLazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(vertical=18.dp),reserveFocusSpace=false) {
             items(count,key={entries.getOrNull(it)?.key ?: "all"}) {Card(it)}
         }
     }
@@ -140,19 +140,20 @@ import io.github.xudong7587.sunnytv.feature.Route
             else -> false
         }
     }
-    Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=14.dp)) {
+    Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=0.dp)) {
         Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(library.title,color=SunnyColors.Text,fontSize=19.sp,
-                fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
+                fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f))
             if(!folder) {
                 val sorts=listOf("DateCreated" to "最新入库","PremiereDate" to "最新上映","Random" to "随机")
                 val index=sorts.indexOfFirst {it.first==(model.libraryLatestModes[library.key] ?: "DateCreated")}.coerceAtLeast(0)
-                Action(sorts[index].second,id="shelf-sort:${library.key}",modifier=Modifier.onFocusChanged {
+                Action(sorts[index].second,id="shelf-sort:${library.key}",icon="sort-directions",alwaysShowLabel=true,
+                    modifier=Modifier.focusRequester(headingFocus).onFocusChanged {
                     if(it.isFocused && homeNavigator==null) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
                 }) {model.loadLatest(library,sorts[(index+1)%sorts.size].first)}
             }
-            Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.focusRequester(headingFocus).onPreviewKeyEvent {event->
+            if(folder) Action("查看文件夹",id="more:${library.key}",icon="arrow",modifier=Modifier.focusRequester(headingFocus).onPreviewKeyEvent {event->
                 if(!folder || event.type!=KeyEventType.KeyDown) false else when(event.key) {
                     Key.DirectionUp -> if(onUp!=null) {onUp();true} else false
                     Key.DirectionDown -> if(!entries.isNullOrEmpty()) {mediaFocus.requestFocus();true} else if(onDown!=null) {onDown();true} else false
@@ -171,8 +172,8 @@ import io.github.xudong7587.sunnytv.feature.Route
         },id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})
         else if(model.errors["${if(folder) "folder-preview" else "latest"}:${library.key}"]!=null) {
-            Action("读取失败 · 重试",modifier=emptyNavigation) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
+            Action("读取失败 · 重试",id="shelf-empty:${library.key}",modifier=emptyNavigation) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
         } else if(entries==null) Text("正在读取…",color=SunnyColors.Secondary,fontSize=13.sp,modifier=Modifier.padding(vertical=20.dp))
-        else Action("暂无媒体 · 查看媒体库",modifier=emptyNavigation) {model.navigate(Route.Library(library))}
+        else Action("暂无媒体 · 查看媒体库",id="shelf-empty:${library.key}",modifier=emptyNavigation) {model.navigate(Route.Library(library))}
     }
 }

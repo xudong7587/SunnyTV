@@ -7,6 +7,7 @@ import coil.memory.MemoryCache
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.core.network.SafeHttp
 import io.github.xudong7587.sunnytv.core.storage.ConfigStore
+import io.github.xudong7587.sunnytv.core.storage.StartupCache
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
 import io.github.xudong7587.sunnytv.source.clouddrive.WebDavSource
 import java.io.File
@@ -14,12 +15,17 @@ import java.io.File
 class SunnyApp : Application() {
     val http by lazy { SafeHttp() }
     val store by lazy { ConfigStore(this) }
+    val startup by lazy {StartupCache(this)}
+    val lowRamDevice by lazy {
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+    }
+    fun lean(settings: AppSettings) = PerformancePolicy.lean(settings.performanceMode,lowRamDevice)
     private val loaders = mutableMapOf<String,ImageLoader>()
     // One global cache budget; adding sources must not multiply the memory budget.
     // Every request's key includes source id, media id, image tag and requested size.
-    private val artworkMemory by lazy { MemoryCache.Builder(this).maxSizeBytes(minOf(64L*1024*1024,Runtime.getRuntime().maxMemory()/10).toInt()).build() }
+    private val artworkMemory by lazy { MemoryCache.Builder(this).maxSizeBytes(PerformancePolicy.memoryBytes(Runtime.getRuntime().maxMemory(),lowRamDevice)).build() }
     private val artworkDisk by lazy { DiskCache.Builder().directory(File(cacheDir,"artwork"))
-        .maxSizeBytes(200L*1024*1024).build() }
+        .maxSizeBytes(PerformancePolicy.cacheSize(store.settings().artworkCacheMiB)*1024L*1024L).build() }
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
@@ -35,12 +41,12 @@ class SunnyApp : Application() {
     }
     @Synchronized fun clearArtwork() {
         loaders.values.forEach { it.shutdown() }; loaders.clear()
-        artworkMemory.clear(); artworkDisk.clear()
+        artworkMemory.clear(); artworkDisk.clear();startup.clear()
     }
     @Synchronized fun removeArtwork(sourceId: String) {
         loaders.remove(sourceId)?.shutdown()
         // Purge all cached art on account removal, rather than retain private artwork.
-        artworkMemory.clear(); artworkDisk.clear()
+        artworkMemory.clear(); artworkDisk.clear();startup.clear()
     }
     @Synchronized override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)

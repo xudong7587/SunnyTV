@@ -132,6 +132,7 @@ import kotlinx.coroutines.*
             finally {importingFont=false}
         }
     }
+    LaunchedEffect(category) {if(category=="首页与外观") category="外观";settingsList.scrollToItem(0);chooser=""}
     SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
         LazyColumn(Modifier.fillMaxSize().testTag("settings:viewport"),state=settingsList,verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
@@ -147,22 +148,9 @@ import kotlinx.coroutines.*
                     item {Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Action("＋ Emby",primary=true) {adding=SourceKind.EMBY}}}
                     item {Action("重置损坏的来源配置") {resetConfirm=true}}
                 }
-                "首页与外观" -> {
-                    item {
-                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                            SectionTitle("UI 大小","即时预览")
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Presentation.uiScaleNames.forEachIndexed {index,label->
-                                    FocusTile("ui-scale:$index",Modifier.weight(1f),active=model.settings.uiScaleLevel==index,
-                                        onClick={model.saveSettings(model.settings.copy(uiScaleLevel=index))}) {
-                                        Text(label,color=SunnyColors.Text,fontSize=12.sp,modifier=Modifier.padding(vertical=13.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item {ToggleRow("深色主题","浅色与重点色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
-                    item {SectionTitle("重点色", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
+                "主题" -> {
+                    item {ToggleRow("深色主题","浅色与主题色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
+                    item {SectionTitle("主题", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
                     val columns=if(compact) 3 else 5
                     Presentation.accents.chunked(columns).forEachIndexed { row, pairs -> item {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -173,11 +161,11 @@ import kotlinx.coroutines.*
                                         val target=if(event.key==Key.DirectionDown) {
                                             if(index/columns<Presentation.accents.lastIndex/columns) (index+columns).coerceAtMost(Presentation.accents.lastIndex) else Presentation.accents.size
                                         } else index-columns
+                                        if(target>=Presentation.accents.size) return@onPreviewKeyEvent false
                                         coroutine.launch {
-                                            val rowCount=(Presentation.accents.size+columns-1)/columns
-                                            settingsList.scrollToItem(4+if(target<Presentation.accents.size) target/columns else rowCount)
+                                            settingsList.revealItem(3+target/columns,motion)
                                             withFrameNanos {};withFrameNanos {}
-                                            (accentFocus.getOrNull(target) ?: heroFocus).requestFocus()
+                                            accentFocus[target].requestFocus()
                                         };true
                                     } else false
                                 },active=model.settings.accentIndex==index,
@@ -191,6 +179,25 @@ import kotlinx.coroutines.*
                             }
                         }
                     } }
+                }
+                "外观" -> {
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            SectionTitle("UI 大小","即时预览")
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Presentation.uiScaleNames.forEachIndexed {index,label->
+                                    FocusTile("ui-scale:$index",Modifier.weight(1f),active=model.settings.uiScaleLevel==index,
+                                        onClick={model.saveSettings(model.settings.copy(uiScaleLevel=index))}) {
+                                        Text(label,color=SunnyColors.Text,fontSize=12.sp,modifier=Modifier.padding(vertical=13.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
+                    item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
+                }
+                "首页" -> {
                     item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"},Modifier.focusRequester(heroFocus)) {chooser="hero"}}
                     item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
                     item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup(),verticalArrangement=Arrangement.spacedBy(13.dp)) {
@@ -216,16 +223,15 @@ import kotlinx.coroutines.*
                         }
                     }
                     }
-                    item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
-                    item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
-                    item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
-                    item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
-                    item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
+                    item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
+                }
+                "字体" -> {
                     item(key="font-size") {Column(Modifier.onPreviewKeyEvent {event->
                         if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
                             val index=settingsList.layoutInfo.visibleItemsInfo.firstOrNull {it.key=="font-size"}?.index
                             if(index!=null) {
-                                coroutine.launch {settingsList.scrollToItem(index+1);withFrameNanos {};withFrameNanos {};fontChoiceFocus.requestFocus()}
+                                coroutine.launch {settingsList.revealItem(index+1,motion);withFrameNanos {};withFrameNanos {};fontChoiceFocus.requestFocus()}
                                 true
                             } else false
                         } else false
@@ -242,9 +248,18 @@ import kotlinx.coroutines.*
                     }}
                     item(key="font-choice") {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"},Modifier.focusRequester(fontChoiceFocus)) {chooser="font"}}
                     item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
-                    item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
-                    item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
-                    item {Action("清理海报缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="海报缓存已清理"}}}
+                }
+                "性能" -> {
+                    item {SettingChoiceRow("性能模式",when(model.settings.performanceMode) {
+                        "low"->"低负载";"balanced"->"标准";else->"自动（按设备内存）"
+                    }) {chooser="performance"}}
+                    item {Text("低负载模式降低海报解码尺寸、减少阴影绘制和图片淡入；保留平滑滚动，不降低视频清晰度。网络并发预算重启后应用。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {SettingChoiceRow("图片缓存上限","${model.settings.artworkCacheMiB} MiB · 重启后生效") {chooser="cache"}}
+                    item {Text("缓存保存在设备内部存储，不是运行内存。首屏快照最多 8 MiB，后台刷新；首次连接仍需加载。系统清理缓存后会重新获取。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
+                    item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
+                    item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {Action("清理图片与首屏缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="图片与首屏缓存已清理"}}}
                 }
                 "播放" -> {
                     item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "跟随媒体默认"}") {chooser="subtitle"}}
@@ -269,21 +284,23 @@ import kotlinx.coroutines.*
             }
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"字体";else->"字幕优先级（未匹配时跟随媒体默认）"},
-        when(chooser) {"artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"cache"->"图片缓存上限（重启后生效）";"performance"->"性能模式";"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"字体";else->"字幕优先级（未匹配时跟随媒体默认）"},
+        when(chooser) {"cache"->PerformancePolicy.cacheSizesMiB.map {it.toString() to "$it MiB"}
+            "performance"->listOf("auto" to "自动（低内存设备启用低负载）","balanced" to "标准","low" to "低负载")
+            "artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
             "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
             "font"->listOf("system" to "系统默认字体","custom" to "用户自定义上传…")
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->if(model.settings.customFontFile.isBlank()) "system" else "custom";else->model.settings.subtitlePreference},
+        when(chooser) {"cache"->model.settings.artworkCacheMiB.toString();"performance"->model.settings.performanceMode;"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->if(model.settings.customFontFile.isBlank()) "system" else "custom";else->model.settings.subtitlePreference},
         onDismiss={chooser=""}) {value ->
         if(chooser=="font") {
             if(value=="custom") {
                 if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
                 catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器。"}
             } else model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
-        } else model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
+        } else model.saveSettings(when(chooser) {"cache"->model.settings.copy(artworkCacheMiB=value.toInt());"performance"->model.settings.copy(performanceMode=value);"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
             "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
         chooser=""
     }
@@ -323,7 +340,7 @@ import kotlinx.coroutines.*
 }
 
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
-    val categories=listOf("媒体来源","首页与外观","播放","设备与诊断","关于")
+    val categories=listOf("媒体来源","主题","外观","首页","字体","性能","播放","设备与诊断","关于")
     @Composable fun Category(cat:String) {
         FocusTile("settings:$cat",Modifier.width(if(LocalCompact.current) 140.dp else 165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
@@ -331,9 +348,9 @@ import kotlinx.coroutines.*
     }
     if(LocalCompact.current) androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
         items(categories.size) {Category(categories[it])}
-    } else Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))
-        categories.forEach {Category(it)}
+    } else LazyColumn(Modifier.testTag("settings:categories"),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+        item {Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))}
+        items(categories.size,key={categories[it]}) {Category(categories[it])}
     }
 }
 

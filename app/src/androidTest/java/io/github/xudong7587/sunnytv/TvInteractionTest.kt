@@ -173,7 +173,7 @@ class TvInteractionTest {
         rule.waitForIdle()
         rule.onNodeWithTag("episode-layout:horizontal").assertIsFocused()
     }
-    @Test fun offscreenAccentRowsMoveDownThroughPartialRowAndIntoNextSetting() {
+    @Test fun offscreenAccentRowsMoveDownThroughPartialRowInThemeCategory() {
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
             activity.setContentForTest {
@@ -182,10 +182,10 @@ class TvInteractionTest {
                 }}
             }
         }
-        rule.onNodeWithTag("settings:首页与外观").performClick()
-        rule.onNodeWithTag("settings:viewport").performScrollToIndex(4)
+        rule.onNodeWithTag("settings:主题").performClick()
+        rule.onNodeWithTag("settings:viewport").performScrollToIndex(3)
         focus("accent:2")
-        listOf("accent:5","accent:8","accent:9","setting:首页轮播").fold("accent:2") {current,next->
+        listOf("accent:5","accent:8","accent:9").fold("accent:2") {current,next->
             rule.onNodeWithTag(current).performKeyInput {pressKey(Key.DirectionDown)}
             rule.waitForIdle()
             rule.onNodeWithTag(next).assertIsFocused()
@@ -276,7 +276,7 @@ class TvInteractionTest {
                 }}
             }
         }
-        rule.onNodeWithTag("settings:首页与外观").performClick()
+        rule.onNodeWithTag("settings:字体").performClick()
         repeat(5) {index->
             rule.onNodeWithTag("settings:viewport").performScrollToNode(hasTestTag("font-size:$index"))
             focus("font-size:$index")

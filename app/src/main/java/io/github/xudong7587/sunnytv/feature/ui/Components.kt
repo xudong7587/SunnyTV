@@ -27,6 +27,9 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -77,10 +80,10 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
     val dark=model.settings.darkTheme
     val outline=if(dark) base.focusContent else base.focusBackground
-    val outlineWidth=if(dark) 1.67.dp else .5.dp
-    // In light mode, elevation and a border compete for the same visual job. Use one at a time.
+    val outlineWidth=if(dark) 1.67.dp else 2.dp
+    // A crisp theme border remains visible even when soft shadows are enabled.
     val showShadow=model.settings.shadowsEnabled && !dark && focused
-    val showOutline=focused && focusOutline && (dark || !model.settings.shadowsEnabled)
+    val showOutline=focused && focusOutline
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45)
@@ -90,7 +93,9 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             }
         }
     }
-    Box(modifier.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
+    Box(modifier.onGloballyPositioned {
+        if(homeNavigator!=null) {val p=it.positionInRoot();homeNavigator.placed(id,Rect(p.x,p.y,p.x+it.size.width,p.y+it.size.height))}
+    }.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
             if(it.isFocused && pageActive) { model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
@@ -116,7 +121,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     }
 }
 
-@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),modifier:Modifier=Modifier,onClick:()->Unit) {
+@Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,icon:String=actionIcon(text),modifier:Modifier=Modifier,alwaysShowLabel:Boolean=false,onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=RoundedCornerShape(28.dp),button=true,onClick=onClick) { focused ->
@@ -125,7 +130,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             LineIcon(icon,ink)
             val motion=LocalMotion.current
-            AnimatedVisibility(focused || active,enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
+            AnimatedVisibility(focused || active || alwaysShowLabel,enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
                 exit=shrinkHorizontally(motion.spring())+fadeOut(motion.fade(240))) {
                 Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
                     modifier=Modifier.padding(start=8.dp),maxLines=1)
@@ -146,14 +151,14 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             val service=remember(source) { model.app.emby(source) }
             val view=LocalView.current
             val density=LocalDensity.current.density
-            val lowRam=(LocalContext.current.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+            val lowRam=model.app.lean(model.settings)
             val densityScale=(density/2f).coerceAtLeast(1f)
-            val maxPixels=if(lowRam) 1920 else 3840
+            val maxPixels=if(lowRam) 1280 else 3840
             val actualWidth=(widthPx*densityScale*(if(model.settings.highQualityArtwork) 1.25f else 1f)).toInt()
                 .coerceAtMost(minOf(maxPixels,maxOf(view.width,view.height,1280))).coerceAtLeast(64)
             val context=LocalContext.current
-            val fadeMs=LocalMotion.current.duration(300)
-            val request=remember(art,actualWidth,source.id,fadeMs) {
+            val fadeMs=if(lowRam) 0 else LocalMotion.current.duration(300)
+            val request=remember(art,actualWidth,source,fadeMs,fit,item.type) {
                 ImageRequest.Builder(context).data(service.imageUrl(art,actualWidth))
                     .size(actualWidth,if(art.type=="Primary" && !fit && item.type!="Episode") actualWidth*3/2 else actualWidth*9/16).precision(coil.size.Precision.INEXACT)
                     .memoryCacheKey("${source.id}:${art.itemId}:${art.type}:${art.tag}:$actualWidth")

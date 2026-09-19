@@ -49,6 +49,7 @@ fun actionIcon(text:String):String=when {
         "heart"->"M12 21 C9 18 2 13 2 7 C2 1 10 1 12 6 C14 1 22 1 22 7 C22 13 15 18 12 21 Z"
         "check"->"M4 12 L9 18 L21 5"
         "sort"->"M4 6 L16 6 M4 11 L12 11 M4 16 L8 16 M19 10 L19 21 M15 17 L19 21 L23 17"
+        "sort-directions"->"M7 21 L7 3 M2 8 L7 3 L12 8 M17 3 L17 21 M12 16 L17 21 L22 16"
         "ascending"->"M12 21 L12 3 M5 10 L12 3 L19 10"
         "descending"->"M12 3 L12 21 M5 14 L12 21 L19 14"
         "list"->"M4 5 L5 5 M9 5 L21 5 M4 12 L5 12 M9 12 L21 12 M4 19 L5 19 M9 19 L21 19"

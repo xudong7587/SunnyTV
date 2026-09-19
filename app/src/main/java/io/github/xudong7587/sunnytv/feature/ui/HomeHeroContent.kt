@@ -24,7 +24,7 @@ import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.feature.Route
 
-/** The focused square stays in place; media rotates beneath it. One full left lap then exits to Play. */
+/** The focused square stays in place; media rotates beneath it. One full left lap then exits to the resume shortcuts. */
 @Composable fun RotatingHeroCards(items:List<MediaEntry>,selected:Int,onSelect:(Int)->Unit,
     modifier:Modifier=Modifier,id:String="home-carousel",requester:FocusRequester?=null,
     onExitLeft:(()->Unit)?=null,onExitDown:(()->Unit)?=null) {
@@ -108,7 +108,6 @@ import io.github.xudong7587.sunnytv.feature.Route
     resume:List<MediaEntry>,onExitDown:()->Unit,onPlay:(MediaEntry,Boolean)->Unit) {
     val compact=LocalCompact.current
     val carouselFocus=remember {FocusRequester()}
-    val playFocus=remember {FocusRequester()}
     val quickFocus=remember {FocusRequester()}
     val exitDown by rememberUpdatedState(onExitDown)
     @Composable fun Copy() {
@@ -118,17 +117,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                 Text(hero.subtitle,color=SunnyColors.Secondary,fontSize=12.sp)
                 Text(hero.overview.ifBlank {"来自你的媒体库"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,
                     maxLines=if(compact) 2 else 3,overflow=TextOverflow.Ellipsis)
-                if(hero.isPlayable || hero.type in setOf("Series","Season")) {
-                    Action(if(hero.positionMs>0) "继续播放" else "立即播放",id="home-play",primary=true,
-                        modifier=Modifier.focusRequester(playFocus)
-                            .focusProperties {right=carouselFocus}
-                            .onPreviewKeyEvent {event->
-                                if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
-                                    if(resume.isNotEmpty()) quickFocus.requestFocus() else exitDown()
-                                    true
-                                } else false
-                            }) {onPlay(hero,false)}
-                }
+
             } else Text("暂无推荐",color=SunnyColors.Text,fontSize=28.sp)
             if(resume.isNotEmpty()) {
                 Text("继续播放",color=SunnyColors.Secondary,fontSize=11.sp)
@@ -138,7 +127,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             .then(if(i==0) Modifier.focusRequester(quickFocus) else Modifier)
                             .onPreviewKeyEvent {event->
                                 if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
-                                    Key.DirectionUp -> {playFocus.requestFocus();true}
+                                    Key.DirectionUp -> {runCatching {carouselFocus.requestFocus()};true}
                                     Key.DirectionDown -> {exitDown();true}
                                     else -> false
                                 }
@@ -155,6 +144,8 @@ import io.github.xudong7587.sunnytv.feature.Route
                     }
                 }
             }
+            Text("向下查看更多媒体  ↓",color=SunnyColors.Secondary,fontSize=11.sp,
+                modifier=Modifier.padding(top=4.dp))
         }
     }
     val carouselDown:()->Unit={
@@ -163,11 +154,11 @@ import io.github.xudong7587.sunnytv.feature.Route
     if(compact) Column(Modifier.fillMaxSize().padding(horizontal=18.dp).padding(top=pageTopPadding,bottom=20.dp),
         verticalArrangement=Arrangement.spacedBy(18.dp,Alignment.Bottom)) {
         Copy()
-        RotatingHeroCards(candidates,selected,onSelect,onExitLeft={playFocus.requestFocus();Unit},onExitDown=carouselDown)
+        RotatingHeroCards(candidates,selected,onSelect,requester=carouselFocus,onExitLeft=if(resume.isNotEmpty()) {{quickFocus.requestFocus();Unit}} else null,onExitDown=carouselDown)
     } else Row(Modifier.fillMaxSize().padding(horizontal=30.dp).padding(top=pageTopPadding,bottom=28.dp),
         horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.Bottom) {
         Box(Modifier.weight(.4f)) {Copy()}
         RotatingHeroCards(candidates,selected,onSelect,Modifier.weight(.6f),requester=carouselFocus,
-            onExitLeft={playFocus.requestFocus();Unit},onExitDown=carouselDown)
+            onExitLeft=if(resume.isNotEmpty()) {{quickFocus.requestFocus();Unit}} else null,onExitDown=carouselDown)
     }
 }

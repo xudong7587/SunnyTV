@@ -83,7 +83,9 @@ class ConfigStore(context: Context) {
         }.toMap(),
         prefs.getFloat("animationSpeed",1f).takeIf {it in MotionPolicy.speeds} ?: 1f,
         prefs.getInt("fontScale",2).coerceIn(0,4),
-        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true)
+        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true),
+        PerformancePolicy.cacheSize(prefs.getInt("artworkCacheMiB",512)),
+        prefs.getString("performanceMode","auto").takeIf {it in PerformancePolicy.modes} ?: "auto"
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -91,7 +93,9 @@ class ConfigStore(context: Context) {
         s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
         libraryEditor.apply()
-        prefs.edit().putBoolean("shadows",s.shadowsEnabled).putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
+        prefs.edit().putInt("artworkCacheMiB",PerformancePolicy.cacheSize(s.artworkCacheMiB))
+        .putString("performanceMode",s.performanceMode.takeIf {it in PerformancePolicy.modes} ?: "auto")
+        .putBoolean("shadows",s.shadowsEnabled).putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
         .putBoolean("backdrop",s.backdropEnabled).putBoolean("resume",s.showResume).putBoolean("next",s.showNextUp)
         .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds)
         .putBoolean("dark",s.darkTheme).putInt("accent",s.accentIndex).putString("artworkMode",s.artworkMode)
