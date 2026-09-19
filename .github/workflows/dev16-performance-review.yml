@@ -1,0 +1,49 @@
+name: Dev16 performance review
+on:
+  push:
+    branches: [perf/dev16-stable-focus-motion]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dev16-performance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive tracked source only
+        run: git archive --format=zip --output=source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev16-review-source
+          path: source.zip
+          retention-days: 7
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Compile, unit tests and lint (no release or signing-key changes)
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dev16-review-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 7
