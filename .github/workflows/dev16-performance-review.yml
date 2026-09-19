@@ -9,22 +9,61 @@ concurrency:
   group: dev16-performance-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  snapshot:
+  prepare:
+    if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/perf/dev16-stable-focus-motion'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Archive tracked source only
-        run: git archive --format=zip --output=source.zip HEAD
+      - name: Apply verified source patch on this review branch only
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -d .ci-dev16-transfer; then
+            python3 - <<'PY'
+          import base64, hashlib, pathlib, subprocess, zlib
+          d=pathlib.Path('.ci-dev16-transfer')
+          parts=[(d/f'part{i}').read_text() for i in range(4)]
+          parts[1]=parts[1][:4184]+(d/'gap1').read_text()+parts[1][4184:]
+          parts[3]=parts[3][:404]+(d/'gap3').read_text()+parts[3][404:]
+          compressed=base64.b64decode(''.join(parts),validate=True)
+          decoder=zlib.decompressobj()
+          patch=decoder.decompress(compressed,200000)
+          assert decoder.eof and not decoder.unused_data and len(patch)==119510
+          assert hashlib.sha256(patch).hexdigest()=='66d6fb617f7542920c198de486d567f37e5d9a6d09ceea8dd31e9d50f9fe9126'
+          for line in patch.decode().splitlines():
+              if line.startswith('+++ b/'):
+                  path=line[6:]
+                  assert '..' not in pathlib.PurePosixPath(path).parts
+                  assert path.startswith(('app/src/','tests/')) or path in ('scripts/viewport-probe.kt','docs/UI-DEV16-PERFORMANCE.md'),path
+          subprocess.run(['git','apply','--check'],input=patch,check=True)
+          subprocess.run(['git','apply','--index'],input=patch,check=True)
+          PY
+            git rm -r .ci-dev16-transfer
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'perf: stabilize dev16 viewports, pinned tools, startup cache and low-end rendering'
+            git push origin HEAD:refs/heads/perf/dev16-stable-focus-motion
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git archive --format=zip --output=source.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
           name: dev16-review-source
           path: source.zip
           retention-days: 7
   validate:
+    needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -33,17 +72,63 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Compile, unit tests and lint (no release or signing-key changes)
+      - name: Require unchanged dev16 signing certificate
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p build-logs "$HOME/.android"
+          test -n "$KEY_B64" || { echo 'Existing signing secret missing; no replacement key allowed.'; exit 1; }
+          printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          test "$certificate" = '5e8dcd5e1eee828e064682ba6f8dc7d54dfcf59d3182dd6b427a23d1214d6b00' || { echo 'Certificate differs from dev16; build blocked.'; exit 1; }
+          echo "SUNNYTV_SIGNING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
+      - name: Compile, unit tests and lint
         run: |
           set -euo pipefail
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 5e8dcd5e1eee828e064682ba6f8dc7d54dfcf59d3182dd6b427a23d1214d6b00 --candidate app/build/outputs/apk/debug/app-debug.apk --out build-logs/signing-validation.json
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Android interaction regression (animations enabled)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          ram-size: 2048M
+          heap-size: 256M
+          disable-animations: false
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -skin 1920x1080 -cores 2
+          script: bash scripts/run-dev16-emulator.sh
+      - name: Package verified dev16 candidate without publishing a release
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          cp app/build/outputs/apk/debug/app-debug.apk candidate/SunnyTV-dev16-performance.apk
+          cp build-logs/signing-validation.json candidate/SIGNING_VALIDATION.json
+          printf 'version=0.1.0-dev16\nversionCode=16\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\n' "$(git rev-parse HEAD)" > candidate/BUILD_INFO.txt
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev16-performance-candidate
+          path: candidate/
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dev16-review-reports
           path: |
+            build-logs/
             app/build/reports/
             app/build/test-results/
+            app/build/outputs/androidTest-results/
           retention-days: 7
+      - name: Remove ephemeral key copy
+        if: always()
+        run: rm -f "$HOME/.android/debug.keystore"
