@@ -2,40 +2,111 @@
 <h1 align="center">SunnyTV</h1>
 <p align="center">让自己的媒体库，回到大屏。</p>
 
-## 项目亮点
+<p align="center">
+  <a href="https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev25">下载 0.1.0-dev25</a> ·
+  <a href="docs/RELEASE-dev25.md">本版说明</a> ·
+  <a href="docs/STATUS.md">开发状态</a> ·
+  <a href="docs/KNOWN-ISSUES.md">已知问题</a> ·
+  <a href="docs/BUILD.md">构建说明</a>
+</p>
 
-- 为 TV 横屏设计的原生界面，支持遥控器焦点导航、轮播推荐、继续观看和按库浏览。
-- 使用 Emby 已有的海报、背景、透明片名 Logo 与单集封面，保留观看进度和收藏状态。
-- 字幕按当前媒体的实际轨道选择，库级设置只作优先级；点击演员可查看介绍与关联作品。
-- 单集支持横向海报、竖向简介和数字选集三种排布，各媒体库可独立保存展示方式。
-- 深浅主题、十组重点色、五档界面大小与独立字号；支持导入自定义字体。
-- TV 横向选片固定纵向位置，宽窄海报协调切换；动画支持五档速度与完全关闭。
-- 手机竖屏自适应，播放页支持分区亮度、音量、进度手势和双击控制。
+SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端，以 Emby 为主要媒体来源，
+同时保留 MediaIndex STRM / 重定向播放与 CloudDrive2 WebDAV 兼容能力。应用不内置任何影视内容，
+需要连接你自己的媒体服务；海报、背景、透明片名 Logo 与单集封面都直接复用 Emby 已有素材，不重新刮削。
 
-![SunnyTV 首页示意](docs/images/home.svg)
+**电视与手机/平板同一套界面**：电视保留遥控器焦点导航与「banner ↔ 媒体区」整屏切换；
+手机与平板改为可触摸的单列滚动，并收紧了 banner 与媒体区之间的留白。
 
-![三种单集排布示意](docs/images/episodes.svg)
+## 主要功能
 
-![媒体库示意](docs/images/library.svg)
+- **首页**：一大一小两段式 banner 轮播（随机推荐 / 最新入库 / 继续观看），按「上」或下拉可换一批；
+  下方是「我的媒体库」与每个媒体库的最新入库行。
+- **媒体库**：banner 推荐 + 工具行 + 海报墙。每个媒体库独立保存展示方式（海报 / 背景 / 横幅）、
+  排序（最新入库 / 最新上映 / 随机）、字幕优先级、单集排布与「按文件夹」浏览。
+- **详情页**：简介、版本（多资源）、演职员表、相似推荐与全部剧集，可标记已看/收藏并写回 Emby。
+- **播放器**：Media3 直连与 STRM/重定向播放、音轨与字幕轨道选择、章节、片头/片尾跳过提示、
+  1x / 1.25x / 1.5x / 2x 倍速、字幕外观（字体、大小、描边、位置、背景，带实时预览）、
+  电视遥控器长按左右连续快进快退、手机分区手势（亮度/音量/进度）与双击控制。
+- **外观**：深浅主题、十组重点色、五档界面大小与独立字号、五档动画速度与完全关闭。
+- **字体**：系统默认字体，或自己导入 TTF / OTF / TTC（只保存在本机）。**仓库与安装包不含任何字体文件。**
+- **搜索**：遥控器键盘 + 本地拼音首字母匹配（输入 `sdyq` 可命中「速度与激情」，无需联网、不内置词典）。
+- **云盘**：CloudDrive2 WebDAV 只读浏览与播放，不提供删除、移动、重命名。
+- **性能**：启动快照缓存、图片按「来源 + 条目 + 类型 + tag + 尺寸」缓存、低负载模式、界面分辨率偏好。
 
-以上均为界面示意图，片名、简介、年份、海报图形和进度全部为原创虚构数据，未使用真实影视素材或用户媒体库截图。图形由 [本地脚本](scripts/generate-readme-art.py) 生成。
+## 界面示意
 
-## 简单介绍
+![SunnyTV 首页界面示意](docs/images/home.svg)
 
-SunnyTV 是基于 Kotlin、Compose TV 和 Media3 的 Android 媒体客户端，以 Emby 为主要媒体来源，也保留 MediaIndex STRM / 重定向播放与 CloudDrive2 WebDAV 兼容能力。应用不内置影视内容，需要连接自己的媒体服务。
+![SunnyTV 媒体库界面示意](docs/images/library.svg)
 
-当前发布为 **0.1.0-dev11 开发测试版**。本机 Android 构建、39 个单元测试及 27 项 TV 模拟器交互测试通过，lint 无错误；实体电视兼容性、4K 实际帧率、HDR 与音频能力仍需按设备验证，详见 [开发状态](docs/STATUS.md)。
+![SunnyTV 三种单集排布示意](docs/images/episodes.svg)
 
-[下载开发版](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev11) · [本轮更新](docs/UI-DEV11.md) · [构建说明](docs/BUILD.md)
+![SunnyTV 手机与平板界面示意](docs/images/handset.svg)
 
-本地构建需要 JDK 17 或 21、Android SDK 35：
+以上均为界面示意图：片名、简介、年份、评分、进度与海报图形全部是原创虚构数据，未使用任何真实影视素材，
+也不是用户媒体库截图；图形由 [本地脚本](scripts/generate-readme-art.py) 生成（纯手写 SVG，无外部图片、字体或网络请求）。
+
+## 快速开始
+
+需要 JDK 17 或 21 与 Android SDK 35（`platforms;android-35`、`build-tools;35.0.0`）。
 
 ```bash
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
 
-Windows 使用 `gradlew.bat`。测试 APK 使用 `.debug` 包名和 debug 签名。
+Windows 用 `gradlew.bat`。发布包在 [Releases](https://github.com/xudong7587/SunnyTV/releases) 下载，
+或安装刚构建出来的调试包：
+
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+首次使用进入「设置 → 媒体来源」填写 Emby 地址与账号；云盘填 CloudDrive2 的 **WebDAV** 地址
+（不是管理后台地址）。凭据按来源保存，只在本机。
+
+## 验证状态（0.1.0-dev25）
+
+| 项目 | 结果 |
+| --- | --- |
+| 单元测试（含纯 Kotlin 契约检查） | 64 项全部通过 |
+| `lintDebug` | 0 错误 / 28 警告 |
+| Android 编译与测试 APK | `assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease` 均通过 |
+| 模拟器交互测试（API 30） | 59 项执行，其中 8 项是落后于现有界面行为的旧断言，见 [已知问题](docs/KNOWN-ISSUES.md) |
+| 发布签名 | 使用仓库既有签名 Secret 签名并校验证书一致；[签名策略](docs/SIGNING.md) |
+| 实体设备 | 电视端交互与手机/平板触摸布局已由使用者人工验收；HDR、杜比、高帧率与部分机型的播放兼容性未验证 |
+
+最近三轮的改动记录：[外框与阴影留白](docs/UI-DEV23.md)、[返回 banner 卡顿](docs/UI-DEV24.md)、
+[手机/平板间距](docs/UI-DEV25.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
+
+## 实现取向
+
+- 页面全部是原生 Compose / Media3，**不用 WebView 承载任何主页面**。
+- 网络策略集中在 `core/network`（来源与路径作用域凭据、有界重定向、严格 TLS、统一播放 UA、可取消请求、不记录签名 URL）。
+- API URL 只在 `source/` 适配器里拼装，UI 不直接构造接口地址，播放器不接触云盘 Cookie。
+- 焦点效果不改变卡片几何；柔和阴影用缓存的轮廓描边带绘制，描边与卡片圆角同心，行内预留阴影留白。
+- 多来源互不合并：同一时间只显示所选 Emby 来源，切换来源不影响缓存与配置。
+
+主要目录：
+
+```
+app/src/main/java/io/github/xudong7587/sunnytv/
+  core/model     展示逻辑、设置模型、策略（纯 Kotlin，可单测）
+  core/network   HTTP 策略与安全传输
+  core/storage   配置、字体、启动快照
+  core/playback  播放会话、进度回报、启动计时
+  feature/ui     首页、媒体库、详情、设置等界面
+  feature/player 播放器与手势
+  source/emby    Emby 适配器（含元数据与图片 URL）
+  source/clouddrive, source/strm  WebDAV 与 STRM / 重定向
+```
+
+## 已知限制
+
+- 模拟器验证不等于实体电视验收；真实设备上的遥控器手感、触摸手感与高码率播放仍需实机反馈。
+- 8 项仪器化断言落后于已被验收的界面行为，未通过跳过测试的方式掩盖，逐条列在 [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md)。
+- 云端只读：不做删除、移动、重命名；应用内不提供文件管理。
 
 ## 开源许可
 
-原创代码与原创示意图采用 [GPL-3.0-only](LICENSE)。分发修改后的版本须遵守 GPL 的源码提供、许可证及署名保留要求；GPL 允许商业使用。第三方组件保留各自许可证，详见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+原创代码与原创示意图采用 [GPL-3.0-only](LICENSE)。分发修改后的版本须遵守 GPL 的源码提供、
+许可证与署名保留要求；GPL 允许商业使用。第三方组件的许可证见 [第三方声明](THIRD_PARTY_NOTICES.md)。
