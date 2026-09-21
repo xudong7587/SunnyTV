@@ -9,10 +9,12 @@ object HomeFocusPlan {
     const val NEXT_UP = "next-up"
     fun latest(libraryKey: String) = "latest:$libraryKey"
     fun sections(libraryKeys: List<String>, hasNextUp: Boolean): List<HomeFocusSection> = buildList {
-        add(HomeFocusSection(LIBRARIES, 0, "more:我的媒体库", "library:"))
-        if (hasNextUp) add(HomeFocusSection(NEXT_UP, 1, null, "shelf:接着看下一集:"))
+        // Lazy index 0 is the hero. Keep the first media-library row as its own adjacent item so
+        // crossing the hero boundary does not move one oversized composable every frame.
+        add(HomeFocusSection(LIBRARIES, 1, "more:我的媒体库", "library:"))
+        if (hasNextUp) add(HomeFocusSection(NEXT_UP, 2, null, "shelf:接着看下一集:"))
         libraryKeys.distinct().forEachIndexed { index, key ->
-            add(HomeFocusSection(latest(key), 1 + (if (hasNextUp) 1 else 0) + index, "more:$key", "latest:$key:"))
+            add(HomeFocusSection(latest(key), 2 + (if (hasNextUp) 1 else 0) + index, "shelf-sort:$key", "latest:$key:"))
         }
     }
     @Suppress("UNUSED_PARAMETER")

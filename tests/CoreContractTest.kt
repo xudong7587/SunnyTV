@@ -146,6 +146,13 @@ fun runContractSuite() {
     test("startup no negative duration") {eq(StartupTiming.between(5,4),null)}
     test("startup large monotonic timestamps") {eq(StartupTiming.between(Long.MAX_VALUE-10,Long.MAX_VALUE),10L)}
 
+    // dev22: subtitle appearance is pure policy shared by the player and the settings preview.
+    test("subtitle scale clamps to the table") {eq(SubtitleAppearance.scale(-3),.75f);eq(SubtitleAppearance.scale(9),1.3f)}
+    test("subtitle edge falls back to outline") {eq(SubtitleAppearance.edge("bogus"),SubtitleAppearance.EDGE_OUTLINE)}
+    test("subtitle background falls back to black") {eq(SubtitleAppearance.background("nope"),SubtitleAppearance.BACKGROUND_BLACK)}
+    test("subtitle position maps to bottom padding") {eq(SubtitleAppearance.bottomPaddingFraction(SubtitleAppearance.POSITION_TOP),.5f)}
+    test("subtitle standard position stays near the bottom") {eq(SubtitleAppearance.bottomPaddingFraction(SubtitleAppearance.POSITION_STANDARD),.08f)}
+
     println("\nRESULT: $passed passed / $failed failed")
     check(failed==0) {"Contract tests failed"}
 }

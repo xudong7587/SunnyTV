@@ -7,9 +7,9 @@ import org.junit.Test
 class HomeFocusPlanTest {
     private val libraries = listOf("a:lib0", "a:lib1", "b:lib0", "b:lib1")
     @Test fun lazyIndicesMatchOnlyActuallyRenderedRegions() {
-        assertEquals(listOf(0,1,2,3,4), Plan.sections(libraries,false).map {it.lazyIndex})
-        assertEquals(listOf(0,1,2,3,4,5), Plan.sections(libraries,true).map {it.lazyIndex})
-        assertEquals(listOf(0,1), Plan.sections(listOf("a:lib0","a:lib0"),false).map {it.lazyIndex})
+        assertEquals(listOf(1,2,3,4,5), Plan.sections(libraries,false).map {it.lazyIndex})
+        assertEquals(listOf(1,2,3,4,5,6), Plan.sections(libraries,true).map {it.lazyIndex})
+        assertEquals(listOf(1,2), Plan.sections(listOf("a:lib0","a:lib0"),false).map {it.lazyIndex})
     }
     @Test fun everySelectedLibraryContinuesToTheNextVisibleRegion() {
         val sections=Plan.sections(libraries,false)

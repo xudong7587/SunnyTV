@@ -30,6 +30,12 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     ).toString(Charsets.UTF_8)
 
     suspend fun views(): List<MediaEntry> = parsePage(get("Users/${config.userId}/Views")).items
+    /** True when this account is allowed to delete media from the server. Read once per source. */
+    suspend fun canDeleteContent(): Boolean {
+        val policy=JSONObject(get("Users/${config.userId}")).optJSONObject("Policy") ?: return false
+        return policy.optBoolean("EnableContentDeletion",false) ||
+            (policy.optJSONArray("EnableContentDeletionFromFolders")?.length() ?: 0)>0
+    }
     suspend fun item(id: String): MediaEntry = withContext(Dispatchers.Default) {
         parseItem(JSONObject(get("Users/${config.userId}/Items/$id",
             mapOf("Fields" to "$fields,Chapters,People,MediaSources,MediaStreams"))))
@@ -98,6 +104,18 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         val request = Request.Builder().url(url("Users/${config.userId}/FavoriteItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
         return userDataResult(item,client.bytes(request.build()).toString(Charsets.UTF_8),favorite=value)
+    }
+    /** Asks the server to rebuild metadata and images. Recursive is used for a whole library. */
+    suspend fun refreshMetadata(id:String,recursive:Boolean=false) {
+        val query=mutableMapOf("MetadataRefreshMode" to "FullRefresh","ImageRefreshMode" to "Default",
+            "ReplaceAllImages" to "false","ReplaceAllMetadata" to "false")
+        if(recursive) query["Recursive"]="true"
+        client.bytes(Request.Builder().url(url("Items/$id/Refresh",query))
+            .post(ByteArray(0).toRequestBody(null)).build())
+    }
+    /** Removes an item from the Emby library. The server enforces the account's delete permission. */
+    suspend fun deleteItem(id:String) {
+        client.bytes(Request.Builder().url(url("Items/$id")).delete().build())
     }
     suspend fun setPlayed(item:MediaEntry,value:Boolean):MediaEntry {
         require(item.isPlayable) {"请在单集或影片页面标记已看"}

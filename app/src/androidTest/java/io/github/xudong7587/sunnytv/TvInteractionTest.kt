@@ -125,7 +125,7 @@ class TvInteractionTest {
         }
         focus("nav:设置")
         rule.onNodeWithTag("nav:设置").performKeyInput {pressKey(Key.DirectionDown)}
-        rule.onNodeWithTag("settings:媒体来源").assertIsFocused()
+        rule.onNodeWithTag("settings:主题").assertIsFocused()
         focus("nav:媒体库")
         rule.onNodeWithTag("nav:媒体库").performClick()
         rule.onNodeWithTag("nav:媒体库").performKeyInput {pressKey(Key.DirectionDown)}
@@ -173,7 +173,7 @@ class TvInteractionTest {
         rule.waitForIdle()
         rule.onNodeWithTag("episode-layout:horizontal").assertIsFocused()
     }
-    @Test fun offscreenAccentRowsMoveDownThroughPartialRowAndIntoNextSetting() {
+    @Test fun offscreenAccentRowsMoveDownThroughPartialRowInThemeCategory() {
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
             activity.setContentForTest {
@@ -182,10 +182,10 @@ class TvInteractionTest {
                 }}
             }
         }
-        rule.onNodeWithTag("settings:首页与外观").performClick()
-        rule.onNodeWithTag("settings:viewport").performScrollToIndex(4)
+        rule.onNodeWithTag("settings:主题").performClick()
+        rule.onNodeWithTag("settings:viewport").performScrollToIndex(3)
         focus("accent:2")
-        listOf("accent:5","accent:8","accent:9","setting:首页轮播").fold("accent:2") {current,next->
+        listOf("accent:5","accent:8","accent:9").fold("accent:2") {current,next->
             rule.onNodeWithTag(current).performKeyInput {pressKey(Key.DirectionDown)}
             rule.waitForIdle()
             rule.onNodeWithTag(next).assertIsFocused()
@@ -208,11 +208,12 @@ class TvInteractionTest {
         focus("library-sort")
         rule.onNodeWithTag("library-sort").performKeyInput {pressKey(Key.DirectionDown)}
         (0..27 step 3).forEach {index->
-            rule.onNodeWithTag("grid:fixture:poster-$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
+            rule.onNodeWithTag("library-slot:$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionDown)}
         }
-        rule.onNodeWithTag("library-more").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+        // dev20 removed the focusable "load more" row; the last poster keeps focus.
+        rule.onNodeWithTag("library-slot:27").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
         (27 downTo 0 step 3).forEach {index->
-            rule.onNodeWithTag("grid:fixture:poster-$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+            rule.onNodeWithTag("library-slot:$index").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
         }
         rule.onNodeWithTag("library-sort").assertIsFocused()
     }
@@ -276,13 +277,14 @@ class TvInteractionTest {
                 }}
             }
         }
-        rule.onNodeWithTag("settings:首页与外观").performClick()
+        // dev22 merged 字体 into 外观.
+        rule.onNodeWithTag("settings:外观").performClick()
         repeat(5) {index->
             rule.onNodeWithTag("settings:viewport").performScrollToNode(hasTestTag("font-size:$index"))
             focus("font-size:$index")
             rule.onNodeWithTag("font-size:$index").performKeyInput {pressKey(Key.DirectionDown)}
             rule.waitForIdle()
-            rule.onNodeWithTag("setting:字体").assertIsFocused()
+            rule.onNodeWithTag("setting:界面字体").assertIsFocused()
         }
     }
     @Test fun actorsMoveDownIntoOffscreenRecommendationsAndBackUp() {
@@ -377,7 +379,7 @@ class TvInteractionTest {
         rule.onNodeWithTag("detail-back").assertDoesNotExist()
     }
 
-    @Test fun detailHidesPinnedNavigation() {
+    @Test fun detailKeepsPinnedNavigation() {
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)
             model.navigate(Route.Detail(entries.first()))
@@ -385,24 +387,33 @@ class TvInteractionTest {
                 CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {SunnyRoot {_,_->}}}
             }
         }
-        rule.onNodeWithTag("nav:首页").assertDoesNotExist()
+        // dev22 acceptance round 3: the library and detail pages show the pinned bar again.
+        rule.onNodeWithTag("nav:首页").assertExists()
         rule.onNodeWithTag("detail-play").assertExists()
     }
 
     @Test fun libraryHeaderCanMoveDownAndEscapeReturnsToParent() {
         lateinit var model:AppModel
         val library=MediaEntry("library","fixture","示例媒体库","CollectionFolder")
+        // A realistic shelf: a short page cannot scroll far enough to align the tool row.
+        val shelf=(0..29).map {MediaEntry("shelf-$it","fixture","条目 $it","Movie")}
         rule.activityRule.scenario.onActivity {activity->
             model=AppModel(activity.application,false)
-            model.pages[library.key]=MediaPage(entries,entries.size)
+            model.pages[library.key]=MediaPage(shelf,shelf.size)
             model.navigate(Route.Library(library))
             activity.setContentForTest {
                 CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme {SunnyRoot {_,_->}}}
             }
         }
-        focus("hero:fixture:0")
-        rule.onNodeWithTag("hero:fixture:0").performKeyInput {pressKey(Key.DirectionDown)}
+        // dev22: the library recommendation bar is the same large/small block carousel as home.
+        focus("library-carousel:featured")
+        rule.onNodeWithTag("library-carousel:featured").performKeyInput {pressKey(Key.DirectionDown)}
         rule.onNodeWithTag("library-sort").assertIsFocused()
+        // The tool row must land at the top of the page, not halfway down with a banner strip above.
+        val toolsTop=rule.onNodeWithTag("library-sort").getUnclippedBoundsInRoot().top.value
+        // The row's content sits just below the pinned bar (its inset), never halfway down the screen.
+        assertTrue("tool row should sit at the top of the media area, was $toolsTop",toolsTop<160f)
+        saveScreenshot("dev22-library-down.png")
         rule.onNodeWithTag("library-sort").performKeyInput {pressKey(Key.Escape)}
         rule.runOnIdle {assertEquals(Route.Home,model.route)}
     }

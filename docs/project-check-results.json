@@ -2,27 +2,39 @@
   "scope": "source/XML/script sanity only; not Android compile",
   "checks": [
     {
-      "name": "XML app/src/main/AndroidManifest.xml",
+      "name": "XML app\\src\\main\\AndroidManifest.xml",
       "passed": true
     },
     {
-      "name": "XML app/src/main/res/values/styles.xml",
+      "name": "XML app\\src\\main\\res\\drawable\\ic_sunny.xml",
       "passed": true
     },
     {
-      "name": "XML app/src/main/res/xml/network_security_config.xml",
+      "name": "XML app\\src\\main\\res\\drawable\\ic_sun_brand.xml",
       "passed": true
     },
     {
-      "name": "XML app/src/main/res/drawable/ic_sunny.xml",
+      "name": "XML app\\src\\main\\res\\drawable\\ic_sun_brand_light.xml",
       "passed": true
     },
     {
-      "name": "XML app/src/main/res/drawable/tv_banner.xml",
+      "name": "XML app\\src\\main\\res\\drawable\\tv_banner.xml",
       "passed": true
     },
     {
-      "name": "Python syntax export-preview.py",
+      "name": "XML app\\src\\main\\res\\values\\styles.xml",
+      "passed": true
+    },
+    {
+      "name": "XML app\\src\\main\\res\\xml\\network_security_config.xml",
+      "passed": true
+    },
+    {
+      "name": "Python syntax apply-dev14-hotfix.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax apply-dev15-hotfix.py",
       "passed": true
     },
     {
@@ -30,19 +42,7 @@
       "passed": true
     },
     {
-      "name": "Python syntax test-bootstrap-workflow.py",
-      "passed": true
-    },
-    {
-      "name": "Python syntax test-preview.py",
-      "passed": true
-    },
-    {
       "name": "Python syntax check-project.py",
-      "passed": true
-    },
-    {
-      "name": "Python syntax test-bootstrap.py",
       "passed": true
     },
     {
@@ -50,27 +50,35 @@
       "passed": true
     },
     {
-      "name": "Bash syntax build.sh",
+      "name": "Python syntax export-preview.py",
       "passed": true
     },
     {
-      "name": "Bash syntax device-report.sh",
+      "name": "Python syntax generate-readme-art.py",
       "passed": true
     },
     {
-      "name": "Bash syntax generate-wrapper.sh",
+      "name": "Python syntax test-bootstrap-workflow.py",
       "passed": true
     },
     {
-      "name": "Bash syntax test-core.sh",
+      "name": "Python syntax test-bootstrap.py",
       "passed": true
     },
     {
-      "name": "JavaScript syntax",
+      "name": "Python syntax test-preview.py",
       "passed": true
     },
     {
-      "name": "No preview imagery or redistributed fonts in native app",
+      "name": "Python syntax verify-release-signer.py",
+      "passed": true
+    },
+    {
+      "name": "No preview imagery in native app",
+      "passed": true
+    },
+    {
+      "name": "No bundled font files in the app",
       "passed": true
     }
   ]

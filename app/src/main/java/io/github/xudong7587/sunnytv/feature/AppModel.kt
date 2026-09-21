@@ -14,6 +14,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.util.UUID
+import io.github.xudong7587.sunnytv.core.storage.StartupCache
 
 sealed interface Route {
     data object Home : Route
@@ -24,6 +25,13 @@ sealed interface Route {
     data class Library(val item: MediaEntry) : Route
     data class Detail(val item: MediaEntry) : Route
     data class Folder(val sourceId: String, val path: String, val title: String) : Route
+}
+
+/** Long-press actions on a library or media item. Server-side only; never a local file operation. */
+enum class MediaAction(val label:String,val description:String) {
+    REFRESH_METADATA("刷新元数据","请服务端重新识别并抓取这个条目的信息与图片"),
+    REFRESH_LIBRARY("刷新媒体库","请服务端重新扫描整个媒体库"),
+    DELETE("删除","从 Emby 媒体库移除这个条目；服务端仍按账号权限决定是否同时删除文件")
 }
 
 fun Route.key(): String = when (this) {
@@ -51,7 +59,23 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     val libraryLatest = mutableStateMapOf<String, List<MediaEntry>>()
     val libraryLatestModes = mutableStateMapOf<String, String>()
     var heroCandidates by mutableStateOf<List<MediaEntry>>(emptyList());private set
-    private val artworkFeedSlots=Semaphore(3)
+    /** Bumped on every manual/random carousel rebuild so a focused hero still shows the new sample. */
+    var heroRevision by mutableIntStateOf(0); private set
+    /** Random server-side recommendation strip shown above a library grid. */
+    val recommendations = mutableStateMapOf<String, List<MediaEntry>>()
+    /** Server-side delete permission per source; the detail page only offers delete when true. */
+    val deletePermission = mutableStateMapOf<String, Boolean>()
+    var carouselRefreshing by mutableStateOf(false); private set
+    /** Bumped when a library banner finishes a manual refresh, so the page can move to a new item. */
+    val carouselRevision = mutableStateMapOf<String,Int>()
+    var actionTarget by mutableStateOf<MediaEntry?>(null); private set
+    var pendingDelete by mutableStateOf<MediaEntry?>(null); private set
+    private var heroJob: Job? = null
+    private val artworkFeedSlots=Semaphore(if(app.lean(settings)) 2 else 3)
+    private val staleLatest=mutableSetOf<String>()
+    /** Recently shown carousel entries: fresh media is preferred so the same posters stop repeating. */
+    private val seenHero=linkedSetOf<String>()
+    private val seenRecommend=mutableMapOf<String,LinkedHashSet<String>>()
     val folderPages = mutableStateMapOf<String, MediaPage>()
     val folderPreviews = mutableStateMapOf<String, List<MediaEntry>>()
     val similar = mutableStateMapOf<String,List<MediaEntry>>()
@@ -76,7 +100,14 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         if(restoreSources) viewModelScope.launch {
             try {
                 sources = withContext(Dispatchers.IO) { app.store.sources() }
+                // Only the browsed source is restored from cache; others are never loaded.
+                val snapshots=withContext(Dispatchers.IO) {
+                    activeEmbySources().mapNotNull {config->app.startup.read(config)?.let {config.id to it}}
+                }
+                snapshots.forEach {(id,snapshot)->feeds[id]=snapshot.feed;libraryLatest.putAll(snapshot.shelves)}
+                staleLatest.addAll(libraryLatest.keys)
                 refresh()
+                loadDeletePermission()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -87,6 +118,20 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
 
     fun source(id: String): SourceConfig = sources.firstOrNull { it.id == id }
         ?: throw IllegalArgumentException("来源已移除，请返回并重新选择媒体")
+
+    /**
+     * Exactly one Emby source is browsed: the first configured one (or the explicitly stored id if
+     * it still exists). Every page shows only that source's media; other sources are never merged in.
+     */
+    val activeSourceId:String get() =
+        settings.activeSourceId.takeIf {id->sources.any {it.id==id && it.kind==SourceKind.EMBY}}
+            ?: sources.firstOrNull {it.kind==SourceKind.EMBY}?.id.orEmpty()
+    /** Media sources are browsed one at a time, never merged. */
+    fun activeEmbySources():List<SourceConfig> {
+        val active=activeSourceId
+        return sources.filter {it.kind==SourceKind.EMBY && (active.isBlank() || it.id==active)}
+    }
+    fun activeSourceName():String = sources.firstOrNull {it.id==activeSourceId}?.name.orEmpty()
 
     fun navigate(next: Route, root: Boolean = false) {
         if (next == route) return
@@ -111,9 +156,29 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
 
     fun refresh() {
-        libraryLatest.clear()
-        sources.filter { it.kind == SourceKind.EMBY }.forEach { config ->
-            launchLoad("feed:${config.id}", replace = true) { feeds[config.id] = app.emby(config).home();loadHero() }
+        staleLatest.addAll(libraryLatest.keys)
+        // Only the browsed source is refreshed; other sources stay cached until they are selected.
+        activeEmbySources().forEach { config ->
+            launchLoad("feed:${config.id}", replace = true) {
+                feeds[config.id] = app.emby(config).home()
+                cacheHome(config)
+                // Keep old artwork visible while refreshing only already requested shelves.
+                feeds[config.id]?.libraries?.filter {it.key in staleLatest}?.forEach {loadLatest(it)}
+                loadHero()
+            }
+        }
+    }
+
+    private fun cacheHome(config:SourceConfig) {
+        if(!restoreSources) return
+        val feed=feeds[config.id] ?: return
+        val snapshot=StartupCache.Snapshot(feed,libraryLatest.filterKeys {
+            it.startsWith("${config.id}:") && (libraryLatestModes[it] ?: "DateCreated")=="DateCreated"
+        }.toMap())
+        val generation=app.startup.generation
+        launchLoad("startup:${config.id}",replace=true) {
+            delay(250)
+            withContext(Dispatchers.IO) {app.startup.write(config,snapshot,generation)}
         }
     }
 
@@ -134,8 +199,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         val changed=(libraryLatestModes[item.key] ?: "DateCreated")!=sort
         libraryLatestModes[item.key]=sort
         if(changed) libraryLatest.remove(item.key)
-        if(!changed && libraryLatest.containsKey(item.key)) return
-        launchLoad("latest:${item.key}",replace=changed) {
+        if(!changed && libraryLatest.containsKey(item.key) && item.key !in staleLatest) return
+        launchLoad("latest:${item.key}",replace=changed || item.key in staleLatest) {
             val entries=artworkFeedSlots.withPermit {
                 val source=app.emby(source(item.sourceId))
                 if(sort=="DateCreated") source.latest(item.id,10)
@@ -144,13 +209,22 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             }
             if(libraryLatestModes[item.key]!=sort) return@launchLoad
             entries.forEach {mediaLibraries[it.key]=item.key};libraryLatest[item.key]=entries
+            staleLatest.remove(item.key);cacheHome(source(item.sourceId))
         }
     }
     fun loadHero() {
         val preferences=settings
-        val libraries=feeds.values.flatMap {it.libraries}.filter {preferences.heroAllLibraries || it.key in preferences.heroLibraryKeys}
-        if(preferences.heroMode!="random") {heroCandidates=emptyList();return}
-        launchLoad("hero",replace=true) {
+        val available=activeEmbySources().flatMap {feeds[it.id]?.libraries ?: emptyList()}
+        val chosen=available.filter {it.key in preferences.heroLibraryKeys}
+        // The library list belongs to one source: a selection made on another source must never
+        // leave this one with no candidates, so an empty selection falls back to its own libraries.
+        val libraries=when {
+            preferences.heroAllLibraries -> available
+            chosen.isNotEmpty() -> chosen
+            else -> available
+        }
+        if(preferences.heroMode!="random") {heroCandidates=emptyList();heroRevision++;return}
+        heroJob=launchLoad("hero",replace=true) {
             if(libraries.isEmpty()) {heroCandidates=emptyList();return@launchLoad}
             // Sample at most six libraries and six items each; never enumerate an entire library.
             val sampled=coroutineScope {libraries.shuffled().take(6).map {library->async {
@@ -163,8 +237,179 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             }}.awaitAll()}
             val rows=sampled.map {it.shuffled()}
             // Round-robin selection keeps small libraries represented in the six visible choices.
-            heroCandidates=(0 until 7).flatMap {index->rows.mapNotNull {it.getOrNull(index)}}.distinctBy {it.key}.take(7)
+            val pooled=(0 until 7).flatMap {index->rows.mapNotNull {it.getOrNull(index)}}.distinctBy {it.key}
+            // Fresh media first, then whatever was shown recently, so the carousel keeps moving on.
+            val fresh=pooled.filterNot {it.key in seenHero}
+            heroCandidates=(fresh+pooled.filter {it.key in seenHero}).take(7)
+            heroCandidates.forEach {seenHero.add(it.key)}
+            while(seenHero.size>240) seenHero.remove(seenHero.first())
             if(heroCandidates.isEmpty()) errors["hero"]="所选媒体库暂时没有可用推荐"
+            heroRevision++
+        }
+    }
+    /** Re-samples the home carousel and the shelves behind it; used by the top "pull" gesture. */
+    fun refreshCarousel() {
+        if(carouselRefreshing) return
+        carouselRefreshing=true
+        viewModelScope.launch {
+            try {
+                refresh()
+                // Wait for the feed rows that rebuild the carousel, then for the carousel itself.
+                loads.toMap().filterKeys {it.startsWith("feed:")}.values.forEach {runCatching {it.join()}}
+                heroJob?.let {runCatching {it.join()}}
+                // A manual refresh must visibly move the banner even when the carousel follows
+                // "最新入库 / 继续观看": rotate the pool so the front item changes too.
+                if(settings.heroMode!="random" && heroCandidates.size>1) {
+                    heroCandidates=heroCandidates.drop(1)+heroCandidates.take(1)
+                    heroRevision++
+                }
+            } finally {carouselRefreshing=false}
+        }
+    }
+    private fun loadDeletePermission() {
+        activeEmbySources().forEach {config->
+            launchLoad("policy:${config.id}") {
+                deletePermission[config.id]=app.emby(config).canDeleteContent()
+            }
+        }
+    }
+    fun canDelete(item:MediaEntry):Boolean = itemActions(item).contains(MediaAction.DELETE) &&
+        deletePermission[item.sourceId]==true
+    /** Keeps entries that were not shown recently in front and remembers what the user has seen. */
+    private fun preferFresh(entries:List<MediaEntry>,seen:LinkedHashSet<String>):List<MediaEntry> {
+        val fresh=entries.filterNot {it.key in seen}
+        val repeat=entries.filter {it.key in seen}
+        val ordered=fresh+repeat
+        ordered.forEach {seen.add(it.key)}
+        while(seen.size>120) seen.remove(seen.first())
+        return ordered
+    }
+    fun loadRecommendations(library:MediaEntry,force:Boolean=false) {
+        if(!force && recommendations.containsKey(library.key)) return
+        launchLoad("recommend:${library.key}",replace=force) {
+            val entries=artworkFeedSlots.withPermit {
+                // Seven entries: one large block plus six strips, exactly like the home carousel.
+                app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
+                    mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos")).items
+            }
+            entries.forEach {mediaLibraries[it.key]=library.key}
+            recommendations[library.key]=preferFresh(entries,seenRecommend.getOrPut(library.key) {linkedSetOf()})
+        }
+    }
+    /** Refreshes a library page carousel together with its first poster page. */
+    fun refreshLibraryCarousel(library:MediaEntry) {
+        if(carouselRefreshing) return
+        carouselRefreshing=true
+        recommendations.remove(library.key)
+        val jobs=listOf(
+            launchLoad("recommend:${library.key}",replace=true) {
+                val entries=artworkFeedSlots.withPermit {
+                    app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
+                        mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos")).items
+                }
+                entries.forEach {mediaLibraries[it.key]=library.key}
+                recommendations[library.key]=preferFresh(entries,seenRecommend.getOrPut(library.key) {linkedSetOf()})
+            },
+            launchLoad("library:${library.key}",replace=true) {
+                val api=app.emby(source(library.sourceId))
+                val sorted=librarySort[library.key]?.substringBefore(':') ?: "DateCreated"
+                val ascending=librarySort[library.key]?.substringAfter(':')?.toBoolean() ?: (sorted=="SortName")
+                val fresh=api.library(library.id,0,sorted,ascending=ascending,
+                    mixed=library.collectionType in setOf("","mixed","homevideos") || library.type=="Folder")
+                fresh.items.forEach {mediaLibraries[it.key]=mediaLibraries[library.key] ?: library.key}
+                pages[library.key]=fresh
+                librarySort[library.key]="$sorted:$ascending"
+                try {libraryResume[library.key]=api.resume(library.id)}
+                catch(e:CancellationException) {throw e}
+                catch(_:Exception) {libraryResume[library.key]=emptyList()}
+            })
+        viewModelScope.launch {
+            try {
+                jobs.forEach {runCatching {it.join()}}
+                carouselRevision[library.key]=(carouselRevision[library.key] ?: 0)+1
+            } finally {carouselRefreshing=false}
+        }
+    }
+    fun itemActions(item:MediaEntry):List<MediaAction> {
+        if(sources.firstOrNull {it.id==item.sourceId}?.kind != SourceKind.EMBY) return emptyList()
+        return when(item.type) {
+            "Person","UserView" -> emptyList()
+            "CollectionFolder","Folder","BoxSet","Season","Series" -> listOf(MediaAction.REFRESH_LIBRARY,MediaAction.REFRESH_METADATA)
+            else -> if(item.isFolder) listOf(MediaAction.REFRESH_LIBRARY,MediaAction.REFRESH_METADATA)
+                else listOf(MediaAction.REFRESH_METADATA,MediaAction.DELETE)
+        }
+    }
+    fun showItemActions(item:MediaEntry) { if(itemActions(item).isNotEmpty()) actionTarget=item }
+    fun dismissItemActions() { actionTarget=null;pendingDelete=null }
+    fun requestDelete(item:MediaEntry) {actionTarget=null;pendingDelete=item}
+    fun cancelDelete() {pendingDelete=null}
+    fun confirmDelete(item:MediaEntry) {pendingDelete=null;runAction(MediaAction.DELETE,item)}
+    fun runAction(action:MediaAction,item:MediaEntry) {
+        actionTarget=null
+        launchLoad("action:${action.name}:${item.key}",replace=true) {
+            try {
+                val api=app.emby(source(item.sourceId))
+                when(action) {
+                    MediaAction.REFRESH_METADATA -> {
+                        api.refreshMetadata(item.id,false)
+                        details.remove(item.key)
+                        message="已请求刷新「${item.title}」的元数据；服务端完成后重新进入即可看到结果"
+                    }
+                    MediaAction.REFRESH_LIBRARY -> {
+                        api.refreshMetadata(item.id,true)
+                        message="已请求刷新「${item.title}」媒体库；扫描在服务端后台进行"
+                    }
+                    MediaAction.DELETE -> {
+                        api.deleteItem(item.id)
+                        removeFromCaches(item)
+                        message="已从媒体库移除「${item.title}」"
+                    }
+                }
+            } catch(e:CancellationException) {throw e}
+            catch(e:Exception) {message=safeError(e)}
+        }
+    }
+    private fun removeFromCaches(item:MediaEntry) {
+        details.remove(item.key)
+        children.remove(item.key)
+        recommendations.keys.toList().forEach {key->recommendations[key]=recommendations[key].orEmpty().filterNot {it.key==item.key}}
+        pages.keys.toList().forEach {key->pages[key]?.let {page->if(page.items.any {it.key==item.key})
+            pages[key]=page.copy(items=page.items.filterNot {it.key==item.key},total=(page.total-1).coerceAtLeast(0))}}
+        listOf(libraryLatest,libraryResume,folderPreviews,similar).forEach {map->
+            map.keys.toList().forEach {key->map[key]=map[key].orEmpty().filterNot {it.key==item.key}}
+        }
+        feeds.keys.toList().forEach {key->feeds[key]?.let {feed->feeds[key]=feed.copy(
+            resume=feed.resume.filterNot {it.key==item.key},latest=feed.latest.filterNot {it.key==item.key},
+            nextUp=feed.nextUp.filterNot {it.key==item.key})}}
+        heroCandidates=heroCandidates.filterNot {it.key==item.key}
+    }
+    /** Remote MENU key: reach settings from any page except the player activity. */
+    fun openSettingsFromMenu() { if(route!=Route.Settings) navigate(Route.Settings,root=true) }
+    /** Leading titles already loaded on this device, used by the search quick-pick. */
+    fun knownTitles():List<String> {
+        return knownEntries().map {it.title}
+    }
+    /** Media already loaded on this device, used for pinyin search without extra requests. */
+    fun knownEntries():List<MediaEntry> {
+        val out=LinkedHashMap<String,MediaEntry>()
+        val active=activeSourceId
+        fun add(entries:Collection<MediaEntry>) {entries.forEach {out[it.key]=it}}
+        activeEmbySources().forEach {config->feeds[config.id]?.let {feed->
+            add(feed.libraries); add(feed.latest); add(feed.resume); add(feed.nextUp)
+        }}
+        libraryLatest.filterKeys {active.isBlank() || it.startsWith("$active:")}.values.forEach {add(it)}
+        pages.filterKeys {active.isBlank() || it.startsWith("$active:")||it.startsWith("search:")}.values.forEach {add(it.items)}
+        personWorks.filterKeys {active.isBlank() || it.startsWith("$active:")}.values.forEach {add(it.items)}
+        if(active.isBlank() || heroCandidates.all {it.sourceId==active}) add(heroCandidates)
+        return out.values.toList()
+    }
+    /** "Up at the very top": refresh the carousel of the page the user is on. */
+    fun refreshTopCarousel() {
+        if(carouselRefreshing) return
+        when(val current=route) {
+            Route.Home -> refreshCarousel()
+            is Route.Library -> refreshLibraryCarousel(current.item)
+            else -> Unit
         }
     }
     fun loadLibraryFolders(item:MediaEntry,more:Boolean=false) {
@@ -244,7 +489,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
 
     fun search(query: String) {
-        sources.filter { it.kind == SourceKind.EMBY }.forEach { config ->
+        activeEmbySources().forEach { config ->
             val key = "search:${config.id}"
             // A slower old query must never overwrite the result of a newer search.
             loads.remove(key)?.cancel()
@@ -321,6 +566,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     fun saveSettings(value: AppSettings) {
         val old=settings;settings=value;if(restoreSources) app.store.saveSettings(value)
         if(old.heroMode!=value.heroMode || old.heroAllLibraries!=value.heroAllLibraries || old.heroLibraryKeys!=value.heroLibraryKeys) loadHero()
+        // Switching the browsed source re-reads that source only; other caches are kept.
+        if(old.activeSourceId!=value.activeSourceId) {heroCandidates=emptyList();refresh()}
     }
 
     fun addSource(kind: SourceKind, name: String, base: String, user: String, password: String, onSuccess: () -> Unit) {
@@ -337,6 +584,9 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                 val updated = sources + config
                 withContext(Dispatchers.IO) { app.store.saveSources(updated) }
                 sources = updated
+                // The server just added becomes the one being browsed.
+                settings=settings.copy(activeSourceId=config.id)
+                withContext(Dispatchers.IO) { app.store.saveSettings(settings) }
                 onSuccess()
                 refresh()
             } catch (e: CancellationException) { throw e }
@@ -358,6 +608,10 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                     app.removeArtwork(id)
                 }
                 sources = updated
+                if(settings.activeSourceId==id) {
+                    settings=settings.copy(activeSourceId="")
+                    withContext(Dispatchers.IO) {app.store.saveSettings(settings)}
+                }
                 clearMediaState()
                 stack.clear()
                 route = Route.Settings
@@ -396,13 +650,14 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     private fun clearMediaState() {
         feeds.clear(); errors.clear(); pages.clear(); libraryResume.clear()
         details.clear(); children.clear(); folders.clear(); librarySort.clear(); focusMemory.clear()
-        libraryLatest.clear(); libraryLatestModes.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
+        libraryLatest.clear(); staleLatest.clear(); libraryLatestModes.clear(); folderPages.clear(); folderPreviews.clear(); similar.clear(); personWorks.clear(); mediaLibraries.clear()
         selectedVersion.clear(); selectedAudio.clear(); selectedSubtitle.clear(); selectedSubtitleTrack.clear()
+        recommendations.clear(); actionTarget=null; pendingDelete=null; heroJob=null; carouselRefreshing=false
         heroCandidates=emptyList()
     }
 
-    private fun launchLoad(key: String, replace: Boolean = false, block: suspend () -> Unit) {
-        if (loads[key]?.isActive == true && !replace) return
+    private fun launchLoad(key: String, replace: Boolean = false, block: suspend () -> Unit): Job {
+        loads[key]?.takeIf {it.isActive}?.let {if(!replace) return it}
         loads.remove(key)?.cancel()
         errors.remove(key)
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
@@ -422,5 +677,6 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         loads[key] = job
         loading[key] = true
         job.start()
+        return job
     }
 }

@@ -16,3 +16,7 @@ __pycache__/
 .ci-logs/
 dist/
 .codex-remote-attachments/
+# Local development snapshots and packaging leftovers are never published.
+/SunnyTV_dev*/
+/_dev21_baseline/
+/SunnyTV_dev19.zip

@@ -1,6 +1,6 @@
 {
   "scope": "offline Python archive restore/security; not GitHub/Gradle",
   "tests": 18,
-  "failures": 0,
-  "errors": 0
+  "failures": 1,
+  "errors": 1
 }

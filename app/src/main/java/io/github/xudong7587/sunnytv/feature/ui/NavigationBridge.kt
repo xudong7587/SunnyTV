@@ -7,6 +7,8 @@ import androidx.compose.ui.focus.FocusRequester
 class NavigationBridge {
     val content=linkedMapOf<String,FocusRequester>()
     val navigation=linkedMapOf<String,FocusRequester>()
+    /** True while any pinned navigation tile holds focus: used to detect "already at the top". */
+    var navActive by mutableStateOf(false)
     var revealTop:(suspend ()->Unit)?=null
     fun enterContent() {(content["home-play"] ?: content["home-carousel:featured"] ?: content.values.firstOrNull())?.let {runCatching {it.requestFocus()}}}
     fun enterNavigation() {navigation.values.firstOrNull()?.let {runCatching {it.requestFocus()}}}

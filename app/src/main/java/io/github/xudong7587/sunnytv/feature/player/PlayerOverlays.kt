@@ -2,7 +2,9 @@ package io.github.xudong7587.sunnytv.feature.player
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -11,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -18,42 +21,99 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.tv.material3.Text
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import io.github.xudong7587.sunnytv.R
 import io.github.xudong7587.sunnytv.core.model.SkipSegment
 import io.github.xudong7587.sunnytv.feature.ui.*
 
-@Composable internal fun SunnyLoadingOverlay(visible:Boolean) {
-    if(!visible) return
-    val transition=rememberInfiniteTransition(label="sunny-loading")
-    val y by transition.animateFloat(-9f,5f,infiniteRepeatable(
-        animation=tween(620,easing=FastOutSlowInEasing),repeatMode=RepeatMode.Reverse),label="loading-y")
-    val alpha by transition.animateFloat(.45f,1f,infiniteRepeatable(
-        animation=tween(900,easing=LinearEasing),repeatMode=RepeatMode.Reverse),label="loading-alpha")
-    Column(Modifier.fillMaxSize().testTag("player:loading"),verticalArrangement=Arrangement.Center,
-        horizontalAlignment=Alignment.CenterHorizontally) {
-        Image(painterResource(R.drawable.ic_sun_brand),"SunnyTV",
-            Modifier.size(72.dp).graphicsLayer {translationY=y.dp.toPx()})
-        Text("L O A D I N G",color=Color.White.copy(alpha),fontSize=13.sp,fontWeight=FontWeight.SemiBold,
-            letterSpacing=3.sp,modifier=Modifier.padding(top=18.dp))
-    }
+internal fun playerClock(ms:Long):String {
+    val seconds=ms.coerceAtLeast(0)/1000
+    return if(seconds>=3600) "%d:%02d:%02d".format(seconds/3600,seconds/60%60,seconds%60)
+    else "%02d:%02d".format(seconds/60,seconds%60)
 }
 
-@Composable internal fun PlayerProgress(position:Long,duration:Long,stepMs:Long,onSeek:(Long)->Unit) {
+@Composable internal fun SunnyLoadingOverlay(visible:Boolean) {
+    SunnyBrandLoading(visible,scopeTag="player:loading")
+}
+
+/**
+ * Playback progress with three ways to seek, all anchored on the same played-position dot:
+ * a single D-pad step, a held D-pad key for continuous accelerated seek (the marker time is shown
+ * while seeking), and a touch drag anywhere on the bar or on the dot itself.
+ */
+@Composable internal fun PlayerProgress(position:Long,duration:Long,stepMs:Long,modifier:Modifier=Modifier,
+    onSeekBy:(Long)->Unit,onSeekTo:(Long)->Unit) {
     var focused by remember {mutableStateOf(false)}
-    val progress=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f
-    BoxWithConstraints(Modifier.fillMaxWidth().height(24.dp).testTag("player:progress").semantics {contentDescription="播放进度"}
+    var preview by remember {mutableLongStateOf(-1L)}
+    val scope=rememberCoroutineScope()
+    var holdJob by remember {mutableStateOf<Job?>(null)}
+    var holdDirection by remember {mutableIntStateOf(0)}
+    val unit=stepMs.coerceAtLeast(1000L)
+    fun stopHold(commit:Boolean) {
+        holdJob?.cancel();holdJob=null
+        if(commit && preview>=0L) onSeekTo(preview)
+        preview=-1L;holdDirection=0
+    }
+    fun startHold(direction:Int) {
+        if(holdJob!=null && holdDirection==direction) return
+        holdJob?.cancel()
+        holdDirection=direction
+        holdJob=scope.launch {
+            var step=unit
+            while(isActive) {
+                val base=preview.takeIf {it>=0L} ?: position
+                preview=(base+direction*step).coerceIn(0L,duration.coerceAtLeast(0L))
+                withFrameNanos {}
+                delay(110)
+                // Keep accelerating while the key stays down, but stay within a bounded speed.
+                step=(step*1.4f).toLong().coerceAtMost(unit*30)
+            }
+        }
+    }
+    DisposableEffect(Unit) {onDispose {holdJob?.cancel()}}
+    val scrubbing=preview>=0L
+    val shown=if(scrubbing) preview else position
+    val progress=if(duration>0) (shown.toFloat()/duration).coerceIn(0f,1f) else 0f
+    BoxWithConstraints(modifier.fillMaxWidth().height(42.dp).testTag("player:progress").semantics {contentDescription="播放进度"}
         .onFocusChanged {focused=it.isFocused}.focusable()
         .onPreviewKeyEvent {event->
-            if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
-                Key.DirectionLeft->{onSeek(-stepMs);true}
-                Key.DirectionRight->{onSeek(stepMs);true}
-                else->false
+            val horizontal=event.key==Key.DirectionLeft || event.key==Key.DirectionRight
+            when {
+                event.type==KeyEventType.KeyUp -> {stopHold(true);horizontal}
+                event.type!=KeyEventType.KeyDown -> false
+                !horizontal -> false
+                event.nativeKeyEvent.repeatCount>0 -> {
+                    if(!scrubbing) preview=position
+                    startHold(if(event.key==Key.DirectionLeft) -1 else 1)
+                    true
+                }
+                else -> {onSeekBy(if(event.key==Key.DirectionLeft) -unit else unit);true}
             }
+        }
+        .pointerInput(duration) {
+            var dragging=false
+            fun target(x:Float):Long = if(duration<=0) 0L else
+                (x/size.width.coerceAtLeast(1).toFloat()*duration).toLong().coerceIn(0L,duration)
+            detectHorizontalDragGestures(
+                onDragStart={offset->if(duration>0) {dragging=true;preview=target(offset.x)}},
+                onHorizontalDrag={change,_->if(duration>0) {change.consume();preview=target(change.position.x)}},
+                onDragEnd={if(dragging) {dragging=false;if(preview>=0L) onSeekTo(preview);preview=-1L}},
+                onDragCancel={dragging=false;preview=-1L})
         },contentAlignment=Alignment.CenterStart) {
-        Box(Modifier.fillMaxWidth().height(if(focused) 5.dp else 3.dp).clip(RoundedCornerShape(99.dp)).background(Color.White.copy(.24f))) {
+        Box(Modifier.fillMaxWidth().height(if(focused||scrubbing) 6.dp else 4.dp).clip(RoundedCornerShape(99.dp)).background(Color.White.copy(.24f))) {
             Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(SunnyColors.Accent))
         }
-        if(focused) Box(Modifier.offset(x=(maxWidth-10.dp)*progress).size(10.dp).background(Color.White,androidx.compose.foundation.shape.CircleShape))
+        // The played-position dot is always visible; it grows, brightens and gains a ring while seeking.
+        val dotSize=if(focused||scrubbing) 17.dp else 11.dp
+        Box(Modifier.offset(x=(maxWidth-dotSize)*progress).size(dotSize)
+            .background(if(focused||scrubbing) SunnyColors.Accent else Color.White,CircleShape)
+            .border(if(focused||scrubbing) 2.dp else 0.dp,Color.Black.copy(.35f),CircleShape))
+        if(scrubbing) Text("${playerClock(preview)} / ${playerClock(duration)}",color=Color.White,fontSize=15.sp,
+            fontWeight=FontWeight.SemiBold,modifier=Modifier.align(Alignment.TopCenter).offset(y=(-26).dp)
+                .background(Color.Black.copy(.78f),RoundedCornerShape(9.dp)).padding(horizontal=11.dp,vertical=4.dp))
     }
 }
 
@@ -65,7 +125,7 @@ import io.github.xudong7587.sunnytv.feature.ui.*
             verticalArrangement=Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Text(title,color=Color.White,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                PlayerControl("关闭","close",initial=true,onClick=onClose)
+                PlayerControl("关闭","close",initial=true,showFocusLabel=false,onClick=onClose)
             }
             content()
         }

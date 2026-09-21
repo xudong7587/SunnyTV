@@ -19,6 +19,7 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -38,12 +39,14 @@ import io.github.xudong7587.sunnytv.feature.Route
 @Composable fun CinemaBackdrop(item:MediaEntry?,modifier:Modifier=Modifier) {
     val model=LocalAppModel.current
     val base=SunnyColors.Background
-    val compact=LocalCompact.current
+    // Portrait keeps the poster, landscape/wide keeps the backdrop: the banner artwork follows the
+    // screen orientation rather than the logical width.
+    val portrait=LocalConfiguration.current.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT
     val motion=LocalMotion.current
     Box(modifier.fillMaxSize().background(base)) {
         if(item!=null && model.settings.backdropEnabled) {
             Crossfade(item,animationSpec=motion.fade(400),label="backdrop") {media->
-                ArtworkView(media,if(compact) media.primary ?: media.backdrop else media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
+                ArtworkView(media,if(portrait) media.primary ?: media.backdrop else media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
             }
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(base.copy(.65f),base.copy(.04f)))))
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(*listOf(0f to base.copy(.3f),.25f to Color.Transparent,.72f to Color.Transparent,1f to base).toTypedArray())))
@@ -73,8 +76,8 @@ import io.github.xudong7587.sunnytv.feature.Route
         val selectedWidth=if(hero) height else height*16/9
         val smallWidth=if(count==1) available else ((available-selectedWidth)/(count-1)).coerceAtLeast(26.dp)
         @Composable fun Card(index:Int) {
-                val active=selected.coerceIn(0,count-1)==index
-                val target=if(!hero) {if(active && index<entries.size) selectedWidth else height*2/3}
+                val active=(hero || rowFocused) && selected.coerceIn(0,count-1)==index
+                val target=if(!hero) {if(active && !LocalCompact.current && index<entries.size) selectedWidth else height*2/3}
                     else if(count==1) available else if(active) (available-smallWidth*(count-1)).coerceAtLeast(smallWidth) else smallWidth
                 val width by animateDpAsState(target,
                     LocalMotion.current.spring(),label="accordion-width")
@@ -88,6 +91,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             true
                         } else false
                     },active=active,focusLift=false,shape=RoundedCornerShape(if(hero) 20.dp else 15.dp),
+                    onLongPress=entry?.let {{model.showItemActions(it)}},
                     onFocus={onSelect(index)},onClick={if(entry==null) onMore?.invoke() else model.navigate(Route.Detail(entry))}) {focused ->
                     if(entry==null) {
                         Column(Modifier.fillMaxSize().padding(10.dp),verticalArrangement=Arrangement.Center,
@@ -97,13 +101,13 @@ import io.github.xudong7587.sunnytv.feature.Route
                                 Text("进入媒体库",color=SunnyColors.Secondary,fontSize=11.sp,modifier=Modifier.padding(top=8.dp)) }
                         }
                     } else {
-                        ArtworkView(entry,if(!hero && active) MediaLogic.wideArtwork(entry) else entry.primary,
+                        ArtworkView(entry,if(!hero && active && !LocalCompact.current) MediaLogic.wideArtwork(entry) else entry.primary,
                             Modifier.fillMaxSize(),if(hero) 700 else 640)
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.05f),Color.Black.copy(.85f)))))
                         if(entry.rating>0) Text("★ %.1f".format(entry.rating),color=Color.White,fontSize=9.sp,
                             modifier=Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(.6f)).padding(4.dp))
                         Column(Modifier.align(Alignment.BottomStart).padding(if(active) 13.dp else 6.dp)) {
-                            Text(entry.title,color=Color.White,fontSize=if(active) 19.sp else 10.sp,lineHeight=if(active) 24.sp else 14.sp,fontWeight=FontWeight.SemiBold,
+                            Text(entry.title,color=Color.White,fontSize=if(active && !LocalCompact.current) 19.sp else 11.sp,lineHeight=if(active && !LocalCompact.current) 24.sp else 15.sp,fontWeight=FontWeight.SemiBold,
                                 maxLines=if(active) 2 else 3,overflow=TextOverflow.Ellipsis)
                             if(active) Text(entry.subtitle,color=Color.White.copy(.8f),fontSize=10.sp,modifier=Modifier.padding(top=5.dp),maxLines=1)
                         }
@@ -113,7 +117,9 @@ import io.github.xudong7587.sunnytv.feature.Route
         }
         if(hero) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(gap),verticalAlignment=Alignment.CenterVertically) {
             repeat(count) {index->key(entries.getOrNull(index)?.key ?: "all") {Card(index)}}
-        } else StableLazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),contentPadding=PaddingValues(4.dp)) {
+        } else StableLazyRow(Modifier.fillMaxWidth(),state=rowState,horizontalArrangement=Arrangement.spacedBy(gap),
+            contentPadding=PaddingValues(start=FocusShadowGutter,end=FocusShadowGutter,
+                top=FocusShadowTopGutter,bottom=FocusShadowBottomGutter),reserveFocusSpace=false) {
             items(count,key={entries.getOrNull(it)?.key ?: "all"}) {Card(it)}
         }
     }
@@ -121,7 +127,7 @@ import io.github.xudong7587.sunnytv.feature.Route
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable fun LibraryLatestRow(library:MediaEntry,folder:Boolean=false,headingFocusRequester:FocusRequester?=null,
-    onUp:(()->Unit)?=null,onDown:(()->Unit)?=null) {
+    onUp:(()->Unit)?=null,onDown:(()->Unit)?=null,headingInset:Dp=0.dp) {
     val model=LocalAppModel.current
     LaunchedEffect(library.key,folder) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
     val entries=(if(folder) model.folderPreviews[library.key] else model.libraryLatest[library.key])
@@ -140,19 +146,20 @@ import io.github.xudong7587.sunnytv.feature.Route
             else -> false
         }
     }
-    Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
+    Column(Modifier.bringIntoViewRequester(reveal).padding(bottom=0.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start=headingInset,top=5.dp,bottom=5.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(library.title,color=SunnyColors.Text,fontSize=19.sp,
-                fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
+                fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f))
             if(!folder) {
                 val sorts=listOf("DateCreated" to "最新入库","PremiereDate" to "最新上映","Random" to "随机")
                 val index=sorts.indexOfFirst {it.first==(model.libraryLatestModes[library.key] ?: "DateCreated")}.coerceAtLeast(0)
-                Action(sorts[index].second,id="shelf-sort:${library.key}",modifier=Modifier.onFocusChanged {
+                Action(sorts[index].second,id="shelf-sort:${library.key}",icon="sort-directions",alwaysShowLabel=true,
+                    modifier=Modifier.focusRequester(headingFocus).onFocusChanged {
                     if(it.isFocused && homeNavigator==null) {axis.horizontal=false;scope.launch {withFrameNanos {};reveal.bringIntoView()}}
                 }) {model.loadLatest(library,sorts[(index+1)%sorts.size].first)}
             }
-            Action("进入媒体库",id="more:${library.key}",icon="arrow",modifier=Modifier.focusRequester(headingFocus).onPreviewKeyEvent {event->
+            if(folder) Action("查看文件夹",id="more:${library.key}",icon="arrow",modifier=Modifier.focusRequester(headingFocus).onPreviewKeyEvent {event->
                 if(!folder || event.type!=KeyEventType.KeyDown) false else when(event.key) {
                     Key.DirectionUp -> if(onUp!=null) {onUp();true} else false
                     Key.DirectionDown -> if(!entries.isNullOrEmpty()) {mediaFocus.requestFocus();true} else if(onDown!=null) {onDown();true} else false
@@ -171,8 +178,8 @@ import io.github.xudong7587.sunnytv.feature.Route
         },id="latest:${library.key}",
             onMore={model.navigate(Route.Library(library))})
         else if(model.errors["${if(folder) "folder-preview" else "latest"}:${library.key}"]!=null) {
-            Action("读取失败 · 重试",modifier=emptyNavigation) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
+            Action("读取失败 · 重试",id="shelf-empty:${library.key}",modifier=emptyNavigation) {if(folder) model.loadFolderPreview(library) else model.loadLatest(library)}
         } else if(entries==null) Text("正在读取…",color=SunnyColors.Secondary,fontSize=13.sp,modifier=Modifier.padding(vertical=20.dp))
-        else Action("暂无媒体 · 查看媒体库",modifier=emptyNavigation) {model.navigate(Route.Library(library))}
+        else Action("暂无媒体 · 查看媒体库",id="shelf-empty:${library.key}",modifier=emptyNavigation) {model.navigate(Route.Library(library))}
     }
 }

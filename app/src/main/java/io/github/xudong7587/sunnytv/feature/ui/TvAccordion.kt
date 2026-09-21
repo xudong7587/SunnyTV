@@ -42,14 +42,22 @@ import kotlinx.coroutines.delay
     var direction by remember {mutableIntStateOf(1)}
     var pending by remember {mutableStateOf<Int?>(null)}
     var rowFocused by remember {mutableStateOf(false)}
+    // Keep a local visual selection so width animation can start in the same key frame as focus.
+    // The parent selection is still updated for state restoration and data changes.
+    var visualSelected by rememberSaveable("$id:visual") {mutableIntStateOf(selected)}
     val returnOffset=remember {Animatable(0f)}
     val requesters=remember(entries.size) {List(entries.size) {FocusRequester()}}
     val moreFocus=remember {FocusRequester()}
-    val selectedIndex=selected.coerceIn(0,entries.lastIndex+if(onMore!=null) 1 else 0)
+    LaunchedEffect(selected) {visualSelected=selected}
+    val selectedIndex=visualSelected.coerceIn(0,entries.lastIndex+if(onMore!=null) 1 else 0)
     val expanded=selectedIndex.coerceAtMost(entries.lastIndex)
     val safeStart=start.coerceIn(0,expanded)
-    BoxWithConstraints(modifier.fillMaxWidth().height(213.dp).clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
-        val inset=0.dp
+    BoxWithConstraints(modifier.fillMaxWidth().height(FocusShadowTopGutter+165.dp+FocusShadowBottomGutter)
+        .clipToBounds().testTag("$id:viewport").onFocusChanged {rowFocused=it.hasFocus}.focusProperties {enter={requesters[0]}}.focusGroup()) {
+        // The viewport clips its own bounds, so the focused card keeps a gutter inside them: the
+        // soft shadow spreads past the card and used to be cut off on the leftmost block.
+        val inset=FocusShadowGutter
+        val topInset=FocusShadowTopGutter
         val height=165.dp
         val gap=8.dp
         val viewport=(maxWidth-inset*2).coerceAtLeast(1.dp)
@@ -61,18 +69,31 @@ import kotlinx.coroutines.delay
         fun select(index:Int) {
             val next=index.coerceIn(0,entries.lastIndex+if(onMore!=null) 1 else 0)
             direction=if(next>=selectedIndex) 1 else -1
-            if(next<=entries.lastIndex) start=ShelfWindow.startFor(next,safeStart,lastSlot)
+            val nextStart=if(next<=entries.lastIndex) ShelfWindow.startFor(next,safeStart,lastSlot) else safeStart
+            val sameWindow=nextStart==safeStart
+            visualSelected=next
+            if(next<=entries.lastIndex) start=nextStart
             model.focusMemory[page]="$id:${entries.getOrNull(next)?.key ?: "all"}"
             onSelect(next)
-            pending=next
+            // Inside the current shelf window the requester already belongs to the destination
+            // card, so focus and expansion can begin immediately. Only a window shift waits one
+            // frame for the requester slot to be remapped.
+            if(next==entries.size && onMore!=null) {
+                runCatching {moreFocus.requestFocus()}
+                pending=null
+            } else if(sameWindow && next<=entries.lastIndex) {
+                runCatching {requesters[(next-safeStart).coerceIn(requesters.indices)].requestFocus()}
+                pending=null
+            } else pending=next
         }
         LaunchedEffect(rowFocused) {
             if(rowFocused) {
                 // Every vertical entrance starts at the left, even if the previous exit is still animating.
                 returnOffset.snapTo(0f)
                 start=0
+                visualSelected=0
                 onSelect(0)
-                pending=0
+                pending=null
             } else {
                 pending=null
                 // First contract the currently wide card, then reveal the original narrow sequence.
@@ -81,9 +102,13 @@ import kotlinx.coroutines.delay
                 if(prior>0) {
                     returnOffset.snapTo(prior*(narrow+gap).value)
                     start=0
+                    visualSelected=0
                     onSelect(0)
-                    returnOffset.animateTo(0f,motion.fade(400))
-                } else onSelect(0)
+                    returnOffset.animateTo(0f,motion.fade(320))
+                } else {
+                    visualSelected=0
+                    onSelect(0)
+                }
             }
         }
         LaunchedEffect(pending,start) {
@@ -96,7 +121,7 @@ import kotlinx.coroutines.delay
         // A single coordinated transition keeps all uninvolved X positions constant.
         val transition=updateTransition(if(rowFocused) expanded-safeStart else -1,label="shelf-expansion")
         val weights=(0 until slots).map {slot->
-            transition.animateFloat(transitionSpec={if(targetState==-1 || initialState==-1) motion.fade(320) else motion.spring()},label="slot-$slot") {if(it==slot) 1f else 0f}
+            transition.animateFloat(transitionSpec={if(targetState==-1 || initialState==-1) motion.fade(220) else motion.spring()},label="slot-$slot") {if(it==slot) 1f else 0f}
         }
         val offset=animateDpAsState(if(rowFocused && selectedIndex==entries.size)
             ShelfWindow.revealAllOffset(slots,narrow.value,wide.value,gap.value,allWidth.value,viewport.value).dp else 0.dp,
@@ -136,6 +161,7 @@ import kotlinx.coroutines.delay
             val h=with(density) {height.roundToPx()}
             val gapPx=with(density) {gap.roundToPx()}
             val insetPx=with(density) {inset.roundToPx()}
+            val topInsetPx=with(density) {topInset.roundToPx()}
             // Calculate boundaries from cumulative floats, avoiding a one-pixel rounding drift.
             val boundaries=mutableListOf(0f)
             repeat(slots) {slot->
@@ -149,7 +175,7 @@ import kotlinx.coroutines.delay
             }
             layout(constraints.maxWidth,constraints.maxHeight) {
                 placeables.forEachIndexed {index,placeable->
-                    placeable.placeRelative(insetPx+boundaries[index].roundToInt()-with(density) {(offset.value+returnOffset.value.dp).roundToPx()},insetPx)
+                    placeable.placeRelative(insetPx+boundaries[index].roundToInt()-with(density) {(offset.value+returnOffset.value.dp).roundToPx()},topInsetPx)
                 }
             }
         }
@@ -159,7 +185,7 @@ import kotlinx.coroutines.delay
 @Composable private fun ShelfArtwork(item:MediaEntry,weight:()->Float,wide:Dp,expanded:Boolean) {
     val motion=LocalMotion.current
     Box(Modifier.fillMaxSize()) {
-        Crossfade(if(expanded) MediaLogic.wideArtwork(item) else item.primary,animationSpec=motion.fade(300),label="shelf-artwork") {art->
+        Crossfade(if(expanded) MediaLogic.wideArtwork(item) else item.primary,animationSpec=motion.fade(180),label="shelf-artwork") {art->
             ArtworkView(item,art,Modifier.fillMaxSize(),640)
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.06f),Color.Black.copy(.88f)))))

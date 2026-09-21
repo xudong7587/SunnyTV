@@ -10,6 +10,20 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 
+
+fun librarySortIcon(sort:String):String=when(sort) {
+    "DateCreated" -> "calendar-plus"
+    "SortName" -> "sort-alpha"
+    "CommunityRating","CriticRating","OfficialRating" -> "rating"
+    "ProductionYear","PremiereDate" -> "calendar"
+    "DatePlayed" -> "history"
+    "Runtime" -> "clock"
+    "Bitrate" -> "signal"
+    "Size" -> "size"
+    "Random" -> "shuffle"
+    else -> "sort"
+}
+
 fun actionIcon(text:String):String=when {
     text.contains("确认") || text.contains("保存") || text.contains("知道了") || text.contains("完成") -> "check"
     text.contains("收藏") -> "heart"
@@ -31,7 +45,7 @@ fun actionIcon(text:String):String=when {
     text.contains("轮播") || text.contains("切换") || text.contains("刷新") || text.contains("重试") -> "repeat"
     text.contains("详情") || text.contains("信息") || text.contains("知道") -> "info"
     text.contains("更多") || text.contains("全部") || text.contains("进入") -> "arrow"
-    text.contains("清理") || text.contains("移除") || text.contains("重置") -> "trash"
+    text.contains("清理") || text.contains("移除") || text.contains("重置") || text.contains("删除") -> "trash"
     text.startsWith("＋") || text.contains("添加") -> "plus"
     else -> "settings"
 }
@@ -49,16 +63,27 @@ fun actionIcon(text:String):String=when {
         "heart"->"M12 21 C9 18 2 13 2 7 C2 1 10 1 12 6 C14 1 22 1 22 7 C22 13 15 18 12 21 Z"
         "check"->"M4 12 L9 18 L21 5"
         "sort"->"M4 6 L16 6 M4 11 L12 11 M4 16 L8 16 M19 10 L19 21 M15 17 L19 21 L23 17"
+        "sort-directions"->"M7 21 L7 3 M2 8 L7 3 L12 8 M17 3 L17 21 M12 16 L17 21 L22 16"
         "ascending"->"M12 21 L12 3 M5 10 L12 3 L19 10"
         "descending"->"M12 3 L12 21 M5 14 L12 21 L19 14"
         "list"->"M4 5 L5 5 M9 5 L21 5 M4 12 L5 12 M9 12 L21 12 M4 19 L5 19 M9 19 L21 19"
         "numbers"->"M9 3 L7 21 M17 3 L15 21 M3 9 L21 9 M2 15 L20 15"
         "layers"->"M2 8 L12 2 L22 8 L12 14 Z M2 13 L12 19 L22 13 M2 18 L12 24 L22 18"
+        "calendar"->"M5 4 L5 7 M19 4 L19 7 M4 7 L20 7 L20 21 L4 21 Z M7 11 L10 11 M14 11 L17 11 M7 15 L10 15 M14 15 L17 15"
+        "calendar-plus"->"M5 4 L5 7 M19 4 L19 7 M4 7 L20 7 L20 21 L4 21 Z M8 14 L16 14 M12 10 L12 18"
+        "sort-alpha"->"M4 19 L8 5 L12 19 M6 13 L10 13 M15 6 L21 6 L15 18 L21 18"
+        "rating"->"M12 3 L14.8 8.8 L21 9.7 L16.5 14.1 L17.6 20.5 L12 17.5 L6.4 20.5 L7.5 14.1 L3 9.7 L9.2 8.8 Z"
+        "history"->"M4 7 L4 3 M4 7 L8 7 M4 7 C7 2 16 2 20 8 C24 15 19 22 12 22 C7 22 3 19 2 15 M12 8 L12 13 L16 15"
+        "clock"->"M12 3 C24 3 24 21 12 21 C0 21 0 3 12 3 Z M12 7 L12 13 L16 15"
+        "signal"->"M5 18 L5 14 M10 18 L10 11 M15 18 L15 8 M20 18 L20 5"
+        "size"->"M5 6 L19 6 L19 18 L5 18 Z M8 9 L16 9 M8 12 L13 12 M8 15 L11 15"
+        "shuffle"->"M3 7 L6 7 C11 7 12 17 18 17 L21 17 M17 13 L21 17 L17 21 M3 17 L6 17 C9 17 11 12 13 9 C14 7 16 7 18 7 L21 7 M17 3 L21 7 L17 11"
         "back"->"M14 4 L6 12 L14 20 M6 12 L22 12"
+        "backspace"->"M9.5 5 L21 5 L21 19 L9.5 19 L3 12 Z M12 9.4 L17 14.6 M17 9.4 L12 14.6"
         "play"->"M6 3 L21 12 L6 21 Z"
         "pause"->"M7 4 L7 20 M17 4 L17 20"
-        "rewind"->"M11 4 L2 12 L11 20 Z M22 4 L13 12 L22 20 Z"
-        "forward"->"M2 4 L11 12 L2 20 Z M13 4 L22 12 L13 20 Z"
+        "rewind"->"M7 7 L3 7 L3 3 M3 7 C5 3 9 2 12 2 C18 2 22 6 22 12 C22 18 18 22 12 22 C6 22 2 18 2 12"
+        "forward"->"M17 7 L21 7 L21 3 M21 7 C19 3 15 2 12 2 C6 2 2 6 2 12 C2 18 6 22 12 22 C18 22 22 18 22 12"
         "frame"->"M9 3 L3 3 L3 9 M15 3 L21 3 L21 9 M21 15 L21 21 L15 21 M9 21 L3 21 L3 15"
         "close"->"M5 5 L19 19 M19 5 L5 19"
         "exit"->"M10 3 L3 3 L3 21 L10 21 M10 12 L22 12 M17 7 L22 12 L17 17"

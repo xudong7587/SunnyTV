@@ -53,6 +53,15 @@ class ConfigStore(context: Context) {
             .put("secret",encrypt(s.secret))) }
         prefs.edit().putString("sources",a.toString()).apply()
     }
+    /**
+     * Reads a stored font id. A dev21 install only kept the custom font file, so a missing value
+     * falls back to that upload before the system default.
+     */
+    private fun fontChoicePreference(key:String,customFile:String):String {
+        val stored=prefs.getString(key,"").orEmpty()
+        val resolved=stored.ifBlank {if(customFile.isNotBlank()) FontCatalog.CUSTOM else FontCatalog.SYSTEM}
+        return resolved.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM
+    }
     fun resetSources() {
         val editor = prefs.edit().remove("sources")
         prefs.all.keys.filter { it.startsWith("pos:") }.forEach { editor.remove(it) }
@@ -83,7 +92,17 @@ class ConfigStore(context: Context) {
         }.toMap(),
         prefs.getFloat("animationSpeed",1f).takeIf {it in MotionPolicy.speeds} ?: 1f,
         prefs.getInt("fontScale",2).coerceIn(0,4),
-        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true)
+        prefs.getString("customFontFile","").orEmpty(),prefs.getString("customFontName","").orEmpty(),prefs.getBoolean("shadows",true),
+        PerformancePolicy.cacheSize(prefs.getInt("artworkCacheMiB",512)),
+        prefs.getString("performanceMode","auto").takeIf {it in PerformancePolicy.modes} ?: "auto",
+        DisplayModePolicy.normalize(prefs.getString("displayModePreference",DisplayModePolicy.AUTO).orEmpty()),
+        fontChoicePreference("fontChoice",prefs.getString("customFontFile","").orEmpty()),
+        fontChoicePreference("subtitleFont",""),
+        prefs.getInt("subtitleScale",2).coerceIn(0,4),
+        SubtitleAppearance.edge(prefs.getString("subtitleEdge",SubtitleAppearance.EDGE_OUTLINE).orEmpty()),
+        SubtitleAppearance.position(prefs.getString("subtitlePosition",SubtitleAppearance.POSITION_STANDARD).orEmpty()),
+        SubtitleAppearance.background(prefs.getString("subtitleBackground",SubtitleAppearance.BACKGROUND_BLACK).orEmpty())
+        ,prefs.getString("activeSource","").orEmpty()
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -91,7 +110,10 @@ class ConfigStore(context: Context) {
         s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}
         libraryEditor.apply()
-        prefs.edit().putBoolean("shadows",s.shadowsEnabled).putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
+        prefs.edit().putInt("artworkCacheMiB",PerformancePolicy.cacheSize(s.artworkCacheMiB))
+        .putString("performanceMode",s.performanceMode.takeIf {it in PerformancePolicy.modes} ?: "auto")
+        .putString("displayModePreference",DisplayModePolicy.normalize(s.displayModePreference))
+        .putBoolean("shadows",s.shadowsEnabled).putBoolean("motion",s.reduceMotion).putBoolean("hq",s.highQualityArtwork)
         .putBoolean("backdrop",s.backdropEnabled).putBoolean("resume",s.showResume).putBoolean("next",s.showNextUp)
         .putBoolean("diag",s.diagnostics).putInt("seek",s.seekStepSeconds)
         .putBoolean("dark",s.darkTheme).putInt("accent",s.accentIndex).putString("artworkMode",s.artworkMode)
@@ -99,6 +121,13 @@ class ConfigStore(context: Context) {
         .putStringSet("heroLibraries",s.heroLibraryKeys).putBoolean("heroAll",s.heroAllLibraries)
         .putFloat("animationSpeed",s.animationSpeed).putInt("fontScale",s.fontScaleLevel.coerceIn(0,4))
         .putString("customFontFile",s.customFontFile).putString("customFontName",s.customFontName)
+        .putString("fontChoice",s.fontChoice.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM)
+        .putString("subtitleFont",s.subtitleFontChoice.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM)
+        .putInt("subtitleScale",s.subtitleScaleLevel.coerceIn(0,4))
+        .putString("subtitleEdge",SubtitleAppearance.edge(s.subtitleEdge))
+        .putString("subtitlePosition",SubtitleAppearance.position(s.subtitlePosition))
+        .putString("subtitleBackground",SubtitleAppearance.background(s.subtitleBackground))
+        .putString("activeSource",s.activeSourceId)
         .putInt("heroInterval",s.heroIntervalSeconds.coerceIn(3,60)).putInt("uiScale",s.uiScaleLevel.coerceIn(0,4)).apply() }
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }

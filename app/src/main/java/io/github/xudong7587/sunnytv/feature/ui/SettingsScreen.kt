@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import io.github.xudong7587.sunnytv.core.network.HttpPolicy
 import io.github.xudong7587.sunnytv.feature.player.PlayerActivity
+import io.github.xudong7587.sunnytv.feature.player.SubtitleStylePreview
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -121,23 +122,36 @@ import kotlinx.coroutines.*
     var chooser by remember {mutableStateOf("")}
     var librariesExpanded by remember {mutableStateOf(false)}
     var importingFont by remember {mutableStateOf(false)}
+    // Which font slot the document picker feeds: the interface font or the subtitle font.
+    var fontTarget by remember {mutableStateOf(FontCatalog.SYSTEM)}
     val fontPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {uri->
         if(uri!=null) coroutine.launch {
             importingFont=true
             try {
                 val (file,label)=withContext(Dispatchers.IO) {FontStore.import(context,uri)}
-                model.saveSettings(model.settings.copy(customFontFile=file,customFontName=label))
+                model.saveSettings(if(fontTarget==FontCatalog.SYSTEM)
+                    model.settings.copy(customFontFile=file,customFontName=label,fontChoice=FontCatalog.CUSTOM)
+                    else model.settings.copy(customFontFile=file,customFontName=label,subtitleFontChoice=FontCatalog.CUSTOM))
             } catch(e:CancellationException) {throw e}
             catch(_:Exception) {model.message="字体导入失败，请选择有效的 TTF / OTF / TTC 字体（不超过 64 MB）"}
             finally {importingFont=false}
         }
     }
+    LaunchedEffect(category) {if(category in setOf("首页与外观","字体")) category="外观";settingsList.scrollToItem(0);chooser=""}
     SettingsLayout(navigation={SettingsCategories(category) {category=it}}) {
         LazyColumn(Modifier.fillMaxSize().testTag("settings:viewport"),state=settingsList,verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(bottom=30.dp)) {
             item {SectionTitle(category)}
             when(category) {
                 "媒体来源" -> {
                     item {Text("来源独立保存 · 凭据本地加密 · 不修改 NAS 媒体文件",color=SunnyColors.Secondary,fontSize=13.sp)}
+                    if(model.sources.any {it.kind==SourceKind.EMBY}) item {
+                        SettingChoiceRow("当前显示来源",model.activeSourceName()) {chooser="activeSource"}
+                    }
+                    if(model.sources.count {it.kind==SourceKind.EMBY}>1) item {
+                        Text("同一时间只显示所选来源的媒体（首页、媒体库、搜索、轮播都跟随）；"+
+                            "其余来源的配置与海报缓存保留，可随时切换。",
+                            color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
+                    }
                     model.sources.filter {it.kind==SourceKind.EMBY}.forEach {source -> item {
                         Row(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(12.dp)).padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {Text(source.name,color=SunnyColors.Text,fontSize=18.sp); Text(if(source.kind==SourceKind.EMBY) "Emby · ${source.username}" else "CloudDrive2 · WebDAV",color=SunnyColors.Secondary,fontSize=12.sp)}
@@ -147,22 +161,9 @@ import kotlinx.coroutines.*
                     item {Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Action("＋ Emby",primary=true) {adding=SourceKind.EMBY}}}
                     item {Action("重置损坏的来源配置") {resetConfirm=true}}
                 }
-                "首页与外观" -> {
-                    item {
-                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                            SectionTitle("UI 大小","即时预览")
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Presentation.uiScaleNames.forEachIndexed {index,label->
-                                    FocusTile("ui-scale:$index",Modifier.weight(1f),active=model.settings.uiScaleLevel==index,
-                                        onClick={model.saveSettings(model.settings.copy(uiScaleLevel=index))}) {
-                                        Text(label,color=SunnyColors.Text,fontSize=12.sp,modifier=Modifier.padding(vertical=13.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item {ToggleRow("深色主题","浅色与重点色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
-                    item {SectionTitle("重点色", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
+                "主题" -> {
+                    item {ToggleRow("深色主题","浅色与主题色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
+                    item {SectionTitle("主题", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
                     val columns=if(compact) 3 else 5
                     Presentation.accents.chunked(columns).forEachIndexed { row, pairs -> item {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -173,11 +174,11 @@ import kotlinx.coroutines.*
                                         val target=if(event.key==Key.DirectionDown) {
                                             if(index/columns<Presentation.accents.lastIndex/columns) (index+columns).coerceAtMost(Presentation.accents.lastIndex) else Presentation.accents.size
                                         } else index-columns
+                                        if(target>=Presentation.accents.size) return@onPreviewKeyEvent false
                                         coroutine.launch {
-                                            val rowCount=(Presentation.accents.size+columns-1)/columns
-                                            settingsList.scrollToItem(4+if(target<Presentation.accents.size) target/columns else rowCount)
+                                            settingsList.revealItem(3+target/columns,motion)
                                             withFrameNanos {};withFrameNanos {}
-                                            (accentFocus.getOrNull(target) ?: heroFocus).requestFocus()
+                                            accentFocus[target].requestFocus()
                                         };true
                                     } else false
                                 },active=model.settings.accentIndex==index,
@@ -191,41 +192,28 @@ import kotlinx.coroutines.*
                             }
                         }
                     } }
-                    item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"},Modifier.focusRequester(heroFocus)) {chooser="hero"}}
-                    item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
-                    item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup(),verticalArrangement=Arrangement.spacedBy(13.dp)) {
-                    ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
-                        model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
-                    }
-                    SettingChoiceRow("参与轮播的媒体库",if(librariesExpanded) "收起  ⌃" else "展开  ⌄") {librariesExpanded=!librariesExpanded}
-                        androidx.compose.animation.AnimatedVisibility(librariesExpanded,
-                            enter=expandVertically(motion.spring())+fadeIn(motion.fade()),exit=shrinkVertically(motion.spring())+fadeOut(motion.fade())) {
-                            Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
-                                .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
-                                val libraries=model.feeds.values.flatMap {it.libraries}
-                                if(libraries.isEmpty()) Text("连接 Emby 后可选择媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
-                                libraries.forEach {library->
-                                    val chosen=library.key in model.settings.heroLibraryKeys
-                                    ToggleRow(library.title,model.sources.firstOrNull {it.id==library.sourceId}?.name.orEmpty(),chosen) {
-                                        model.saveSettings(model.settings.copy(heroLibraryKeys=if(chosen) model.settings.heroLibraryKeys-library.key else model.settings.heroLibraryKeys+library.key))
+                }
+                "外观" -> {
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            SectionTitle("UI 大小","即时预览")
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Presentation.uiScaleNames.forEachIndexed {index,label->
+                                    FocusTile("ui-scale:$index",Modifier.weight(1f),active=model.settings.uiScaleLevel==index,
+                                        onClick={model.saveSettings(model.settings.copy(uiScaleLevel=index))}) {
+                                        Text(label,color=SunnyColors.Text,fontSize=12.sp,modifier=Modifier.padding(vertical=13.dp))
                                     }
                                 }
-                                if(model.settings.heroLibraryKeys.isEmpty()) Text("请选择至少一个媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
                             }
                         }
                     }
-                    }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
-                    item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
                     item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
-                    item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
-                    item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
                     item(key="font-size") {Column(Modifier.onPreviewKeyEvent {event->
                         if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
                             val index=settingsList.layoutInfo.visibleItemsInfo.firstOrNull {it.key=="font-size"}?.index
                             if(index!=null) {
-                                coroutine.launch {settingsList.scrollToItem(index+1);withFrameNanos {};withFrameNanos {};fontChoiceFocus.requestFocus()}
+                                coroutine.launch {settingsList.revealItem(index+1,motion);withFrameNanos {};withFrameNanos {};fontChoiceFocus.requestFocus()}
                                 true
                             } else false
                         } else false
@@ -240,11 +228,77 @@ import kotlinx.coroutines.*
                             }
                         }
                     }}
-                    item(key="font-choice") {SettingChoiceRow("字体",if(importingFont) "正在导入…" else model.settings.customFontName.ifBlank {"系统默认字体"},Modifier.focusRequester(fontChoiceFocus)) {chooser="font"}}
-                    item {Text("支持 TTF / OTF / TTC，可从本地存储或 U 盘导入。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
+                    item(key="font-choice") {SettingChoiceRow("界面字体",
+                        if(importingFont) "正在导入…" else fontChoiceLabel(model.settings.fontChoice,model.settings.customFontName),
+                        Modifier.focusRequester(fontChoiceFocus)) {chooser="font"}}
+                    item {Text("界面与字幕都可选系统默认字体，或用「用户自定义上传」导入自己的字体文件。\n支持 TTF / OTF / TTC，可从本地存储或 U 盘导入，文件只保存在本机。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",
+                        color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
+                    // One card: live preview on top, then the five style variables. No blind tuning.
+                    item {Column(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(18.dp))
+                        .border(1.dp,SunnyColors.Border,RoundedCornerShape(18.dp)).padding(16.dp),
+                        verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        SectionTitle("字幕外观","实时预览；颜色跟随主题色")
+                        SubtitleStylePreview(model.settings,model.settings.darkTheme,
+                            Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)))
+                        SettingChoiceRow("字幕字体",fontChoiceLabel(model.settings.subtitleFontChoice,model.settings.customFontName)) {chooser="subtitle-font"}
+                        SettingChoiceRow("字幕大小","${SubtitleAppearance.scaleNames[model.settings.subtitleScaleLevel.coerceIn(0,4)]} · ${"%.2f".format(SubtitleAppearance.scale(model.settings.subtitleScaleLevel))}x") {chooser="subtitle-scale"}
+                        SettingChoiceRow("描边",SubtitleAppearance.edges.firstOrNull {it.first==model.settings.subtitleEdge}?.second ?: "描边") {chooser="subtitle-edge"}
+                        SettingChoiceRow("位置",SubtitleAppearance.positions.firstOrNull {it.first==model.settings.subtitlePosition}?.second ?: "标准（底部）") {chooser="subtitle-position"}
+                        SettingChoiceRow("背景",SubtitleAppearance.backgrounds.firstOrNull {it.first==model.settings.subtitleBackground}?.second ?: "半透明黑") {chooser="subtitle-bg"}
+                    }}
+                }
+                "首页" -> {
+                    item {SettingChoiceRow("首页轮播",when(model.settings.heroMode) {"resume"->"继续观看";"latest"->"最新入库";else->"随机推荐"},Modifier.focusRequester(heroFocus)) {chooser="hero"}}
+                    item {SettingChoiceRow("自动切换","${model.settings.heroIntervalSeconds} 秒") {chooser="interval"}}
+                    item {Column(Modifier.onFocusChanged {if(!it.hasFocus) librariesExpanded=false}.focusGroup(),verticalArrangement=Arrangement.spacedBy(13.dp)) {
+                    ToggleRow("使用全部媒体库","关闭后，勾选参与随机轮播的媒体库",model.settings.heroAllLibraries) {
+                        model.saveSettings(model.settings.copy(heroAllLibraries=!model.settings.heroAllLibraries))
+                    }
+                    SettingChoiceRow("参与轮播的媒体库",if(librariesExpanded) "收起  ⌃" else "展开  ⌄") {librariesExpanded=!librariesExpanded}
+                        androidx.compose.animation.AnimatedVisibility(librariesExpanded,
+                            enter=expandVertically(motion.spring())+fadeIn(motion.fade()),exit=shrinkVertically(motion.spring())+fadeOut(motion.fade())) {
+                            Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
+                                .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
+                                // The list follows the source being browsed: libraries of other
+                                // sources are never offered here.
+                                val libraries=model.activeEmbySources().flatMap {model.feeds[it.id]?.libraries ?: emptyList()}
+                                if(libraries.isEmpty()) Text("连接 Emby 后可选择媒体库",color=SunnyColors.Secondary,fontSize=12.sp)
+                                libraries.forEach {library->
+                                    val chosen=library.key in model.settings.heroLibraryKeys
+                                    ToggleRow(library.title,model.sources.firstOrNull {it.id==library.sourceId}?.name.orEmpty(),chosen) {
+                                        model.saveSettings(model.settings.copy(heroLibraryKeys=if(chosen) model.settings.heroLibraryKeys-library.key else model.settings.heroLibraryKeys+library.key))
+                                    }
+                                }
+                                val chosenHere=libraries.count {it.key in model.settings.heroLibraryKeys}
+                                if(chosenHere==0) Text(
+                                    if(!model.settings.heroAllLibraries) "当前来源还没有勾选媒体库，轮播会先按本来源的全部媒体库运行"
+                                    else "当前来源将使用全部媒体库",
+                                    color=SunnyColors.Secondary,fontSize=12.sp)
+                            }
+                        }
+                    }
+                    }
                     item {ToggleRow("继续观看","显示服务端的续播记录",model.settings.showResume) {model.saveSettings(model.settings.copy(showResume=!model.settings.showResume))}}
                     item {ToggleRow("接着看下一集","显示 Emby NextUp 推荐",model.settings.showNextUp) {model.saveSettings(model.settings.copy(showNextUp=!model.settings.showNextUp))}}
-                    item {Action("清理海报缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="海报缓存已清理"}}}
+                }
+                "性能" -> {
+                    item {SettingChoiceRow("性能模式",when(model.settings.performanceMode) {
+                        "low"->"低负载";"balanced"->"标准";else->"自动（按设备内存）"
+                    }) {chooser="performance"}}
+                    item {Text("低负载模式降低海报解码尺寸、减少阴影绘制和图片淡入；保留平滑滚动，不降低视频清晰度。网络并发预算重启后应用。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {SettingChoiceRow("界面分辨率",when(model.settings.displayModePreference) {
+                        DisplayModePolicy.FHD->"1080p（优先流畅度）"
+                        DisplayModePolicy.NATIVE->"原生最高（4K 电视优先 4K）"
+                        else->"自动（系统默认）"
+                    }) {chooser="display"}}
+                    item {Text("这是应用窗口的显示模式偏好，不修改电视全局设置。原生 4K 会让 UI 像素量约为 1080p 的 4 倍，低性能电视建议保持自动或 1080p；视频本身的解码分辨率不受此项限制。",color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)}
+                    item {SettingChoiceRow("图片缓存上限","${model.settings.artworkCacheMiB} MiB · 重启后生效") {chooser="cache"}}
+                    item {Text("缓存保存在设备内部存储，不是运行内存。首屏快照最多 8 MiB，后台刷新；首次连接仍需加载。系统清理缓存后会重新获取。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {ToggleRow("高清图片","提高请求图片尺寸；不修改电视的系统分辨率",model.settings.highQualityArtwork) {model.saveSettings(model.settings.copy(highQualityArtwork=!model.settings.highQualityArtwork))}}
+                    item {SettingChoiceRow("动画速度",MotionPolicy.label(MotionPolicy.speed(model.settings))) {chooser="motion"}}
+                    item {Text("0.5x 更舒缓 · 1x 标准 · 2x 更快",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {Action("清理图片与首屏缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="图片与首屏缓存已清理"}}}
                 }
                 "播放" -> {
                     item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "跟随媒体默认"}") {chooser="subtitle"}}
@@ -269,22 +323,41 @@ import kotlinx.coroutines.*
             }
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"字体";else->"字幕优先级（未匹配时跟随媒体默认）"},
-        when(chooser) {"artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"cache"->"图片缓存上限（重启后生效）";"performance"->"性能模式";"display"->"界面分辨率";"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"界面字体"
+            "subtitle-font"->"字幕字体";"subtitle-scale"->"字幕大小";"subtitle-edge"->"字幕描边"
+            "subtitle-position"->"字幕位置";"subtitle-bg"->"字幕背景";"activeSource"->"选择要显示的 Emby 来源"
+            else->"字幕优先级（未匹配时跟随媒体默认）"},
+        when(chooser) {"cache"->PerformancePolicy.cacheSizesMiB.map {it.toString() to "$it MiB"}
+            "performance"->listOf("auto" to "自动（低内存设备启用低负载）","balanced" to "标准","low" to "低负载")
+            "display"->listOf(DisplayModePolicy.AUTO to "自动（由 Android / 电视选择）",DisplayModePolicy.FHD to "1080p · 优先流畅度",DisplayModePolicy.NATIVE to "原生最高 · 4K 电视优先 3840×2160")
+            "artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
             "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
-            "font"->listOf("system" to "系统默认字体","custom" to "用户自定义上传…")
+            "font","subtitle-font"->FontCatalog.entries.map {it.id to it.label}
+            "subtitle-scale"->SubtitleAppearance.scales.indices.map {it.toString() to SubtitleAppearance.scaleNames[it]}
+            "subtitle-edge"->SubtitleAppearance.edges
+            "subtitle-position"->SubtitleAppearance.positions
+            "subtitle-bg"->SubtitleAppearance.backgrounds
+            "activeSource"->model.sources.filter {it.kind==SourceKind.EMBY}.map {it.id to it.name}
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->if(model.settings.customFontFile.isBlank()) "system" else "custom";else->model.settings.subtitlePreference},
+        when(chooser) {"cache"->model.settings.artworkCacheMiB.toString();"performance"->model.settings.performanceMode;"display"->model.settings.displayModePreference;"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->model.settings.fontChoice;"subtitle-font"->model.settings.subtitleFontChoice;"subtitle-scale"->model.settings.subtitleScaleLevel.toString();"subtitle-edge"->model.settings.subtitleEdge;"subtitle-position"->model.settings.subtitlePosition;"subtitle-bg"->model.settings.subtitleBackground;"activeSource"->model.activeSourceId;else->model.settings.subtitlePreference},
         onDismiss={chooser=""}) {value ->
-        if(chooser=="font") {
-            if(value=="custom") {
+        when(chooser) {
+            "activeSource" -> model.saveSettings(model.settings.copy(activeSourceId=value))
+            "font","subtitle-font" -> if(value==FontCatalog.CUSTOM) {
+                fontTarget=if(chooser=="font") FontCatalog.SYSTEM else "subtitle"
                 if(!importingFont) try {fontPicker.launch(arrayOf("*/*"))}
                 catch(_:android.content.ActivityNotFoundException) {model.message="此电视没有文件选择器，请先安装支持系统文件选择的文件管理器。"}
-            } else model.saveSettings(model.settings.copy(customFontFile="",customFontName=""))
-        } else model.saveSettings(when(chooser) {"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
-            "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
+            } else model.saveSettings(if(chooser=="font") model.settings.copy(fontChoice=value)
+                else model.settings.copy(subtitleFontChoice=value))
+            "subtitle-scale"->model.saveSettings(model.settings.copy(subtitleScaleLevel=value.toInt()))
+            "subtitle-edge"->model.saveSettings(model.settings.copy(subtitleEdge=value))
+            "subtitle-position"->model.saveSettings(model.settings.copy(subtitlePosition=value))
+            "subtitle-bg"->model.saveSettings(model.settings.copy(subtitleBackground=value))
+            else->model.saveSettings(when(chooser) {"cache"->model.settings.copy(artworkCacheMiB=value.toInt());"performance"->model.settings.copy(performanceMode=value);"display"->model.settings.copy(displayModePreference=DisplayModePolicy.normalize(value));"motion"->model.settings.copy(animationSpeed=value.toFloat(),reduceMotion=false);"artwork"->model.settings.copy(artworkMode=value)
+                "hero"->model.settings.copy(heroMode=value);"interval"->model.settings.copy(heroIntervalSeconds=value.toInt());else->model.settings.copy(subtitlePreference=value)})
+        }
         chooser=""
     }
     if(resetConfirm) Dialog(onDismissRequest={resetConfirm=false}) {
@@ -323,7 +396,8 @@ import kotlinx.coroutines.*
 }
 
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
-    val categories=listOf("媒体来源","首页与外观","播放","设备与诊断","关于")
+    // 字体 merged into 外观; the data-source page sits below 性能.
+    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","关于")
     @Composable fun Category(cat:String) {
         FocusTile("settings:$cat",Modifier.width(if(LocalCompact.current) 140.dp else 165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
@@ -331,9 +405,9 @@ import kotlinx.coroutines.*
     }
     if(LocalCompact.current) androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
         items(categories.size) {Category(categories[it])}
-    } else Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))
-        categories.forEach {Category(it)}
+    } else LazyColumn(Modifier.testTag("settings:categories"),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+        item {Text("设置",color=SunnyColors.Text,fontSize=29.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(bottom=18.dp))}
+        items(categories.size,key={categories[it]}) {Category(categories[it])}
     }
 }
 
@@ -377,6 +451,9 @@ import kotlinx.coroutines.*
         }
     }
 }
+
+private fun fontChoiceLabel(choice:String,customName:String):String =
+    if(choice==FontCatalog.CUSTOM) customName.ifBlank {"用户自定义字体"} else FontCatalog.label(choice)
 
 @Composable private fun SettingChoiceRow(title:String,value:String,modifier:Modifier=Modifier,onClick:()->Unit) {
     FocusTile("setting:$title",Modifier.fillMaxWidth().then(modifier),onClick=onClick) {

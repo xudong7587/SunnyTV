@@ -28,10 +28,19 @@ if shutil.which('node') and (root/'preview/ui.js').exists():
     check('JavaScript syntax', lambda: subprocess.run(['node','--check',str(root/'preview/ui.js')],check=True,capture_output=True))
 
 def no_packaged_demo():
-    forbidden = ('.jpg','.jpeg','.png','.woff','.woff2','.ttf','.otf')
-    # User screenshots, prototype illustrations and redistributable font binaries stay outside the APK tree.
+    forbidden = ('.jpg','.jpeg','.png','.woff','.woff2')
+    # User screenshots and prototype illustrations stay outside the APK tree.
     assert not [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden]
-check('No preview imagery or redistributed fonts in native app', no_packaged_demo)
+check('No preview imagery in native app', no_packaged_demo)
+
+def no_bundled_fonts():
+    # The app ships no font file: interface and subtitle fonts come from the platform or from a file
+    # the user imports into app storage. Keeping this strict also keeps third-party font licences out
+    # of the repository.
+    packaged = sorted(str(p.relative_to(root)) for p in (root/'app/src/main').rglob('*')
+                      if p.suffix.lower() in ('.ttf','.otf','.ttc'))
+    assert not packaged, "bundled font files: " + ", ".join(packaged)
+check('No bundled font files in the app', no_bundled_fonts)
 
 result = {'scope':'source/XML/script sanity only; not Android compile', 'checks':checks}
 (root/'docs/project-check-results.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')

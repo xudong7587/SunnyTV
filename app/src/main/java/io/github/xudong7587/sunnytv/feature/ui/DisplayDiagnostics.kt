@@ -20,6 +20,7 @@ private fun Context.activity():Activity?=when(this) {is Activity->this;is Contex
 @Composable fun DisplayDiagnostics() {
     val view=LocalView.current
     val context=LocalContext.current
+    val model=LocalAppModel.current
     val window=context.activity()?.window
     val samples=remember {ArrayDeque<Long>()}
     var dropped by remember {mutableIntStateOf(0)}
@@ -37,17 +38,24 @@ private fun Context.activity():Activity?=when(this) {is Activity->this;is Contex
         while(true) {
             val display=view.display
             val mode=display?.mode
+            val highest=display?.supportedModes?.maxWithOrNull(compareBy<android.view.Display.Mode> {it.physicalWidth.toLong()*it.physicalHeight}.thenBy {it.refreshRate})
             val density=view.resources.displayMetrics.density
             val ordered=samples.sorted()
             val p95=if(ordered.isEmpty()) null else ordered[((ordered.size-1)*.95).toInt()]/1_000_000.0
             val memory=ActivityManager.MemoryInfo().also {(context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)}
             info=buildString {
-                append("当前显示：${mode?.physicalWidth ?: 0} × ${mode?.physicalHeight ?: 0} · ${display?.refreshRate ?: 0} Hz\n")
+                val preference=when(model.settings.displayModePreference) {
+                    io.github.xudong7587.sunnytv.core.model.DisplayModePolicy.FHD->"1080p"
+                    io.github.xudong7587.sunnytv.core.model.DisplayModePolicy.NATIVE->"原生最高"
+                    else->"自动"
+                }
+                append("界面模式偏好：$preference · 当前显示：${mode?.physicalWidth ?: 0} × ${mode?.physicalHeight ?: 0} @ ${mode?.refreshRate ?: display?.refreshRate ?: 0f} Hz\n")
                 append("应用窗口：${view.width} × ${view.height} px · ${(view.width/density).toInt()} × ${(view.height/density).toInt()} dp\n")
+                append("设备最高模式：${highest?.physicalWidth ?: 0} × ${highest?.physicalHeight ?: 0} @ ${highest?.refreshRate ?: 0f} Hz\n")
                 append("支持模式："+display?.supportedModes?.joinToString {"${it.physicalWidth}×${it.physicalHeight} @ ${it.refreshRate}"}+"\n")
                 append("系统可用内存：${memory.availMem/1024/1024} MB\n")
                 append("当前诊断会话渲染帧 P95：${p95?.let {"%.2f ms".format(it)} ?: "—"} · ${ordered.size} 样本 · 回调丢失 $dropped\n")
-                append("显示模式与渲染帧耗时不等于视频帧率；静止界面不会持续产出新帧。")
+                append("界面窗口分辨率、显示模式与视频实际解码分辨率是不同概念；窗口模式请求可能被电视固件忽略。静止界面不会持续产出新帧。")
             }
             delay(1500)
         }

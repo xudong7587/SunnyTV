@@ -70,7 +70,8 @@ class TvMotionTest {
         rule.onNodeWithTag("outside").assertIsFocused()
         rule.waitForIdle()
         assertEquals(110f,width("idle:fixture:0"),1f)
-        assertEquals(0f,bounds("idle:fixture:0").left.value,1f)
+        // dev23: the shelf keeps the focus-shadow gutter inside its own bounds.
+        assertEquals(FocusShadowGutter.value,bounds("idle:fixture:0").left.value,1f)
         key("outside",Key.DirectionDown)
         rule.onNodeWithTag("idle:fixture:0").assertIsFocused()
         assertTrue(width("idle:fixture:0")>290f)
@@ -159,7 +160,7 @@ class TvMotionTest {
         val viewport=bounds("header-viewport")
         val shelf=bounds("latest:fixture:lib:viewport")
         assertTrue(shelf.bottom.value+13f<=viewport.bottom.value)
-        assertTrue(bounds("more:fixture:lib").top>=viewport.top)
+        assertTrue(bounds("shelf-sort:fixture:lib").top>=viewport.top)
     }
     @Test fun adjacentExpansionKeepsOtherCardsAndAllVerticalEdgesFixedDuringEveryFrame() {
         shelf();focus("motion-shelf:fixture:0")
@@ -199,7 +200,8 @@ class TvMotionTest {
         assertEquals(edge.left.value,bounds("motion-shelf:fixture:9").left.value,1f)
         for(index in 9 downTo 1) key("motion-shelf:fixture:$index",Key.DirectionLeft)
         rule.onNodeWithTag("motion-shelf:fixture:0").assertIsFocused()
-        assertEquals(0f,bounds("motion-shelf:fixture:0").left.value,1f)
+        // dev23: the first slot sits one shadow gutter in from the row's own left edge.
+        assertEquals(FocusShadowGutter.value,bounds("motion-shelf:fixture:0").left.value,1f)
     }
     @Test fun anUnfinishedWidthAnimationCanReverseWithoutLosingFocusOrMovingY() {
         shelf();focus("motion-shelf:fixture:0")
@@ -246,9 +248,10 @@ class TvMotionTest {
         focus("nav:首页")
         val hero=bounds("home:hero")
         key("nav:首页",Key.DirectionDown)
-        rule.onNodeWithTag("home-play").assertIsFocused()
+        rule.onNodeWithTag("home-play").assertDoesNotExist()
+        rule.onNodeWithTag("quick-resume:fixture:0").assertIsFocused()
         assertEquals(hero.top.value,bounds("home:hero").top.value,.1f)
-        key("home-play",Key.DirectionRight)
+        key("quick-resume:fixture:0",Key.DirectionUp)
         rule.onNodeWithTag("home-carousel:featured").assertIsFocused()
         key("home-carousel:featured",Key.DirectionRight)
         assertEquals(hero.top.value,bounds("home:hero").top.value,.1f)
@@ -256,8 +259,6 @@ class TvMotionTest {
         repeat(7) {key("home-carousel:featured",Key.DirectionLeft)}
         rule.onNodeWithTag("home-carousel:featured").assertIsFocused()
         key("home-carousel:featured",Key.DirectionLeft)
-        rule.onNodeWithTag("home-play").assertIsFocused()
-        key("home-play",Key.DirectionDown)
         rule.onNodeWithTag("quick-resume:fixture:0").assertIsFocused()
         assertEquals(hero.top.value,bounds("home:hero").top.value,.1f)
         key("quick-resume:fixture:0",Key.DirectionDown)

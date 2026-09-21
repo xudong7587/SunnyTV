@@ -10,17 +10,20 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.1.0-dev16"
+        versionCode = 25
+        versionName = "0.1.0-dev25"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("debug")
+            // Keep the complete playback, reflection, STRM, and network surface for dev21.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // No release key in this repository. Use your own signing config.
+            // Reuse the existing dev16 signing identity; never generate a replacement key.
         }
     }
     providers.environmentVariable("SUNNYTV_SIGNING_KEYSTORE").orNull?.let { path ->
@@ -34,6 +37,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+    // No font file is bundled: interface and subtitle fonts are either the platform font or a file
+    // the user imports into app storage, which Typeface reads from the file system.
     sourceSets.getByName("test").java.srcDir(rootProject.file("tests"))
     testOptions { unitTests.isReturnDefaultValues = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }

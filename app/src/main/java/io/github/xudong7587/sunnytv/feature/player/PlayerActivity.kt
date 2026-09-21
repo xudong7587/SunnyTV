@@ -3,6 +3,7 @@ package io.github.xudong7587.sunnytv.feature.player
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.annotation.SuppressLint
 import android.view.Display
 import android.media.AudioManager
 import android.provider.Settings
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -98,6 +100,7 @@ class PlayerActivity: ComponentActivity() {
     private var playbackSpeed by mutableFloatStateOf(1f)
     private var tvPlayback = false
     private var returnControl by mutableStateOf("transport")
+    private var controlInteractionSerial by mutableIntStateOf(0)
     private val settings get()=app.store.settings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,7 +130,30 @@ class PlayerActivity: ComponentActivity() {
         }
         setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
     }
+
+    // Targeting suppression: overriding the framework Activity key dispatch is a normal app pattern;
+    // lint's RestrictedApi check only guards androidx' own group prefix, not this app.
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The OSD timeout is an idle timeout, not a fixed lifetime. Every D-pad/button operation
+        // while controls are visible restarts it, so controls never disappear mid-navigation.
+        if(event.action==KeyEvent.ACTION_DOWN && controls && panel.isBlank() && error.isBlank()) {
+            controlInteractionSerial++
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        // Touch/air-mouse interactions should obey the same idle timeout as D-pad input.
+        if(controls && panel.isBlank() && error.isBlank()) controlInteractionSerial++
+    }
+
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) createPlayer()}
+    override fun onResume() {
+        super.onResume()
+        window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
+    }
     override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
     override fun onStop() {
         player?.let {p ->
@@ -163,7 +189,14 @@ class PlayerActivity: ComponentActivity() {
                 override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET
             })
         val p=ExoPlayer.Builder(this).setMediaSourceFactory(sourceFactory)
-            .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(15_000,40_000,1_000,2_500).build())
+            // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
+            // buffer, size the target to the device heap and read in bigger chunks.
+            .setLoadControl(DefaultLoadControl.Builder()
+                .setBufferDurationsMs(30_000,120_000,2_500,5_000)
+                .setTargetBufferBytes((Runtime.getRuntime().maxMemory()/8)
+                    .coerceIn(48L*1024*1024,160L*1024*1024).toInt())
+                .setAllocator(androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024))
+                .build())
             .setSeekBackIncrementMs(settings.seekStepSeconds*1000L).setSeekForwardIncrementMs(settings.seekStepSeconds*1000L)
             .build()
         p.setAudioAttributes(AudioAttributes.DEFAULT,true)
@@ -363,6 +396,13 @@ class PlayerActivity: ComponentActivity() {
     }
     @Composable private fun PlayerContent() {
         val context=mediaContext
+        val progressFocus=remember {FocusRequester()}
+        val subtitleInk=SunnyColors.Text.toArgb()
+        val subtitleAccent=SunnyColors.Accent.toArgb()
+        val resolvedSubtitleFont by produceState<android.graphics.Typeface?>(null,settings.subtitleFontChoice,settings.customFontFile) {
+            value=withContext(Dispatchers.IO) {subtitleTypeface(this@PlayerActivity,settings)}
+        }
+        val appliedSubtitle=remember {arrayOfNulls<Any>(1)}
         val activeSkip=SegmentLogic.active(context?.skipSegments.orEmpty(),position,dismissedSegments)
         val remainingMs=(duration-position).coerceAtLeast(0)
         val showNextUp=context?.next!=null && !nextUpDismissed && rendered && duration>0 &&
@@ -372,7 +412,20 @@ class PlayerActivity: ComponentActivity() {
                 useController=false;keepScreenOn=true
                 isFocusable=false
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            }},update={view->view.player=player;view.resizeMode=resizeMode},modifier=Modifier.fillMaxSize())
+            }},update={view->
+                view.player=player;view.resizeMode=resizeMode
+                // 裁切 keeps the aspect ratio and scales the picture up so the edges run off screen
+                // (this also removes letterbox bars baked into the file); 拉伸 stays a plain FILL.
+                val crop=resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                view.scaleX=if(crop) 1.12f else 1f
+                view.scaleY=if(crop) 1.12f else 1f
+                val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
+                    settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
+                if(appliedSubtitle[0]!=key) {
+                    appliedSubtitle[0]=key
+                    applySubtitleAppearance(view,settings,subtitleInk,subtitleAccent,resolvedSubtitleFont)
+                }
+            },modifier=Modifier.fillMaxSize())
 
             if(panel.isBlank()) PlayerTouchSurface(
                 onTap={controls=!controls},
@@ -459,31 +512,33 @@ class PlayerActivity: ComponentActivity() {
 
             if(controls && panel.isBlank() && error.isBlank()) {
                 Box(Modifier.align(Alignment.TopStart).padding(start=40.dp,top=30.dp).width(300.dp).height(82.dp)) {PlayerMediaTitle()}
-                LaunchedEffect(controls,playing,panel,error,gestureActive) {
+                LaunchedEffect(controls,playing,panel,error,gestureActive,controlInteractionSerial) {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .focusProperties {up=progressFocus}
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
-                    .padding(start=18.dp,end=18.dp,top=44.dp,bottom=10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
-                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L) {seek(it)}
+                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus),
+                        onSeekBy={seek(it)},onSeekTo={target->player?.seekTo(target);position=target})
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                         Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
                         Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
                     Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
-                        Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
-                            PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
-                            PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=returnControl=="transport") {
+                            PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind",badge=settings.seekStepSeconds.toString()) {seek(-settings.seekStepSeconds*1000L)}
+                            PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=returnControl=="transport",emphasis=true) {
                                 player?.let {if(it.isPlaying) it.pause() else it.play()}
                             }
-                            PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
+                            PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward",badge=settings.seekStepSeconds.toString()) {seek(settings.seekStepSeconds*1000L)}
                             context?.next?.let {next->PlayerControl("下一集","next") {switchEpisode(next)}}
                         }
                         Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))
-                        Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
-                            PlayerControl("倍速 ${playbackSpeed}x","speed",initial=returnControl=="speed") {returnControl="speed";panel="speed"}
+                        Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
+                            PlayerControl("倍速 ${speedLabel(playbackSpeed)}","speed",initial=returnControl=="speed",badge=speedLabel(playbackSpeed)) {returnControl="speed";panel="speed"}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
                             if(availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
                             if(availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
@@ -531,7 +586,7 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun SpeedPanel() {
         PlayerSheet("播放倍速",{panel=""}) {
             listOf(1f,1.25f,1.5f,2f).forEach {speed->
-                PlayerOption(if(speed==1f) "1x" else if(speed==2f) "2x" else "${speed}x",selected=playbackSpeed==speed) {
+                PlayerOption(speedLabel(speed),selected=playbackSpeed==speed) {
                     playbackSpeed=speed
                     player?.setPlaybackSpeed(speed)
                     panel=""
@@ -619,6 +674,7 @@ class PlayerActivity: ComponentActivity() {
     companion object {
         fun intent(context:Context,request:PlaybackRequest)=Intent(context,PlayerActivity::class.java).putExtra("request",request)
         private fun millis(ms:Long):String = if(ms < 0) "—" else "${ms}ms"
+        private fun speedLabel(speed:Float):String = if(speed % 1f == 0f) "%.1fx".format(speed) else "${speed}x"
         private fun clock(ms:Long):String {val seconds=ms.coerceAtLeast(0)/1000;return if(seconds>=3600) "%d:%02d:%02d".format(seconds/3600,seconds/60%60,seconds%60) else "%02d:%02d".format(seconds/60,seconds%60)}
     }
 }

@@ -17,6 +17,7 @@ import androidx.tv.material3.darkColorScheme
 import androidx.tv.material3.lightColorScheme
 import io.github.xudong7587.sunnytv.feature.AppModel
 import io.github.xudong7587.sunnytv.core.model.*
+import io.github.xudong7587.sunnytv.core.storage.loadFontTypeface
 
 data class SunnyPalette(val background:Color,val surface:Color,val raised:Color,val accent:Color,
     val ink:Color,val text:Color,val secondary:Color,val border:Color,
@@ -57,16 +58,10 @@ val LocalPageActive=staticCompositionLocalOf {true}
     val p=SunnyPalette(blend(target.background),blend(target.surface),blend(target.raised),blend(target.accent),
         blend(target.ink),blend(target.text),blend(target.secondary),blend(target.border),blend(target.focusBackground),blend(target.focusContent))
     val context=LocalContext.current
-    val font by produceState<FontFamily>(FontFamily.SansSerif,settings.customFontFile) {
+    // 外观 · 字体: system, the two bundled self-use fonts, or a user-uploaded font.
+    val font by produceState<FontFamily>(FontFamily.SansSerif,settings.fontChoice,settings.customFontFile) {
         value=withContext(Dispatchers.IO) {
-            runCatching {
-                if(settings.customFontFile.isBlank()) FontFamily.SansSerif else {
-                    val folder=File(context.filesDir,"fonts").canonicalFile
-                    val file=File(folder,settings.customFontFile).canonicalFile
-                    require(file.parentFile==folder && file.isFile)
-                    FontFamily(android.graphics.Typeface.createFromFile(file))
-                }
-            }.getOrDefault(FontFamily.SansSerif)
+            loadFontTypeface(context,settings.fontChoice,settings.customFontFile)?.let {FontFamily(it)} ?: FontFamily.SansSerif
         }
     }
     CompositionLocalProvider(LocalSunnyPalette provides p,LocalMotion provides motion) {

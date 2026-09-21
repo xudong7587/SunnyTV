@@ -16,6 +16,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -46,6 +47,11 @@ class MainActivity: ComponentActivity() {
     private val model:AppModel by viewModels()
     private var keyboardFallback:((Int)->Boolean)?=null
     override fun onKeyDown(keyCode:Int,event:android.view.KeyEvent):Boolean {
+        // Hardware/remote MENU jumps straight to settings; the player is a separate activity.
+        if(keyCode==android.view.KeyEvent.KEYCODE_MENU && event.action==android.view.KeyEvent.ACTION_DOWN) {
+            model.openSettingsFromMenu()
+            return true
+        }
         if(keyboardFallback?.invoke(keyCode)==true) return true
         return super.onKeyDown(keyCode,event)
     }
@@ -59,6 +65,11 @@ class MainActivity: ComponentActivity() {
         setContent {
             val input=LocalInputModeManager.current
             val focus=LocalFocusManager.current
+            val configuration=LocalConfiguration.current
+            val handset=remember(configuration) {isHandset(configuration)}
+            val touchFirst=remember(configuration) {isTouchFirst(configuration)}
+            val portrait=isPortrait(configuration)
+            val topInset=handsetTopInset(WindowInsets.displayCutout.asPaddingValues().calculateTopPadding(),handset,portrait)
             DisposableEffect(input,focus) {
                 keyboardFallback={code->
                     val direction=when(code) {
@@ -72,7 +83,11 @@ class MainActivity: ComponentActivity() {
                 }
                 onDispose {keyboardFallback=null}
             }
-            CompositionLocalProvider(LocalAppModel provides model) {
+            LaunchedEffect(model.settings.displayModePreference) {
+                applyPreferredDisplayMode(window,model.settings.displayModePreference)
+            }
+            CompositionLocalProvider(LocalAppModel provides model,LocalHandset provides handset,
+                LocalTouchFirst provides touchFirst,LocalTopInset provides topInset) {
                 ScaledUi(model.settings) {SunnyTheme(model.settings) { SunnyRoot(onPlay={ entry,fromStart -> model.play(entry,fromStart) { request ->
                     startActivity(PlayerActivity.intent(this,request))
                 } }) }}
@@ -82,14 +97,7 @@ class MainActivity: ComponentActivity() {
     override fun onRestart() { super.onRestart(); model.afterPlayback() }
     override fun onResume() {
         super.onResume()
-        window.decorView.post {
-            val screen=window.decorView.display ?: return@post
-            val current=screen.mode
-            val fastest=screen.supportedModes.filter {it.physicalWidth==current.physicalWidth && it.physicalHeight==current.physicalHeight}
-                .maxByOrNull {it.refreshRate} ?: current
-            // A window preference within advertised modes, never a global display override.
-            window.attributes=window.attributes.apply {preferredRefreshRate=fastest.refreshRate}
-        }
+        window.decorView.post {applyPreferredDisplayMode(window,model.settings.displayModePreference)}
     }
 }
 
@@ -99,22 +107,39 @@ class MainActivity: ComponentActivity() {
     BackHandler(enabled=route!=Route.Home || model.busy) { model.back() }
     val compact=LocalConfiguration.current.screenWidthDp<600
     val bridge=remember(route) {NavigationBridge()}
-    val navVisible=route !is Route.Library && route !is Route.Detail
+    // dev22 acceptance: the library and detail pages keep the pinned navigation and brand again.
+    val navVisible=true
     val scope=rememberCoroutineScope()
     val focus=LocalFocusManager.current
     val inputMotion=remember(route) {TvFocusMotion()}
     val motion=LocalMotion.current
     CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,
         LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion) {
-        Box(Modifier.fillMaxSize().background(SunnyColors.Background).onPreviewKeyEvent {inputMotion.record(it);false}) {
+        Box(Modifier.fillMaxSize().background(SunnyColors.Background)
+            .onPreviewKeyEvent {inputMotion.record(it);false}
+            .onKeyEvent {event->
+                // Bubble phase at the root so it also applies while the pinned navigation holds
+                // focus (that bar is a sibling of the page content, not a child of it).
+                if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp) {
+                    // The pinned navigation IS the top of the page: pressing Up there refreshes the
+                    // carousel. Move-focus is not consulted first, because it may pick another tile
+                    // in the same row and swallow the key.
+                    when {
+                        bridge.navActive -> model.refreshTopCarousel()
+                        focus.moveFocus(FocusDirection.Up) -> Unit
+                        navVisible -> scope.launch {bridge.revealTop?.invoke();bridge.enterNavigation()}
+                        else -> model.refreshTopCarousel()
+                    }
+                    true
+                } else false
+            }) {
             Box(Modifier.fillMaxSize().onPreviewKeyEvent {event->
                 if(event.key==Key.Back || event.key==Key.Escape) {
                     if(event.type==KeyEventType.KeyUp) model.back()
                     true
-                } else false
-            }.onKeyEvent {event->
-                if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp) {
-                    if(!focus.moveFocus(FocusDirection.Up) && navVisible) scope.launch {bridge.revealTop?.invoke();bridge.enterNavigation()}
+                } else if(event.key==Key.Menu && event.type==KeyEventType.KeyDown) {
+                    // Remote MENU reaches settings directly on every page except the player.
+                    model.openSettingsFromMenu()
                     true
                 } else false
             }) {
@@ -123,7 +148,7 @@ class MainActivity: ComponentActivity() {
                 },label="page-transition") {visibleRoute->
                     val visibleBridge=remember(visibleRoute) {if(visibleRoute==route) bridge else NavigationBridge()}
                     CompositionLocalProvider(LocalPageKey provides visibleRoute.key(),LocalPageActive provides (visibleRoute==route),
-                        LocalNavigationBridge provides visibleBridge,LocalNavVisible provides (visibleRoute !is Route.Library && visibleRoute !is Route.Detail)) {
+                        LocalNavigationBridge provides visibleBridge,LocalNavVisible provides true) {
                     StableVerticalViewport {
                     stateHolder.SaveableStateProvider(visibleRoute.key()) {
                         when(visibleRoute) {
@@ -150,6 +175,13 @@ class MainActivity: ComponentActivity() {
             if(model.busy) Text("正在连接媒体…  返回可取消",color=SunnyColors.Accent,fontSize=14.sp,
                 modifier=Modifier.align(Alignment.BottomCenter).padding(18.dp).background(SunnyColors.Surface).padding(15.dp))
             if(model.message.isNotEmpty()) MessageDialog(model.message) { model.message="" }
+            model.actionTarget?.let {target->
+                ItemActionSheet(target,model.itemActions(target),onRun={model.runAction(it,target)},
+                    onDelete={model.requestDelete(target)},onDismiss={model.dismissItemActions()})
+            }
+            model.pendingDelete?.let {target->
+                ItemDeleteConfirm(target,onConfirm={model.confirmDelete(target)},onDismiss={model.cancelDelete()})
+            }
         }
     }
 }
@@ -162,14 +194,28 @@ class MainActivity: ComponentActivity() {
         else -> model.route
     }
     val compact=LocalCompact.current
+    val topInset=LocalTopInset.current
     val scope=rememberCoroutineScope()
-    Row(Modifier.fillMaxWidth().statusBarsPadding().height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
+    Row(Modifier.fillMaxWidth().padding(top=topInset).height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Row(Modifier.padding(horizontal=if(compact) 0.dp else 8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            Image(painterResource(if(model.settings.darkTheme) R.drawable.ic_sun_brand else R.drawable.ic_sun_brand_light),"SunnyTV",Modifier.size(if(compact) 30.dp else 36.dp))
-            if(!compact) Text("  SunnyTV",color=SunnyColors.Text,fontSize=19.sp,fontWeight=FontWeight.Bold)
+        // Only the wordmark carries the light-theme elevation. A shadow around the round logo mark
+        // reads as a circular button, so the logo itself stays flat.
+        val brandShadow=model.settings.shadowsEnabled && !model.settings.darkTheme
+        Row(Modifier.padding(start=if(compact) 6.dp else 10.dp,end=8.dp,top=13.dp,bottom=13.dp),
+            verticalAlignment=Alignment.CenterVertically) {
+            val iconSize=if(compact) 30.dp else 36.dp
+            // No shadow on the sun mark: any shadow behind a round glyph reads as a circular button.
+            Image(painterResource(if(model.settings.darkTheme) R.drawable.ic_sun_brand else R.drawable.ic_sun_brand_light),
+                "SunnyTV",Modifier.size(iconSize))
+            if(!compact) Text("  SunnyTV",color=SunnyColors.Text,fontSize=19.sp,fontWeight=FontWeight.Bold,
+                style=androidx.tv.material3.LocalTextStyle.current.copy(shadow=if(brandShadow)
+                    androidx.compose.ui.graphics.Shadow(color=androidx.compose.ui.graphics.Color(0xFF3F3B36).copy(alpha=.38f),
+                        offset=androidx.compose.ui.geometry.Offset(0f,2.4f),blurRadius=7f) else null))
         }
-        Row(Modifier.cinemaGlass().padding(4.dp).onFocusChanged {if(it.hasFocus) scope.launch {bridge.revealTop?.invoke()}}.onPreviewKeyEvent {
+        Row(Modifier.cinemaGlass().padding(4.dp).onFocusChanged {focusState->
+            bridge.navActive=focusState.hasFocus
+            if(focusState.hasFocus) scope.launch {bridge.revealTop?.invoke()}
+        }.onPreviewKeyEvent {
             if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent()};true} else false
         }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->

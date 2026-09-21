@@ -78,5 +78,16 @@ data class AppSettings(
     val episodeLayouts:Map<String,String> = emptyMap(),
     val librarySubtitlePreferences:Map<String,String> = emptyMap(),
     val animationSpeed:Float = 1f, val fontScaleLevel:Int = 2,
-    val customFontFile:String = "", val customFontName:String = "", val shadowsEnabled:Boolean = true
+    val customFontFile:String = "", val customFontName:String = "", val shadowsEnabled:Boolean = true,
+    val artworkCacheMiB:Int = 512, val performanceMode:String = "auto",
+    val displayModePreference:String = DisplayModePolicy.AUTO,
+    // Self-use build: the two bundled fonts live in FontCatalog and are listed in 外观 · 字体.
+    val fontChoice:String = FontCatalog.SYSTEM,
+    val subtitleFontChoice:String = FontCatalog.SYSTEM,
+    val subtitleScaleLevel:Int = 2,
+    val subtitleEdge:String = SubtitleAppearance.EDGE_OUTLINE,
+    val subtitlePosition:String = SubtitleAppearance.POSITION_STANDARD,
+    val subtitleBackground:String = SubtitleAppearance.BACKGROUND_BLACK
+    /** Only this Emby source is browsed; empty means the first configured Emby source. */
+    , val activeSourceId:String = ""
 )

@@ -68,6 +68,9 @@ import kotlinx.coroutines.withContext
 @Composable fun MediaDetailContent(initial:MediaEntry,onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current
     val item=model.details[initial.key] ?: initial
+    // Room reserved inside a row so the focus shadow is not clipped, without indenting the row's
+    // content away from the section heading.
+    val detailRowGutter=FocusShadowGutter
     val context=LocalContext.current
     val tint by animateColorAsState(posterTint(item),LocalMotion.current.fade(400),label="detail-tint")
     val base=LocalSunnyPalette.current
@@ -77,6 +80,21 @@ import kotlinx.coroutines.withContext
     val tracks=version?.tracks ?: item.tracks
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
+    val motion=LocalMotion.current
+    var contentMoving by remember(item.key) {mutableStateOf(false)}
+    fun moveContent(index:Int,requester:FocusRequester?=null,alignTop:Boolean=false) {
+        if(contentMoving) return
+        contentMoving=true
+        scope.launch {
+            try {
+                list.revealItem(index,motion,alignTop=alignTop)
+                if(requester!=null) repeat(20) {
+                    withFrameNanos { }
+                    if(runCatching {requester.requestFocus()}.getOrDefault(false)) return@launch
+                }
+            } finally {contentMoving=false}
+        }
+    }
     val lowerContentFocus=remember(item.key) {FocusRequester()}
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
     val episodeLayout=model.settings.episodeLayouts[item.key] ?: "horizontal"
@@ -103,13 +121,22 @@ import kotlinx.coroutines.withContext
     }
     val similarIndex=3+(if(item.versions.isNotEmpty()) 1 else 0)+childRows+(if(item.people.isNotEmpty()) 1 else 0)
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
-        Box(Modifier.fillMaxSize().background(tint)) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // dev22: the media page keeps the same fixed, full-screen backdrop as the library page,
+            // so the artwork is shown complete with only a soft fade at the bottom.
+            Backdrop(item)
+            // On a phone the header only takes the room between the pinned bar and the action row,
+            // so those buttons sit right at the bottom instead of being pushed off screen. The
+            // title/logo stays at the bottom-left of its own block, as before.
+            val headerHeight=if(LocalHandset.current)
+                (maxHeight-pageTopPadding-96.dp).coerceIn(170.dp,262.dp) else 340.dp
+            StableVerticalViewport(hold={contentMoving}) {
             LazyColumn(modifier=Modifier.testTag("detail:viewport"),state=list,contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 item(key="detail-header") {
-                    Box(Modifier.fillMaxWidth().height(320.dp)) {
-                        ArtworkView(item,if(LocalCompact.current) item.primary ?: item.backdrop else item.backdrop ?: item.primary,Modifier.fillMaxSize(),1920)
-                        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(.55f),Color.Transparent))))
-                        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,tint.copy(.3f),tint))))
+                    Box(Modifier.fillMaxWidth().height(headerHeight)) {
+                        // The artwork itself is the fixed page background; the header only carries copy.
+                        Box(Modifier.fillMaxWidth().height(220.dp).align(Alignment.TopCenter)
+                            .background(Brush.verticalGradient(listOf(tint.copy(.22f),Color.Transparent))))
                         Column(Modifier.align(Alignment.BottomStart).padding(start=pageSidePadding,end=pageSidePadding,bottom=4.dp).widthIn(max=680.dp),
                             verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             MediaTitle(item,if(LocalCompact.current) 29.sp else 38.sp)
@@ -123,9 +150,9 @@ import kotlinx.coroutines.withContext
                 item(key="detail-actions") {
                     val moveIntoContent:Modifier.()->Modifier={onPreviewKeyEvent {
                         if(it.type!=KeyEventType.KeyDown) false else when(it.key) {
-                            Key.DirectionUp -> {scope.launch {list.scrollToItem(0)};false}
+                            Key.DirectionUp -> {moveContent(0,alignTop=true);true}
                             Key.DirectionDown -> if(lowerTarget.isNotEmpty()) {
-                                scope.launch {list.scrollToItem(3);withFrameNanos {};withFrameNanos {};runCatching {lowerContentFocus.requestFocus()}}
+                                moveContent(3,lowerContentFocus)
                                 true
                             } else false
                             else -> false
@@ -145,15 +172,21 @@ import kotlinx.coroutines.withContext
                             item {Action("继续播放",id="detail-resume",primary=true,icon="play",modifier=Modifier.moveIntoContent()) {onPlay(item,false)}}
                         }
                         item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),modifier=Modifier.moveIntoContent()) {model.favorite(item)}}
+                        if(model.canDelete(item)) item {Action("删除",id="detail-delete",icon="trash",
+                            modifier=Modifier.moveIntoContent()) {model.requestDelete(item)}}
                         item {Action("返回",modifier=Modifier.moveIntoContent()) {model.back()}}
                     }
                 }
-                item {Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=23.sp,
+                // Acceptance round 3: plain body colour, so the description stays legible over art.
+                item {Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Text,fontSize=14.sp,lineHeight=23.sp,
                     modifier=Modifier.padding(horizontal=pageSidePadding),maxLines=8,overflow=TextOverflow.Ellipsis)}
                 if(item.versions.isNotEmpty()) item {
-                    Column(Modifier.padding(horizontal=pageSidePadding)) {
-                        SectionTitle("播放资源", "${item.versions.size} 个版本")
-                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(horizontal=18.dp,vertical=18.dp)) {
+                    // dev22 acceptance: heading and cards share one left edge. The row keeps a small
+                    // gutter inside its own bounds so the focus shadow is not clipped.
+                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
+                        Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("播放资源", "${item.versions.size} 个版本")}
+                        StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),reserveFocusSpace=false,
+                            contentPadding=PaddingValues(horizontal=detailRowGutter,vertical=18.dp)) {
                             itemsIndexed(item.versions,key={ _,v->v.id}) {index,v->
                                 FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp).then(if(lowerTarget=="versions" && index==0) Modifier.focusRequester(lowerContentFocus) else Modifier),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {
@@ -181,7 +214,8 @@ import kotlinx.coroutines.withContext
                                     repeat(numberColumns-row.size) {Spacer(Modifier.weight(1f))}
                                 }
                             }
-                            else -> item {Box(Modifier.padding(horizontal=pageSidePadding)) {EpisodeHorizontal(children)}}
+                            else -> item {Box(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
+                                EpisodeHorizontal(children,gutter=detailRowGutter)}}
                         }
                     } else item {Column(Modifier.padding(horizontal=pageSidePadding)) {
                         SectionTitle("选择季","查看全部") {model.navigate(Route.Library(item))}
@@ -189,13 +223,15 @@ import kotlinx.coroutines.withContext
                     }}
                 }
                 if(item.people.isNotEmpty()) item {
-                    Column(Modifier.padding(horizontal=pageSidePadding)) {
-                        SectionTitle("演员表")
+                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
+                        Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("演员表")}
                         StableLazyRow(modifier=Modifier.onPreviewKeyEvent {event->
                             if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && similar.isNotEmpty()) {
-                                scope.launch {list.scrollToItem(similarIndex);withFrameNanos {};withFrameNanos {};similarEntryFocus.requestFocus()};true
+                                moveContent(similarIndex,similarEntryFocus);true
                             } else false
-                        },horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                        },horizontalArrangement=Arrangement.spacedBy(16.dp),reserveFocusSpace=false,
+                            contentPadding=PaddingValues(start=detailRowGutter,end=detailRowGutter,
+                                top=FocusShadowTopGutter,bottom=FocusShadowBottomGutter)) {
                             itemsIndexed(item.people,key={ _,person->"${person.id}:${person.name}:${person.role}"}) {index,person ->
                                 Column(Modifier.width(104.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     val actor=MediaEntry(person.id.ifBlank {"person:${person.name}"},item.sourceId,person.name,"Person",primary=person.primary)
@@ -209,13 +245,15 @@ import kotlinx.coroutines.withContext
                         }
                     }
                 }
-                item {Box(Modifier.padding(horizontal=pageSidePadding).onPreviewKeyEvent {event->
+                item {Box(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp)).onPreviewKeyEvent {event->
                     if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && item.people.isNotEmpty()) {
-                        scope.launch {list.scrollToItem(similarIndex-1);withFrameNanos {};withFrameNanos {};peopleEntryFocus.requestFocus()};true
+                        moveContent(similarIndex-1,peopleEntryFocus);true
                     } else false
-                }) {MediaShelf("相似推荐",similar,firstFocusRequester=similarEntryFocus,onClick={model.navigate(Route.Detail(it))})}}
+                }) {MediaShelf("相似推荐",similar,firstFocusRequester=similarEntryFocus,focusGutter=detailRowGutter,
+                    onClick={model.navigate(Route.Detail(it))})}}
                 model.errors["detail:${item.key}"]?.let {error->item {Box(Modifier.padding(horizontal=pageSidePadding)) {EmptyState("详情暂不可用",error,"重试") {model.loadDetail(item)}}}}
                 listOf("played","favorite").forEach {operation->model.errors["$operation:${item.key}"]?.let {error->item {Text(error,color=SunnyColors.Secondary,modifier=Modifier.padding(horizontal=pageSidePadding))}}}
+            }
             }
         }
         when(panel) {
