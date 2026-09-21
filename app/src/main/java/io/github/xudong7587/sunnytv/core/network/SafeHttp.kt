@@ -7,9 +7,16 @@ import java.util.concurrent.TimeUnit
 
 /** One request path for API, images, STRM and video. Redirects are bounded and auth is origin/path scoped. */
 class SafeHttp {
-    val client: OkHttpClient = create()
-    private fun create(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS)
+    /** API, image and STRM text: a LAN server that stays silent this long is treated as down. */
+    val client: OkHttpClient = create(HttpPolicy.CONNECT_TIMEOUT_SECONDS, HttpPolicy.READ_TIMEOUT_SECONDS)
+    /**
+     * Video transport. Same redirect handling, header scoping, TLS policy and user agent as [client];
+     * only the connect/read budget is larger, because a cloud-drive or STRM source may need to resolve
+     * a provider link before it can answer at all. Never used for API, image or STRM text requests.
+     */
+    val playbackClient: OkHttpClient = create(HttpPolicy.PLAYBACK_CONNECT_TIMEOUT_SECONDS, HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS)
+    private fun create(connectSeconds: Int, readSeconds: Int): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(connectSeconds.toLong(), TimeUnit.SECONDS).readTimeout(readSeconds.toLong(), TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS).retryOnConnectionFailure(false)
         .followRedirects(false).followSslRedirects(false)
         .addInterceptor { chain ->
@@ -51,9 +58,9 @@ class SafeHttp {
         }
     }
 
-    fun scopedClient(scope: HeaderScope?): OkHttpClient {
+    fun scopedClient(scope: HeaderScope?, playback: Boolean = false): OkHttpClient {
         // The tag MUST be applied before the redirect interceptor executes.
-        val builder = client.newBuilder()
+        val builder = (if (playback) playbackClient else client).newBuilder()
         builder.interceptors().add(0, Interceptor { chain ->
             chain.proceed(chain.request().newBuilder().tag(HeaderScope::class.java, scope).build())
         })

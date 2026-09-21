@@ -40,6 +40,36 @@ class TransportTest {
             assertEquals("token",server.takeRequest().getHeader("X-Emby-Token"))
         }
     }
+
+    /** dev26: video gets a longer first-byte budget without losing any header-scoping protection. */
+    @Test fun playbackClientKeepsPolicyAndOnlyRelaxesTheTimeout() {
+        val http=SafeHttp()
+        assertEquals(HttpPolicy.CONNECT_TIMEOUT_SECONDS*1000L,http.client.connectTimeoutMillis.toLong())
+        assertEquals(HttpPolicy.READ_TIMEOUT_SECONDS*1000L,http.client.readTimeoutMillis.toLong())
+        assertEquals(HttpPolicy.PLAYBACK_CONNECT_TIMEOUT_SECONDS*1000L,http.playbackClient.connectTimeoutMillis.toLong())
+        assertEquals(HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS*1000L,http.playbackClient.readTimeoutMillis.toLong())
+        assertTrue(http.playbackClient.readTimeoutMillis>http.client.readTimeoutMillis)
+        val scoped=http.scopedClient(HeaderScope("https://nas.test/emby/",mapOf("X-Emby-Token" to "t")),playback=true)
+        assertEquals(HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS*1000L,scoped.readTimeoutMillis.toLong())
+        assertFalse(scoped.followRedirects);assertFalse(scoped.followSslRedirects)
+    }
+
+    @Test fun playbackClientStillStripsAuthWhenTheStrmRedirectsToACdn() {
+        MockWebServer().use {origin->MockWebServer().use {cdn->
+            origin.enqueue(MockResponse().setResponseCode(302).addHeader("Location",cdn.url("/d/115/movie.mp4?sign=x")))
+            cdn.enqueue(MockResponse().setResponseCode(200).setBody("video"))
+            val client=SafeHttp().scopedClient(HeaderScope(origin.url("/emby/").toString(),
+                mapOf("Authorization" to "secret","X-Emby-Token" to "token")),playback=true)
+            client.newCall(Request.Builder().url(origin.url("/emby/Videos/1/stream?Static=true")).build()).execute().use {
+                assertEquals(200,it.code)
+            }
+            assertEquals("secret",origin.takeRequest().getHeader("Authorization"))
+            val last=cdn.takeRequest()
+            assertNull(last.getHeader("Authorization"));assertNull(last.getHeader("X-Emby-Token"))
+            assertEquals(HttpPolicy.USER_AGENT,last.getHeader("User-Agent"))
+            assertEquals("/d/115/movie.mp4?sign=x",last.path)
+        }}
+    }
     @Test fun embyImageTagsAndProgressAreUsed() {
         val source=EmbySource(SourceConfig("serverA",SourceKind.EMBY,"Emby","https://example.test/emby/","user","u","token"),SafeHttp(),"device")
         val item=source.parseItem(JSONObject("""{"Id":"lib","Name":"电影","Type":"CollectionFolder","IsFolder":true,"ImageTags":{"Primary":"native-tag"},"BackdropImageTags":["back"],"RunTimeTicks":1000000000,"UserData":{"PlaybackPositionTicks":300000000}}"""))

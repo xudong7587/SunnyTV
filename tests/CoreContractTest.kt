@@ -3,6 +3,7 @@ package io.github.xudong7587.sunnytv.contract
 import io.github.xudong7587.sunnytv.source.clouddrive.DavXmlParser
 import io.github.xudong7587.sunnytv.core.playback.SessionEvents
 import io.github.xudong7587.sunnytv.core.playback.StartupTiming
+import io.github.xudong7587.sunnytv.core.playback.PlaybackRecovery
 import io.github.xudong7587.sunnytv.core.network.HttpPolicy
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.source.strm.StrmParser
@@ -152,6 +153,37 @@ fun runContractSuite() {
     test("subtitle background falls back to black") {eq(SubtitleAppearance.background("nope"),SubtitleAppearance.BACKGROUND_BLACK)}
     test("subtitle position maps to bottom padding") {eq(SubtitleAppearance.bottomPaddingFraction(SubtitleAppearance.POSITION_TOP),.5f)}
     test("subtitle standard position stays near the bottom") {eq(SubtitleAppearance.bottomPaddingFraction(SubtitleAppearance.POSITION_STANDARD),.08f)}
+
+    // dev26: playback gets a longer first-byte budget than API/image/STRM traffic, one bounded retry,
+    // and host-only diagnostics that cannot leak a signed URL.
+    test("playback budget exceeds the api budget") {
+        check(HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS>HttpPolicy.READ_TIMEOUT_SECONDS)
+        check(HttpPolicy.PLAYBACK_CONNECT_TIMEOUT_SECONDS>=HttpPolicy.CONNECT_TIMEOUT_SECONDS)
+    }
+    test("playback budget stays bounded") {check(HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS<=120)}
+    test("host label keeps an explicit port") {eq(HttpPolicy.hostLabel("https://cdn.test:8443/a/b.mp4?sig=s%2Fcret"),"cdn.test:8443")}
+    test("host label drops the default port") {eq(HttpPolicy.hostLabel("https://nas.test/emby/"),"nas.test")}
+    test("host label lowercases the host") {eq(HttpPolicy.hostLabel("http://NAS.Test:8096/emby/"),"nas.test:8096")}
+    test("host label refuses non-http input") {eq(HttpPolicy.hostLabel("file:///etc/passwd"),null)}
+    test("host label refuses embedded credentials") {eq(HttpPolicy.hostLabel("https://u:p@cdn.test/a"),null)}
+    test("host label tolerates empty input") {eq(HttpPolicy.hostLabel(""),null)}
+    test("retry allowed once before the first frame") {check(PlaybackRecovery.shouldRetry(0,2001,false,listOf("SocketTimeoutException")))}
+    test("retry allowed for a bare timeout code") {check(PlaybackRecovery.shouldRetry(0,2002,false,emptyList()))}
+    test("retry denied after the first frame") {check(!PlaybackRecovery.shouldRetry(0,2001,true,listOf("SocketTimeoutException")))}
+    test("retry denied after the single automatic attempt") {check(!PlaybackRecovery.shouldRetry(1,2001,false,listOf("SocketTimeoutException")))}
+    test("dns failure is not retried") {check(!PlaybackRecovery.shouldRetry(0,2001,false,listOf("UnknownHostException")))}
+    test("tls failure is not retried") {check(!PlaybackRecovery.shouldRetry(0,2002,false,listOf("SSLHandshakeException")))}
+    test("bad http status is not retried") {check(!PlaybackRecovery.shouldRetry(0,2004,false,listOf("InvalidResponseCodeException")))}
+    test("unrelated failure is not retried") {check(!PlaybackRecovery.shouldRetry(0,2000,false,listOf("IOException")))}
+    test("retry budget is exactly one") {eq(PlaybackRecovery.MAX_AUTO_RETRIES,1)}
+    test("waiting for the response is named") {eq(PlaybackRecovery.stageHint(1,false),"等待响应（连接或首字节）")}
+    test("streaming the body is named") {eq(PlaybackRecovery.stageHint(2,false),"读取数据流")}
+    test("wrapped response call is named when the type is lost") {eq(PlaybackRecovery.stageHint(null,true),"等待响应（连接或首字节）")}
+    test("unknown stage stays unnamed") {eq(PlaybackRecovery.stageHint(null,false),null)}
+    test("route label marks the emby host") {eq(PlaybackRecovery.routeLabel("https://nas.test/Videos/1/stream?sig=x","https://nas.test/emby/"),"nas.test（Emby 本机）")}
+    test("route label marks a direct media source") {eq(PlaybackRecovery.routeLabel("http://cdn.test:5244/d/115/movie.mp4?sig=x","https://nas.test/emby/"),"cdn.test:5244（直连媒体源，不是 Emby）")}
+    test("route label marks a source without emby") {eq(PlaybackRecovery.routeLabel("https://dav.test/movie.strm",null),"dav.test（独立媒体来源）")}
+    test("route label needs a usable url") {eq(PlaybackRecovery.routeLabel(null,"https://nas.test/emby/"),null)}
 
     println("\nRESULT: $passed passed / $failed failed")
     check(failed==0) {"Contract tests failed"}

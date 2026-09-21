@@ -7,6 +7,17 @@ import java.util.Locale
 object HttpPolicy {
     const val USER_AGENT = "SunnyTV/0.1.0 (Android TV; Media3)"
     const val MAX_REDIRECTS = 8
+    /** API, image and STRM budget: a server that stays silent this long is treated as unavailable. */
+    const val CONNECT_TIMEOUT_SECONDS = 8
+    const val READ_TIMEOUT_SECONDS = 25
+    /**
+     * Playback budget. Cloud-drive and STRM sources routinely need longer than a static LAN server
+     * before the first byte arrives (the source server has to resolve a provider link first), and a
+     * 302 chain to a CDN costs another round trip. The header scoping, redirect and TLS rules stay
+     * identical to [CONNECT_TIMEOUT_SECONDS]/[READ_TIMEOUT_SECONDS]; only the first-byte budget grows.
+     */
+    const val PLAYBACK_CONNECT_TIMEOUT_SECONDS = 15
+    const val PLAYBACK_READ_TIMEOUT_SECONDS = 60
     private val sensitive = setOf("authorization", "proxy-authorization", "cookie", "cookie2", "x-emby-token", "x-emby-authorization", "x-mediabrowser-token")
 
     fun validate(raw: String): URI {
@@ -66,5 +77,16 @@ object HttpPolicy {
         require(u.rawQuery == null) { "服务器地址不能包含查询参数" }
         require(!hasAmbiguousSegments(u.rawPath.orEmpty())) { "服务器根路径不能包含歧义的点路径或编码分隔符" }
         return u.toString().trimEnd('/') + "/"
+    }
+
+    /**
+     * Host and explicit port only, for diagnostics. The path, the query and any signed token are
+     * dropped, so a report can say which server timed out without logging a playable URL.
+     */
+    fun hostLabel(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val uri = try { validate(raw) } catch (_: IllegalArgumentException) { return null }
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return null
+        return if (uri.port >= 0) "$host:${uri.port}" else host
     }
 }

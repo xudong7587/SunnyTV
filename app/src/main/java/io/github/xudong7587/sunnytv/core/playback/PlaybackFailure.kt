@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv.core.playback
 
 import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.DataSourceException
 import androidx.media3.datasource.HttpDataSource
 import java.io.EOFException
 import java.io.FileNotFoundException
@@ -8,6 +9,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
+import java.util.concurrent.ExecutionException
 
 /** Categorize causes, never display raw exception messages (which can contain signed URLs). */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -31,7 +33,15 @@ object PlaybackFailure {
         return loader && bounds
     }
 
-    fun describe(error:PlaybackException,stage:String,mime:String?):String {
+    /** Cause class names only. Exception messages are never displayed (they can carry signed URLs). */
+    fun causeNames(error:Throwable):List<String> = causes(error).map {it.javaClass.simpleName}
+
+    /** The Media3/DataSource error code buried in the chain, for retry decisions. 0 when unknown. */
+    fun errorCodeOf(error:Throwable):Int =
+        causes(error).filterIsInstance<DataSourceException>().map {it.reason}.firstOrNull {it>0} ?: 0
+
+    fun describe(error:PlaybackException,stage:String,mime:String?,mediaUrl:String?=null,
+                 baseUrl:String?=null,retryAttempts:Int=0):String {
         val chain=causes(error)
         val http=chain.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
         val reason=when {
@@ -43,7 +53,7 @@ object PlaybackFailure {
             }
             chain.any {it is SSLException} -> "TLS 证书或加密连接失败；未跳过证书校验。"
             chain.any {it is UnknownHostException} -> "电视无法解析媒体服务器地址。"
-            chain.any {it is SocketTimeoutException} -> "读取媒体超时，请检查电视到 Emby 的连接。"
+            chain.any {it is SocketTimeoutException} -> "读取媒体超时：媒体服务在限定时间内没有返回数据，也没有断开连接。"
             chain.any {it is ConnectException} -> "电视无法连接媒体服务。"
             chain.any {it is EOFException} -> "媒体数据提前结束，请检查本地文件是否完整，以及 Emby 是否中断了读取。"
             chain.any {it is FileNotFoundException} -> "媒体文件不可读取或已不存在。"
@@ -59,6 +69,14 @@ object PlaybackFailure {
         val types=chain.drop(1).map {it.javaClass.simpleName.filter {c->c.isLetterOrDigit() || c=='_'}.take(64)}
             .distinct().joinToString(" → ").ifBlank {"未提供底层异常"}
         val format=mime?.takeIf {it.matches(Regex("[a-zA-Z0-9.+/-]{1,80}"))} ?: "自动识别"
-        return "$reason\n错误码 ${error.errorCode} · $stage · $format\n$types"
+        val retry=if(retryAttempts>0) " · 已自动重试 $retryAttempts 次" else ""
+        // Which host actually stalled, and which half of the exchange: host only, never path or query.
+        val route=PlaybackRecovery.routeLabel(mediaUrl,baseUrl)
+        val stageHint=PlaybackRecovery.stageHint(
+            chain.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()?.type,
+            chain.any {it is ExecutionException})
+        val facts=listOfNotNull(route?.let {"请求主机 $it"},stageHint?.let {"阶段 $it"}).joinToString(" · ")
+        val header="$reason\n错误码 ${error.errorCode} · $stage · $format$retry"
+        return if(facts.isBlank()) "$header\n$types" else "$header\n$facts\n$types"
     }
 }

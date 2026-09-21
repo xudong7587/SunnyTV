@@ -4,15 +4,15 @@
 
 ## 已执行自动测试
 
-`tests/CoreContractTest.kt`：102项；只编译Models/MediaLogic/HttpPolicy/StrmParser/DavXmlParser/SessionEvents及测试入口，不编译Android Activity。
+`tests/CoreContractTest.kt`：144项（dev26）；只编译Models/MediaLogic/HttpPolicy/StrmParser/DavXmlParser/SessionEvents/StartupTiming/PlaybackRecovery及测试入口，不编译Android Activity。
 
-覆盖：无后缀MediaIndex URL、BOM/换行/字节上限、无效编码、URL/协议校验、作用域/路径穿越、签名参数、相对跳转/循环/降级、有界递归、图片优先级、进度/seek溢出、DAV命名空间/属性状态/中文/href/实体拒绝，以及会话事件顺序与心跳合并。
+覆盖：无后缀MediaIndex URL、BOM/换行/字节上限、无效编码、URL/协议校验、作用域/路径穿越、签名参数、相对跳转/循环/降级、有界递归、图片优先级、进度/seek溢出、DAV命名空间/属性状态/中文/href/实体拒绝、会话事件顺序与心跳合并，以及dev26新增的播放超时预算（连接/读取、上下界）、host标签（端口/小写/非HTTP/内嵌凭据拒绝）、首帧重试门槛（仅一次、仅首帧前、DNS/TLS/4xx/未知原因不重试）、失败阶段命名与"Emby本机/直连媒体源"路由标签。
 
 `preview-test-results.json`：12项HTML交互检查，具体断言与脚本一起交付。没有真实视频、没有用户账号。
 
 ## 已写但待执行的Android JVM测试
 
-`TransportTest.kt`的4项：302后的Range/UA保留和Token剥离、相对302到proxy、Emby图片tag/进度解析、DAV207及STRM只读请求。需Gradle/Maven依赖。
+`TransportTest.kt`的6项：302后的Range/UA保留和Token剥离、相对302到proxy、Emby图片tag/进度解析、DAV207及STRM只读请求，以及dev26新增的两项——播放客户端只放宽超时（连接/读取取值与跳转开关断言）、延长超时后跨域跳转仍然剥离Emby认证头。需Gradle/Maven依赖。
 
 `ContractSuiteTest.kt`桥接同一核心测试到JUnit。整包构建与这些测试未在本环境执行，不能给它们打通过勾。
 

@@ -302,7 +302,7 @@ import kotlinx.coroutines.*
                 }
                 "播放" -> {
                     item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "跟随媒体默认"}") {chooser="subtitle"}}
-                    item {Field("直接播放测试 · HTTP 媒体或 MediaIndex /api/play 入口",directUrl,{directUrl=it})}
+                    item {Field("直接播放测试 · HTTP 媒体地址（网盘直链或播放入口）",directUrl,{directUrl=it})}
                     item {Action("打开媒体地址") {try {HttpPolicy.validate(directUrl.trim());context.startActivity(PlayerActivity.intent(context,PlaybackRequest("",directUrl.trim(),"手动媒体地址",requestedAtMs=SystemClock.elapsedRealtime(),sourceReadyAtMs=SystemClock.elapsedRealtime())))} catch(_: Exception) {model.message="地址无效，仅支持完整 HTTP / HTTPS 媒体地址"}}}
                     item {Text("Media3 · 原画直放优先\n首版不自动申请服务端转码；不能解码时明确提示。\n左右方向键快进/快退；音轨与字幕在播放面板中选择。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                     item {Action("快进步长：${model.settings.seekStepSeconds} 秒") {model.saveSettings(model.settings.copy(seekStepSeconds=if(model.settings.seekStepSeconds==10) 30 else 10))}}

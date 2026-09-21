@@ -1,3 +1,12 @@
+# SunnyTV dev26
+
+- 修复用户实机反馈的"首帧前读取超时"（`错误码 2001 · 首帧前读取 · video/mp4`，链 `HttpDataSourceException → IOException → ExecutionException → SocketTimeoutException`），出问题的媒体是 MP（MoviePilot）生成的 STRM。反编译 `media3-datasource-okhttp-1.9.4` 确认：`OkHttpDataSource.executeCall` 用 `enqueue + SettableFuture.get()` 并在 `catch ExecutionException` 后包成普通 `IOException`，而它只被 `open()` 调用 —— 该链意味着"响应头还没到就超时"；2001 而非 2002 只是 `createForIOException` 的 `cause instanceof SocketTimeoutException` 看不到包装层。
+- 播放传输单独放宽首次响应预算（连接 8→15 秒、读取 25→60 秒，`SafeHttp.playbackClient`），API、图片与 STRM 文本仍为 8/25 秒；跳转上限、跨域认证头剥离、禁止 HTTPS 降级、统一 UA 与有界 TLS 全部不变（新增测试断言）。
+- 首帧前对瞬时传输失败自动重试一次（`PlaybackRecovery`，`MAX_AUTO_RETRIES=1`，Media3 侧延迟 1500 ms；DNS、TLS、HTTP 4xx、越界与解析错误不重试），重试期间提示"网络读取超时，正在自动重试一次…"，手动"重试此播放入口一次"保持不变。
+- 诊断新增"请求主机 host:port（Emby 本机 / 直连媒体源，不是 Emby）"、"阶段 等待响应（连接或首字节）/ 读取数据流"与"已自动重试 N 次"，只打印主机与端口，路径、查询与签名不出现；删掉"请检查电视到 Emby 的连接"这句会误指方向的结论。
+- HTTP 409 提示与设置页直接播放测试的输入框不再特指 MediaIndex；SunnyTV 与 MediaIndex 无代码耦合，STRM 一律按"文件内唯一一条 HTTP(S) 地址"处理。
+- 验证：纯 Kotlin 契约测试 144/144（基线 119 + 25 项）；Gradle 单元测试 70 项方法全通过；`check-project.py` 通过；`lintDebug` 0 错误 / 28 警告（与 dev25 逐条一致）；API 30 TV 模拟器 59 项仪器化测试失败 8 项，与 dev22 基线逐个同名、无新增。详见 `docs/PLAYBACK-DEV26.md` 与 `docs/RELEASE-dev26.md`。
+
 # SunnyTV dev25
 
 - 公开发布：GitHub Release `v0.1.0-dev25`（源码提交 776fb24）。去掉开发期间临时内置的第三方字体后重新构建，APK 体积由 16,256,704 字节降至 14,435,701 字节，SHA256 `3e3861cab2fdbefe58c7a47ca20a89ed6aaa2a53a725204445c58036bd5a1825`，沿用仓库既有签名 Secret（证书 SHA-256 `5e8dcd5e…`）。同时修掉 dev22 起累积的 14 项 lint 报错：`PinyinIndex` 的 ICU 转写加 API 29 守卫（旧设备上原本可能抛 `NoSuchMethodError`）、字幕预览改用 `androidx.annotation.OptIn` 标注 Media3 `@UnstableApi`、播放器 `dispatchKeyEvent` 定点抑制 `RestrictedApi`；`lintDebug` 回到 0 错误。8 项滞后断言见 `docs/KNOWN-ISSUES.md`。

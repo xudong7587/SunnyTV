@@ -7,6 +7,7 @@ $Sources = @(
     "$Root/core/model/FontCatalog.kt", "$Root/core/model/SubtitleAppearance.kt",
     "$Root/core/network/HttpPolicy.kt", "$Root/source/strm/StrmParser.kt",
     "$Root/source/clouddrive/DavXmlParser.kt", "$Root/core/playback/SessionEvents.kt", "$Root/core/playback/StartupTiming.kt",
+    "$Root/core/playback/PlaybackRecovery.kt",
     'tests/CoreContractTest.kt'
 )
 

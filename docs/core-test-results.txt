@@ -112,5 +112,35 @@ PASS  startup zero timestamp is valid
 PASS  startup unknown marks are unavailable
 PASS  startup no negative duration
 PASS  startup large monotonic timestamps
+PASS  subtitle scale clamps to the table
+PASS  subtitle edge falls back to outline
+PASS  subtitle background falls back to black
+PASS  subtitle position maps to bottom padding
+PASS  subtitle standard position stays near the bottom
+PASS  playback budget exceeds the api budget
+PASS  playback budget stays bounded
+PASS  host label keeps an explicit port
+PASS  host label drops the default port
+PASS  host label lowercases the host
+PASS  host label refuses non-http input
+PASS  host label refuses embedded credentials
+PASS  host label tolerates empty input
+PASS  retry allowed once before the first frame
+PASS  retry allowed for a bare timeout code
+PASS  retry denied after the first frame
+PASS  retry denied after the single automatic attempt
+PASS  dns failure is not retried
+PASS  tls failure is not retried
+PASS  bad http status is not retried
+PASS  unrelated failure is not retried
+PASS  retry budget is exactly one
+PASS  waiting for the response is named
+PASS  streaming the body is named
+PASS  wrapped response call is named when the type is lost
+PASS  unknown stage stays unnamed
+PASS  route label marks the emby host
+PASS  route label marks a direct media source
+PASS  route label marks a source without emby
+PASS  route label needs a usable url
 
-RESULT: 114 passed / 0 failed
+RESULT: 144 passed / 0 failed

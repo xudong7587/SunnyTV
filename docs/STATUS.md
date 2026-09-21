@@ -1,6 +1,14 @@
 # SunnyTV 0.1.0-dev2 — 真实开发状态
 
-## 2026-09-21 dev25 更新（当前 · 公开版）
+## 2026-09-21 dev26 更新（当前 · 公开版）
+
+按用户实机反馈修"首帧前读取超时"。报错为 `读取媒体超时，请检查电视到 Emby 的连接 · 错误码 2001 · 首帧前读取 · video/mp4`，异常链是 `HttpDataSourceException → IOException → ExecutionException → SocketTimeoutException`，出问题的媒体是别人用 MP（MoviePilot）生成的 STRM（与 MediaIndex 无关）。反编译本地 Maven 缓存里的 `media3-datasource-okhttp-1.9.4` 确认两件事：`OkHttpDataSource.executeCall` 用 `call.enqueue(...)` + `SettableFuture.get()` 取响应、`catch ExecutionException` 后包成普通 `IOException`，而它只在 `open()` 里调用 —— 所以这个链等于"请求已发出、响应头没在预算内到达"，不是读 body 中断；错误码 2001（而非 2002 连接超时）只是 `createForIOException` 的 `cause instanceof SocketTimeoutException` 看不到那层包装，分类变粗。当时全项目共用 8 秒连接 / 25 秒读取，首帧失败没有任何自动重试。
+
+改动：①播放传输单独放宽首次响应预算（连接 8→15 秒、读取 25→60 秒，新增 `SafeHttp.playbackClient` 与 `scopedClient(scope, playback=true)`），API、图片、STRM 文本维持 8/25 秒，跳转上限 8 次、跨域剥离 Emby/CD2 认证头、禁止 HTTPS 降级、统一 UA、有界 TLS 全部逐条不变；②首帧前对瞬时传输失败（2001/2002 或链含 `SocketTimeoutException`/`ConnectException`）自动重试一次（新增纯 Kotlin `PlaybackRecovery`，`MAX_AUTO_RETRIES=1`，Media3 侧 `getRetryDelayMsFor` 返回 1500 ms，其余情况仍返回 `C.TIME_UNSET`；DNS、TLS、HTTP 4xx、越界与解析错误不重试），重试期间显示"网络读取超时，正在自动重试一次…"；③诊断新增"请求主机 host:port（Emby 本机 / 直连媒体源，不是 Emby）"、"阶段 等待响应（连接或首字节）/ 读取数据流"与"已自动重试 N 次"，只打印主机与端口，路径、查询与签名不出现，并删掉会误导的"请检查电视到 Emby 的连接"；④顺带去掉 HTTP 409 与设置页直接播放测试里的 MediaIndex 特指文案。详见 `docs/PLAYBACK-DEV26.md`。
+
+验证：纯 Kotlin 契约测试 144/144（dev22 基线 119 + 本轮 25 项）；Gradle 单元测试 70 项方法全通过（`TransportTest` 6 项含新增 2 项、`PlaybackFailureTest` 8 项含新增 4 项）；`scripts/check-project.py` 通过；`assembleDebug`、`assembleDebugAndroidTest` 与 `lintDebug` 通过（0 错误 / 28 警告，与 dev25 逐条一致）；API 30 TV 模拟器 `connectedDebugAndroidTest` 59 项失败 8 项，与 dev22 基线失败集合逐个同名、无新增。发布 APK `dist/SunnyTV-v0.1.0-dev26.apk`（14,436,245 字节，SHA256 `74a36eecc5f180c9a620599ea4ff882aaefd4ea56571c47cb62025acaa4ffc33`）由仓库既有密钥签名（证书 SHA-256 `5e8dcd5e…`），未新建密钥、未替换既有标签或资产。Windows 本机 `scripts/test-bootstrap.py` 仍为 16/18（反斜杠 ZIP 条目与符号链接两项属本机平台限制，Linux CI 上通过）。实体电视与真实 MP/Alist 播放未复测，本轮不宣称已解决服务端取流慢。
+
+## 2026-09-21 dev25 更新（公开版）
 
 以 dev24 快照为基线，按用户反馈只改手机 / 平板（触摸设备）媒体库与文件夹视图里 banner 与媒体区之间的空隙；电视端按用户确认"没问题了"，取值逐值不变。新增 `BannerMediaGapTest` 在固定尺寸容器里量「轮播媒体块底边 → 工具行顶边」：修复前手机横屏、手机竖屏、电视都是 122dp（= 18dp banner 底边距 + 22dp 网格项间距 + 82dp 工具行上内边距）。其中 82dp 是电视端"整屏切换"需要的顶栏内边距（`enterTools()` 把工具行整行对齐到视口顶端，靠它把标题/按钮留在顶栏下方、上方不露 banner），而触摸设备是自由滚动，这段就是纯空白。修复：触摸设备工具行上内边距改为 8dp、`LibraryHero` 底部留白 18→10dp（电视分别保持 `pageTopPadding` 与 18dp）；`enterTools()` 与文件夹模式返回工具行的落位偏移由 `pinnedTop` 改为 `toolsTopInsetPx`（电视上两者逐值相同，触摸设备上落在 8dp，接遥控器按下键时内容仍不会跑到顶栏底下）。结果：手机横屏 40dp、手机竖屏 40dp、电视 122dp。
 

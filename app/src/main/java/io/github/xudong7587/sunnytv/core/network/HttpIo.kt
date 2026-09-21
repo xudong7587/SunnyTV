@@ -17,7 +17,7 @@ suspend fun OkHttpClient.bytes(request: Request, limit: Long = 4L * 1024 * 1024)
                     val bytes = response.use { r ->
                         if (!r.isSuccessful) throw SourceException(when(r.code) {
                             401, 403 -> "认证或访问权限不足（HTTP ${r.code}）"
-                            409 -> "播放资产或令牌失效（HTTP 409），请检查 MediaIndex"
+                            409 -> "播放资产或令牌失效（HTTP 409），请检查来源令牌或直链是否已过期"
                             416 -> "请求位置超出媒体范围（HTTP 416）"
                             else -> "服务返回 HTTP ${r.code}"
                         })

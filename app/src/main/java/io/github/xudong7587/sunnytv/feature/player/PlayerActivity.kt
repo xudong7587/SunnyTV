@@ -49,6 +49,7 @@ import kotlinx.coroutines.*
 import io.github.xudong7587.sunnytv.core.playback.PlaybackReporter
 import io.github.xudong7587.sunnytv.core.playback.StartupTiming
 import io.github.xudong7587.sunnytv.core.playback.PlaybackFailure
+import io.github.xudong7587.sunnytv.core.playback.PlaybackRecovery
 import okhttp3.Interceptor
 import java.util.concurrent.atomic.AtomicLong
 import coil.compose.AsyncImage
@@ -76,6 +77,7 @@ class PlayerActivity: ComponentActivity() {
     private var resizeMode by mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT)
     private var retryUsed=false
     private var mp4EditListFallbackUsed=false
+    private var autoRetryAttempts=0
     private var progressJob: Job?=null
     private var reporter: PlaybackReporter? = null
     private var resumePlayWhenReady = true
@@ -169,11 +171,14 @@ class PlayerActivity: ComponentActivity() {
     }
     private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
         rendered=false;error="";firstFrameMs=-1;headerMs=-1;totalStartupMs=-1;sourceStartupMs=-1
+        // Each player instance gets its own single automatic first-frame retry budget.
+        autoRetryAttempts=0
         val includeSourceTime = originalLaunch
         originalLaunch = false
         val started=SystemClock.elapsedRealtime()
         val firstHeader=AtomicLong(-1)
-        val client=app.http.scopedClient(request.scope).newBuilder()
+        // Video gets the longer first-byte budget; header scoping, TLS and redirect limits are identical.
+        val client=app.http.scopedClient(request.scope,playback=true).newBuilder()
             .addNetworkInterceptor(Interceptor {chain ->
                 val response=chain.proceed(chain.request())
                 firstHeader.compareAndSet(-1,SystemClock.elapsedRealtime()-started)
@@ -184,9 +189,18 @@ class PlayerActivity: ComponentActivity() {
             if(ignoreMp4EditLists) setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
         }
         val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors)
-            // No unbounded engine/source/HTTP retries: one explicit retry button below.
-            .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) {
-                override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET
+            // Bounded recovery: one automatic retry, only for a transient transport failure that happens
+            // before the first frame. Everything else stays fatal and keeps the explicit retry button.
+            .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(PlaybackRecovery.MAX_AUTO_RETRIES) {
+                override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                    val allowed=PlaybackRecovery.shouldRetry(autoRetryAttempts,
+                        PlaybackFailure.errorCodeOf(loadErrorInfo.exception),rendered,
+                        PlaybackFailure.causeNames(loadErrorInfo.exception))
+                    if(!allowed) return C.TIME_UNSET
+                    autoRetryAttempts++
+                    window.decorView.post {if(error.isBlank()) status=PlaybackRecovery.RETRY_NOTICE}
+                    return PlaybackRecovery.RETRY_DELAY_MS
+                }
             })
         val p=ExoPlayer.Builder(this).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
@@ -294,7 +308,8 @@ class PlayerActivity: ComponentActivity() {
                     }
                     return
                 }
-                error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint)
+                error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint,
+                    mediaUrl=request.stableUrl,baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
                 app.store.savePlaybackDiagnostic(error)
                 controls=true
             }
