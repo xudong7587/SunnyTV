@@ -11,6 +11,15 @@
 `scripts/check-project.py` 改为「仓库内不得出现任何 `.ttf/.otf/.ttc`」。字体选项只保留系统默认与用户自定义上传，
 既有的 `fontChoice` 归一化逻辑会把旧的自用字体 id 回退为系统字体，不会因缺字体导致启动失败。
 
+**公开版已发布**：GitHub Release `v0.1.0-dev25`（源码提交 776fb24），资产 `SunnyTV-v0.1.0-dev25.apk`
+16,256,704 字节 → 14,435,701 字节（去掉内置字体后），SHA256 `3e3861cab2fdbefe58c7a47ca20a89ed6aaa2a53a725204445c58036bd5a1825`，
+签名证书 SHA-256 `5e8dcd5e…`（仓库既有 Secret，未新建密钥），并附 `SIGNING_VALIDATION.json`、
+`BUILD_INFO.txt`（`bundledFonts=none`）与 `SHA256SUMS.txt`。发布工作流与常规 CI 均通过；
+工作流里额外断言了"APK 内不得出现字体文件"，并在公开版清理时顺带修掉 dev22 起累积的 14 项 lint 报错
+（`PinyinIndex` 的 ICU 转写加 API 29 守卫——旧设备上原本可能抛 `NoSuchMethodError`、Media3 预览改用
+`androidx.annotation.OptIn`、播放器 `dispatchKeyEvent` 定点抑制），`lintDebug` 现为 0 错误 / 28 警告。
+仪器化测试本轮只记录不作为发布门槛，8 项滞后断言清单见 `docs/KNOWN-ISSUES.md`。
+
 ## 2026-09-21 dev24 更新
 
 以 dev23 快照为基线，修用户反馈的最后一处手感问题：媒体库（含文件夹内部）从媒体区按「上」回到 banner 时会"卡一下"。用新增的 `BannerReturnMotionTest` 停住时钟逐帧采样工具行位置，量出修复前是两段动画——`99,62,35,18,10,6,2,1,1,0,0` 后接 `173,296`，即第一段衰减到完全停住再重新起步。根因：工具行按「上」走的 `GridFocusNavigator.move(0)` → `revealItem(0, alignTop=true)`，而 `revealItem` 在目标项不在可见列表时只能按"当前可见首行高度"逐次滚动，banner 恰好是占满视口的整项、回到它时整项都在视口上方，所以必然先滚一段、停住、再滚一段。现改为与已验收的"banner → 媒体区"同一套写法：新增 `leaveToolsForBanner()`，一次 `animateScrollToItem(0)` 回到 banner 自己的偏移，焦点在并行协程里逐帧重试，全过程 hold 住视口并在结束后多保持两帧；`beforeMove(0)` 一并改为单次滚动；文件夹模式从文件夹行回到工具行改为一次 `animateScrollToItem(1, pageTopPadding)` 落位，不再依赖 hold 释放后的补滚动。

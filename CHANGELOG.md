@@ -1,5 +1,7 @@
 # SunnyTV dev25
 
+- 公开发布：GitHub Release `v0.1.0-dev25`（源码提交 776fb24）。去掉开发期间临时内置的第三方字体后重新构建，APK 体积由 16,256,704 字节降至 14,435,701 字节，SHA256 `3e3861cab2fdbefe58c7a47ca20a89ed6aaa2a53a725204445c58036bd5a1825`，沿用仓库既有签名 Secret（证书 SHA-256 `5e8dcd5e…`）。同时修掉 dev22 起累积的 14 项 lint 报错：`PinyinIndex` 的 ICU 转写加 API 29 守卫（旧设备上原本可能抛 `NoSuchMethodError`）、字幕预览改用 `androidx.annotation.OptIn` 标注 Media3 `@UnstableApi`、播放器 `dispatchKeyEvent` 定点抑制 `RestrictedApi`；`lintDebug` 回到 0 错误。8 项滞后断言见 `docs/KNOWN-ISSUES.md`。
+
 - 验收第二十四轮：手机 / 平板（触摸设备）的媒体库与文件夹视图里，banner 与媒体区之间的空隙太大。量测后确认 122dp 的构成为 18dp（banner 底边距）+ 22dp（网格项间距）+ 82dp（工具行上内边距），其中 82dp 是电视端"整屏切换"必须的顶栏内边距——电视把工具行整行对齐到视口顶端，靠它把标题与按钮留在顶栏下方；触摸设备自由滚动，这段就成了空白。现在触摸设备改用 8dp 上内边距（电视仍取 `pageTopPadding`），`LibraryHero` 底部留白触摸设备 18→10dp（电视不变）；`enterTools()` 与文件夹返回的落位偏移改为 `toolsTopInsetPx`，电视上逐值等于原来的 `pinnedTop`。结果：手机横屏 / 竖屏 122dp → 40dp，电视保持 122dp。新增 `BannerMediaGapTest` 同时断言这两个数字。详见 `docs/UI-DEV25.md`。
 
 # SunnyTV dev24
