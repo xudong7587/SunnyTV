@@ -8,6 +8,13 @@
 
 验证：纯 Kotlin 契约测试 144/144（dev22 基线 119 + 本轮 25 项）；Gradle 单元测试 70 项方法全通过（`TransportTest` 6 项含新增 2 项、`PlaybackFailureTest` 8 项含新增 4 项）；`scripts/check-project.py` 通过；`assembleDebug`、`assembleDebugAndroidTest` 与 `lintDebug` 通过（0 错误 / 28 警告，与 dev25 逐条一致）；API 30 TV 模拟器 `connectedDebugAndroidTest` 59 项失败 8 项，与 dev22 基线失败集合逐个同名、无新增。发布 APK `dist/SunnyTV-v0.1.0-dev26.apk`（14,436,245 字节，SHA256 `74a36eecc5f180c9a620599ea4ff882aaefd4ea56571c47cb62025acaa4ffc33`）由仓库既有密钥签名（证书 SHA-256 `5e8dcd5e…`），未新建密钥、未替换既有标签或资产。Windows 本机 `scripts/test-bootstrap.py` 仍为 16/18（反斜杠 ZIP 条目与符号链接两项属本机平台限制，Linux CI 上通过）。实体电视与真实 MP/Alist 播放未复测，本轮不宣称已解决服务端取流慢。
 
+**公开版已发布**：GitHub Release `v0.1.0-dev26`（源码提交 ea07c77），资产 `SunnyTV-v0.1.0-dev26.apk`
+14,436,245 字节、SHA256 `74a36eecc5f180c9a620599ea4ff882aaefd4ea56571c47cb62025acaa4ffc33`，
+签名证书 SHA-256 `5e8dcd5e…`（仓库既有密钥，未新建密钥），另附 `SIGNING_VALIDATION.json`、`BUILD_INFO.txt`
+与 `SHA256SUMS.txt`；从发行页重新下载后复核 SHA256 与签名均与本地一致。
+本版安装包在维护者本机（Windows / JDK 17 / Gradle 8.11.1 / SDK 35）构建，未新增 dev26 发布工作流，
+以免与已发布的标签重复发布；常规 CI 仍在每次推送 main 时执行。
+
 ## 2026-09-21 dev25 更新（公开版）
 
 以 dev24 快照为基线，按用户反馈只改手机 / 平板（触摸设备）媒体库与文件夹视图里 banner 与媒体区之间的空隙；电视端按用户确认"没问题了"，取值逐值不变。新增 `BannerMediaGapTest` 在固定尺寸容器里量「轮播媒体块底边 → 工具行顶边」：修复前手机横屏、手机竖屏、电视都是 122dp（= 18dp banner 底边距 + 22dp 网格项间距 + 82dp 工具行上内边距）。其中 82dp 是电视端"整屏切换"需要的顶栏内边距（`enterTools()` 把工具行整行对齐到视口顶端，靠它把标题/按钮留在顶栏下方、上方不露 banner），而触摸设备是自由滚动，这段就是纯空白。修复：触摸设备工具行上内边距改为 8dp、`LibraryHero` 底部留白 18→10dp（电视分别保持 `pageTopPadding` 与 18dp）；`enterTools()` 与文件夹模式返回工具行的落位偏移由 `pinnedTop` 改为 `toolsTopInsetPx`（电视上两者逐值相同，触摸设备上落在 8dp，接遥控器按下键时内容仍不会跑到顶栏底下）。结果：手机横屏 40dp、手机竖屏 40dp、电视 122dp。
