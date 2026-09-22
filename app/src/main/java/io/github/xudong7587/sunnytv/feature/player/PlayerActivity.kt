@@ -78,6 +78,9 @@ class PlayerActivity: ComponentActivity() {
     private var retryUsed=false
     private var mp4EditListFallbackUsed=false
     private var autoRetryAttempts=0
+    /** Direct play is attempted first; the Emby server route is the one-way fallback when it fails. */
+    private var useFallbackRoute=false
+    private var fallbackRouteUsed=false
     private var progressJob: Job?=null
     private var reporter: PlaybackReporter? = null
     private var resumePlayWhenReady = true
@@ -193,7 +196,9 @@ class PlayerActivity: ComponentActivity() {
             // before the first frame. Everything else stays fatal and keeps the explicit retry button.
             .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(PlaybackRecovery.MAX_AUTO_RETRIES) {
                 override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                    val allowed=PlaybackRecovery.shouldRetry(autoRetryAttempts,
+                    // With an unused server route available, switching route beats repeating a request
+                    // that already timed out; the same-URL retry stays for sources without a fallback.
+                    val allowed=!hasServerFallback() && PlaybackRecovery.shouldRetry(autoRetryAttempts,
                         PlaybackFailure.errorCodeOf(loadErrorInfo.exception),rendered,
                         PlaybackFailure.causeNames(loadErrorInfo.exception))
                     if(!allowed) return C.TIME_UNSET
@@ -225,7 +230,7 @@ class PlayerActivity: ComponentActivity() {
         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT,request.subtitlePreference=="none" && !request.explicitSubtitle)
             .build()
-        val media=androidx.media3.common.MediaItem.Builder().setUri(request.stableUrl)
+        val media=androidx.media3.common.MediaItem.Builder().setUri(currentPlaybackUrl())
             .setMediaId(request.localKey.ifBlank {"session"})
             .setMediaMetadata(MediaMetadata.Builder().setTitle(request.title).build())
         request.mimeHint?.let {media.setMimeType(it)}
@@ -292,6 +297,25 @@ class PlayerActivity: ComponentActivity() {
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
             }
             override fun onPlayerError(e:PlaybackException) {
+                if(!useFallbackRoute && !fallbackRouteUsed && hasServerFallback() &&
+                    PlaybackRecovery.shouldUseServerFallback(e.errorCode,PlaybackFailure.causeNames(e))) {
+                    // The television could not reach the STRM target itself (timeout, refused or a
+                    // server-side error such as 409). Emby is on the same network as the source, so let
+                    // the server read the item instead. One-way and once per playback.
+                    fallbackRouteUsed=true;useFallbackRoute=true
+                    status=PlaybackRecovery.FALLBACK_NOTICE
+                    lastPosition=player?.currentPosition?.coerceAtLeast(0) ?: lastPosition
+                    resumePlayWhenReady=player?.playWhenReady ?: resumePlayWhenReady
+                    progressJob?.cancel();progressJob=null
+                    reporter?.close(lastPosition,rendered);reporter=null
+                    val previous=player
+                    player=null
+                    window.decorView.post {
+                        previous?.release()
+                        if(!isFinishing && !isDestroyed && player==null) createPlayer()
+                    }
+                    return
+                }
                 if(!rendered && !mp4EditListFallbackUsed && PlaybackFailure.isMp4IndexFailure(e,request.mimeHint)) {
                     mp4EditListFallbackUsed=true
                     status="正在使用 MP4 兼容模式重试…"
@@ -309,7 +333,7 @@ class PlayerActivity: ComponentActivity() {
                     return
                 }
                 error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint,
-                    mediaUrl=request.stableUrl,baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
+                    mediaUrl=currentPlaybackUrl(),baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
                 app.store.savePlaybackDiagnostic(error)
                 controls=true
             }
@@ -368,7 +392,7 @@ class PlayerActivity: ComponentActivity() {
                 val started=SystemClock.elapsedRealtime()
                 val next=withContext(Dispatchers.IO) {
                     val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
-                    app.emby(config).playback(item,false)
+                    app.emby(config).playback(item,false,preferServerStream=settings.preferServerPlayback)
                 }.copy(requestedAtMs=started,sourceReadyAtMs=SystemClock.elapsedRealtime())
                 startActivity(intent(this@PlayerActivity,next));finish()
             } catch(_:CancellationException) {throw CancellationException()}
@@ -380,6 +404,15 @@ class PlayerActivity: ComponentActivity() {
         sleepJob?.cancel();sleepJob=null;sleepMinutes=minutes
         if(minutes!=null) sleepJob=lifecycleScope.launch {delay(minutes*60_000L);finish()}
     }
+
+    /** The route in use: the STRM's own URL first, Emby's server-side entry after a failed direct try. */
+    private fun currentPlaybackUrl():String =
+        if(useFallbackRoute) request.fallbackUrl?.takeIf {it.isNotBlank()} ?: request.stableUrl else request.stableUrl
+
+    /** True while this playback still has an unused Emby server route to try. */
+    private fun hasServerFallback():Boolean =
+        !useFallbackRoute && !request.fallbackUrl.isNullOrBlank() && request.fallbackUrl != request.stableUrl
+
     private fun startReporter() {
         if (request.embyItemId.isBlank()) return
         reporter = PlaybackReporter(request,
@@ -429,11 +462,12 @@ class PlayerActivity: ComponentActivity() {
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
             }},update={view->
                 view.player=player;view.resizeMode=resizeMode
-                // 裁切 keeps the aspect ratio and scales the picture up so the edges run off screen
-                // (this also removes letterbox bars baked into the file); 拉伸 stays a plain FILL.
-                val crop=resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                view.scaleX=if(crop) 1.12f else 1f
-                view.scaleY=if(crop) 1.12f else 1f
+                // 裁切 is Media3's own ZOOM: the aspect ratio is kept and the picture is grown until
+                // the screen is filled, so a 18:9 file loses its sides and a 16:10 file its top and
+                // bottom — and nothing more. The old extra 1.12 upscale cut a further 12% of the
+                // frame away on every edge, which the user rejected as too much.
+                view.scaleX=1f
+                view.scaleY=1f
                 val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                     settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
                 if(appliedSubtitle[0]!=key) {
@@ -501,6 +535,8 @@ class PlayerActivity: ComponentActivity() {
                     Text(error,color=Color.White,fontSize=15.sp,lineHeight=23.sp)
                     if(!retryUsed) PlayerControl("重试此播放入口一次","repeat",initial=true) {
                         retryUsed=true;lastPosition=player?.currentPosition ?: lastPosition
+                        // A manual retry also tries the other route once: direct failed, so ask Emby.
+                        if(hasServerFallback()) useFallbackRoute=true
                         player?.release();player=null;progressJob?.cancel()
                         reporter?.close(lastPosition,rendered);reporter=null;createPlayer()
                     }
@@ -544,11 +580,11 @@ class PlayerActivity: ComponentActivity() {
                     Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
-                            PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind",badge=settings.seekStepSeconds.toString()) {seek(-settings.seekStepSeconds*1000L)}
+                            PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
                             PlayerControl(if(playing) "暂停" else "播放",if(playing) "pause" else "play",initial=returnControl=="transport",emphasis=true) {
                                 player?.let {if(it.isPlaying) it.pause() else it.play()}
                             }
-                            PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward",badge=settings.seekStepSeconds.toString()) {seek(settings.seekStepSeconds*1000L)}
+                            PlayerControl("前进 ${settings.seekStepSeconds} 秒","forward") {seek(settings.seekStepSeconds*1000L)}
                             context?.next?.let {next->PlayerControl("下一集","next") {switchEpisode(next)}}
                         }
                         Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))

@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// A private ("self-use") build may carry third-party fonts for the maintainer's own device. They are
+// never in this repository and never in a published APK: the folder is git-ignored, and it is only
+// added to the assets when the build asks for it.
+val selfUseBuild = (System.getenv("SUNNYTV_SELFUSE") ?: providers.gradleProperty("sunnytvSelfUse").getOrElse("false"))
+    .equals("true", ignoreCase = true)
 android {
     namespace = "io.github.xudong7587.sunnytv"
     compileSdk = 35
@@ -10,8 +15,8 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.1.0-dev26"
+        versionCode = 27
+        versionName = "0.1.0-dev27"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -42,6 +47,10 @@ android {
     sourceSets.getByName("test").java.srcDir(rootProject.file("tests"))
     testOptions { unitTests.isReturnDefaultValues = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+if (selfUseBuild) {
+    // Fonts a private build bundles, copied in by scripts/build-selfuse.ps1.
+    android.sourceSets.getByName("main").assets.srcDir("src/selfUse/assets")
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))

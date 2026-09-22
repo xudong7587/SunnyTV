@@ -1,4 +1,4 @@
-# 已知问题（dev26 公开版）
+# 已知问题（dev27 公开版）
 
 本清单只记录**已知且已确认**的问题，不隐藏失败、不禁用测试。发布工作流里编译、单元测试、lint、
 签名校验与「不打包字体」检查都是硬门槛；模拟器交互测试本轮**不作为发布门槛**，
@@ -17,8 +17,11 @@
 
 说明：
 
-- 以上 8 项在 dev22 基线上用同一台 API 30 TV 模拟器跑出过同样的失败集合，dev23～dev26 未新增失败项
-  （dev26 在本机 API 30 TV 模拟器上执行 59 项、失败 8 项，逐个与本表同名）。
+- 以上 8 项在 dev22 基线上用同一台 API 30 TV 模拟器跑出过同样的失败集合，dev23～dev27 未新增失败项
+  （dev27 在本机 API 30 TV 模拟器上执行 65 项、失败 6 项，全部与本表同名）。
+- 本轮第 1 项（`Dev16PerformanceTest.visibleGridRowsStayStillAndHeaderStaysPinnedAcrossBoundary`）与
+  第 2 项（`HomeHotfixTest.selectedThirdLibraryContinuesInPageOrderAndReturnsToSelectedLibrary`）没有复现，
+  可能与 dev27 改动的焦点记忆与导航落点有关；没有据此把它们判为已修复，仍保留在清单里并计划单独一轮重写断言。
 - 发布工作流里的模拟器使用默认（手机/平板）API 30 镜像，与本地 TV 镜像的设备形态不同，
   因此 CI 上的失败集合可能与上表不完全一致；CI 会把完整的仪器化测试报告作为构建产物上传，供核对。
 - 这 8 项属于"测试断言落后于已被用户验收的界面行为"，不是功能性回归。修复它们需要逐条对照当前交互重写断言，

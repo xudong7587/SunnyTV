@@ -58,7 +58,7 @@ val LocalPageActive=staticCompositionLocalOf {true}
     val p=SunnyPalette(blend(target.background),blend(target.surface),blend(target.raised),blend(target.accent),
         blend(target.ink),blend(target.text),blend(target.secondary),blend(target.border),blend(target.focusBackground),blend(target.focusContent))
     val context=LocalContext.current
-    // 外观 · 字体: system, the two bundled self-use fonts, or a user-uploaded font.
+    // 外观 · 字体: the platform font, an imported document, or any font file in the font folder.
     val font by produceState<FontFamily>(FontFamily.SansSerif,settings.fontChoice,settings.customFontFile) {
         value=withContext(Dispatchers.IO) {
             loadFontTypeface(context,settings.fontChoice,settings.customFontFile)?.let {FontFamily(it)} ?: FontFamily.SansSerif

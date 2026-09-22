@@ -80,4 +80,14 @@ class PlaybackFailureTest {
         assertFalse(PlaybackRecovery.shouldRetry(1,2001,false,names))
         assertFalse(PlaybackRecovery.shouldRetry(0,2001,true,names))
     }
+
+    /** The 409 wording lives in the pure policy so the standalone contract suite covers it. */
+    @Test fun rejectedSourceSaysTheTokenIsTheLikelyCause() {
+        val text=PlaybackRecovery.statusReason(409)
+        assertTrue(text.contains("409"));assertTrue(text.contains("令牌"));assertTrue(text.contains("STRM"))
+        assertTrue(PlaybackRecovery.statusReason(403).contains("403"))
+        assertTrue(PlaybackRecovery.statusReason(404).contains("404"))
+        assertTrue(PlaybackRecovery.statusReason(416).contains("416"))
+        assertTrue(PlaybackRecovery.statusReason(500).contains("500"))
+    }
 }

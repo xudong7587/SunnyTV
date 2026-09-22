@@ -184,6 +184,32 @@ fun runContractSuite() {
     test("route label marks a direct media source") {eq(PlaybackRecovery.routeLabel("http://cdn.test:5244/d/115/movie.mp4?sig=x","https://nas.test/emby/"),"cdn.test:5244（直连媒体源，不是 Emby）")}
     test("route label marks a source without emby") {eq(PlaybackRecovery.routeLabel("https://dav.test/movie.strm",null),"dav.test（独立媒体来源）")}
     test("route label needs a usable url") {eq(PlaybackRecovery.routeLabel(null,"https://nas.test/emby/"),null)}
+    test("server fallback used for a stalled source") {check(PlaybackRecovery.shouldUseServerFallback(2001,listOf("SocketTimeoutException")))}
+    test("server fallback used for a refused source") {check(PlaybackRecovery.shouldUseServerFallback(2004,listOf("InvalidResponseCodeException")))}
+    test("server fallback used for a connection failure") {check(PlaybackRecovery.shouldUseServerFallback(2001,listOf("ConnectException")))}
+    test("server fallback used when the body is cut off") {check(PlaybackRecovery.shouldUseServerFallback(2000,listOf("EOFException")))}
+    test("server fallback skipped for dns failures") {check(!PlaybackRecovery.shouldUseServerFallback(2001,listOf("UnknownHostException")))}
+    test("server fallback skipped for tls failures") {check(!PlaybackRecovery.shouldUseServerFallback(2002,listOf("SSLHandshakeException")))}
+    test("server fallback skipped for decode failures") {check(!PlaybackRecovery.shouldUseServerFallback(3002,listOf("DecoderInitializationException")))}
+    test("server fallback skipped for container failures") {check(!PlaybackRecovery.shouldUseServerFallback(2000,listOf("IOException")))}
+    test("409 points at a stale token or strm") {val t=PlaybackRecovery.statusReason(409);check(t.contains("409")&&t.contains("令牌")&&t.contains("STRM"))}
+    test("403 names the permission") {check(PlaybackRecovery.statusReason(403).contains("权限"))}
+    test("404 names the missing address") {check(PlaybackRecovery.statusReason(404).contains("404"))}
+    test("416 offers restarting") {check(PlaybackRecovery.statusReason(416).contains("从头"))}
+    test("other statuses stay generic") {eq(PlaybackRecovery.statusReason(503),"媒体服务返回 HTTP 503。")}
+    test("fallback notice explains the route change") {check(PlaybackRecovery.FALLBACK_NOTICE.contains("Emby"))}
+
+    // Emby's item query accepts a fixed set of sort keys; bitrate and size are ordered on the device.
+    test("bitrate and size are local sorts") {check(MediaLogic.isLocalSort("Bitrate")&&MediaLogic.isLocalSort("Size"))}
+    test("date created stays a server sort") {check(!MediaLogic.isLocalSort("DateCreated"))}
+    test("random stays a server sort") {check(!MediaLogic.isLocalSort("Random"))}
+    val heavy=MediaEntry("heavy","s","重","Movie",versions=listOf(MediaVersion("1","4K",3840,2160,"HDR",9_000_000_000,40_000_000,"mkv",emptyList())))
+    val light=MediaEntry("light","s","轻","Movie",versions=listOf(MediaVersion("1","1080p",1920,1080,"SDR",2_000_000_000,6_000_000,"mkv",emptyList())))
+    val unknown=MediaEntry("unknown","s","未知","Movie")
+    test("bitrate sort puts the heaviest first") {eq(MediaLogic.localSort(listOf(light,heavy,unknown),"Bitrate",false).map {it.id},listOf("heavy","light","unknown"))}
+    test("bitrate sort ascending reverses") {eq(MediaLogic.localSort(listOf(light,heavy,unknown),"Bitrate",true).map {it.id},listOf("unknown","light","heavy"))}
+    test("size sort uses the largest version") {eq(MediaLogic.localSort(listOf(light,heavy),"Size",false).map {it.id},listOf("heavy","light"))}
+    test("items without media data sort last when descending") {eq(MediaLogic.localSort(listOf(unknown,light),"Size",false).map {it.id},listOf("light","unknown"))}
 
     println("\nRESULT: $passed passed / $failed failed")
     check(failed==0) {"Contract tests failed"}

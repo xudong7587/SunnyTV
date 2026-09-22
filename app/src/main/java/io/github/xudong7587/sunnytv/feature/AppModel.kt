@@ -515,7 +515,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             try {
                 val config = source(item.sourceId)
                 val playable=if(config.kind==SourceKind.EMBY && item.type in setOf("Series","Season")) app.emby(config).playableEpisode(item,fromStart) else item
-                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(playable, fromStart,selectedVersion[playable.key].orEmpty())
+                val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(playable, fromStart,
+                    selectedVersion[playable.key].orEmpty(),app.store.settings().preferServerPlayback)
                 else app.dav(config).playback(item, if (fromStart) 0 else app.store.position(item.key))
                 ensureActive()
                 val chosenSubtitle=selectedSubtitleTrack[playable.key]

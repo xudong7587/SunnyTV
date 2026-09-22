@@ -45,12 +45,7 @@ object PlaybackFailure {
         val chain=causes(error)
         val http=chain.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
         val reason=when {
-            http!=null -> when(http.responseCode) {
-                401,403 -> "Emby 拒绝读取媒体（HTTP ${http.responseCode}），请检查当前用户的播放权限。"
-                404 -> "媒体地址不存在（HTTP 404），请确认 Emby 仍能访问本地文件。"
-                416 -> "服务器拒绝此播放位置（HTTP 416），可以尝试从头播放。"
-                else -> "媒体服务返回 HTTP ${http.responseCode}。"
-            }
+            http!=null -> PlaybackRecovery.statusReason(http.responseCode)
             chain.any {it is SSLException} -> "TLS 证书或加密连接失败；未跳过证书校验。"
             chain.any {it is UnknownHostException} -> "电视无法解析媒体服务器地址。"
             chain.any {it is SocketTimeoutException} -> "读取媒体超时：媒体服务在限定时间内没有返回数据，也没有断开连接。"

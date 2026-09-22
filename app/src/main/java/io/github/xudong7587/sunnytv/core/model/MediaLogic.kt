@@ -23,6 +23,21 @@ object MediaLogic {
     fun libraryArtwork(item: MediaEntry): Artwork? = item.primary ?: item.thumb ?: item.backdrop
     fun wideArtwork(item: MediaEntry): Artwork? = if(item.type=="Episode") item.primary ?: item.thumb ?: item.backdrop else item.thumb ?: item.backdrop ?: item.primary
 
+    /**
+     * Emby's item query accepts a fixed list of sort keys (Album, … , Runtime, Random); file bitrate
+     * and file size are not among them, so those two sorts are ordered on the device instead of
+     * being sent to a server that would reject or ignore them.
+     */
+    fun isLocalSort(sort:String):Boolean = sort in setOf("Bitrate","Size")
+
+    /** Sorts one loaded page by its largest media version. Items without media data keep a stable 0. */
+    fun localSort(items:List<MediaEntry>,sort:String,ascending:Boolean):List<MediaEntry> {
+        val value:(MediaEntry)->Long = if(sort=="Size") {entry->entry.versions.maxOfOrNull {it.size} ?: 0L}
+            else {entry->entry.versions.maxOfOrNull {it.bitrate} ?: 0L}
+        val ordered=items.sortedWith(compareBy {value(it)})
+        return if(ascending) ordered else ordered.asReversed()
+    }
+
     fun mime(container: String): String? = when (container.lowercase().trimStart('.')) {
         "mp4", "m4v", "mov" -> "video/mp4"
         "mkv", "matroska" -> "video/x-matroska"

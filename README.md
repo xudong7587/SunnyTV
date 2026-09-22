@@ -3,8 +3,8 @@
 <p align="center">让自己的媒体库，回到大屏。</p>
 
 <p align="center">
-  <a href="https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev25">下载 0.1.0-dev25</a> ·
-  <a href="docs/RELEASE-dev25.md">本版说明</a> ·
+  <a href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新版</a> ·
+  <a href="docs/RELEASE-dev27.md">本版说明</a> ·
   <a href="docs/STATUS.md">开发状态</a> ·
   <a href="docs/KNOWN-ISSUES.md">已知问题</a> ·
   <a href="docs/BUILD.md">构建说明</a>
@@ -16,6 +16,23 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 
 **电视与手机/平板同一套界面**：电视保留遥控器焦点导航与「banner ↔ 媒体区」整屏切换；
 手机与平板改为可触摸的单列滚动，并收紧了 banner 与媒体区之间的留白。
+
+## 亮点
+
+- **流畅**：焦点与滚动按遥控器节奏设计——整屏切换只做 GPU 平移，网格跨行先交接焦点再滚动，
+  详情页进入即停在「播放 / 继续播放」上、按上回顶部导航、再按下回到按钮，连续按键不丢焦点、不抖屏。
+- **美观**：深浅主题 + 十组重点色，海报墙、banner、详情页与播放器共用同一套渐变、柔光与留白；
+  焦点框与卡片圆角同心，行内预留阴影空间，聚焦不改变卡片几何。
+- **STRM 支持好**：STRM 一律按「文件内唯一一条 HTTP(S) 地址」处理，支持 302/重定向、带签名的直链与
+  Emby 服务端取流；电视直连失败时自动改用 Emby 服务端读一次，失败原因写到能看懂（主机 + 阶段）。
+- **大视频与高码率体验**：播放传输单独放宽首次响应预算（连接 15 秒 / 读取 60 秒），缓冲按物理内存配置，
+  首帧前的瞬时传输失败自动重试一次；原画直放优先，不申请转码。
+- **字体与界面大小自定义**：可导入自己的 TTF / OTF / TTC 作为界面或字幕字体，
+  界面缩放、字号、字幕外观（描边 / 位置 / 背景 / 大小）与动画速度都能单独调整。
+- **多端自适应**：同一份界面适配电视（遥控器焦点导航）与手机 / 平板（单列触摸滚动），
+  横竖屏、安全区与「按文件夹 / 按海报」浏览方式自动处理。
+- **性能优化**：启动快照缓存、图片按「来源 + 条目 + 类型 + tag + 尺寸」缓存、低负载模式与界面分辨率偏好，
+  低内存设备自动降低解码尺寸与阴影绘制。
 
 ## 主要功能
 
@@ -64,19 +81,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 首次使用进入「设置 → 媒体来源」填写 Emby 地址与账号；云盘填 CloudDrive2 的 **WebDAV** 地址
 （不是管理后台地址）。凭据按来源保存，只在本机。
 
-## 验证状态（0.1.0-dev25）
+## 验证状态（0.1.0-dev27）
 
 | 项目 | 结果 |
 | --- | --- |
-| 单元测试（含纯 Kotlin 契约检查） | 64 项全部通过 |
+| 单元测试 | 72 项方法全部通过（纯 Kotlin 契约检查 165/165） |
 | `lintDebug` | 0 错误 / 28 警告 |
 | Android 编译与测试 APK | `assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease` 均通过 |
-| 模拟器交互测试（API 30） | 59 项执行，其中 8 项是落后于现有界面行为的旧断言，见 [已知问题](docs/KNOWN-ISSUES.md) |
+| 模拟器交互测试（API 30） | 65 项执行，6 项是落后于现有界面行为的旧断言，见 [已知问题](docs/KNOWN-ISSUES.md) |
 | 发布签名 | 使用仓库既有签名 Secret 签名并校验证书一致；[签名策略](docs/SIGNING.md) |
 | 实体设备 | 电视端交互与手机/平板触摸布局已由使用者人工验收；HDR、杜比、高帧率与部分机型的播放兼容性未验证 |
 
-最近三轮的改动记录：[外框与阴影留白](docs/UI-DEV23.md)、[返回 banner 卡顿](docs/UI-DEV24.md)、
-[手机/平板间距](docs/UI-DEV25.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
+本版改动记录：[详情焦点、排序窗口、裁切与搜索布局](docs/UI-DEV27.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 实现取向
 

@@ -1,5 +1,30 @@
 # SunnyTV 0.1.0-dev2 — 真实开发状态
 
+## 2026-09-22 dev27 更新（当前）
+
+按用户实机反馈修一批界面与播放问题，基线 dev26（1d455cd）。①**详情页焦点**：`FocusTile` 过去把顶部导航栏
+也写进页面焦点记忆，用户按上到过顶部一次后，再次进入同一详情页就默认落在导航栏；同时动作行的「上」被行内
+预览处理器吃掉，根节点的「上移到导航栏」永远收不到——于是出现"默认在顶部按钮、从顶部按下进去后回不去"。
+现在导航 tile 不再写页面记忆，动作行按上改为把焦点交给导航、页面注册 `revealTop` 让导航获得焦点时滚回顶部，
+剧集把「继续播放」排在「从头播放」之前并作为默认焦点，动作行下方第一段内容按上会回到该按钮。
+②**排序**：排序窗口改为一行三个的固定网格（十二键同屏、不滚动），修掉"选中项在折叠区外导致焦点落到取消上"
+的问题；排序按钮左侧改为一对等高的上下箭头；用户 Emby 上实测 `SortBy=SortName` 会重排、
+`SortBy=Bitrate` 返回默认顺序（键被忽略、不报错），因此比特率 / 大小改为取回带 `MediaSources` 的一页
+（一次 200 条）在设备端按码率 / 体积排序。
+③**搜索页**：键盘移到搜索栏上方并整体居中，退格与清除移到字母与数字之间，触摸端可横向滚动。④**视图按钮**改为
+单击在海报 / 背景 / 横幅之间循环。⑤**字体**：字体改为以设备上的文件为准（`core/storage/FontLibrary.kt`），
+随包字体首启复制一次到 `files/fonts`，因此换成不带字体的公开版后仍可选；自用版通过
+`scripts/build-selfuse.ps1`（`-PsunnytvSelfUse=true`）把 `app/src/selfUse/assets` 加进资源，该目录不入库。
+⑥**画面裁切**：去掉 `RESIZE_MODE_ZOOM` 之上额外的 `1.12` 放大，只按屏幕比例挤掉黑边。⑦**图标**：快进 / 快退
+改为双三角并去掉 10 秒角标，睡眠图标重绘为新月。⑧沿用工作区里上一轮未提交的 STRM 服务端兜底与 409 文案。
+
+验证：纯 Kotlin 契约测试 165/165（dev26 公开版 144 + 上一轮未提交 13 + 本轮 8）；Gradle 单元测试 72 项方法
+全通过；`scripts/check-project.py` 通过；`assembleDebug`、`assembleDebugAndroidTest` 与 `lintDebug`
+（0 错误 / 28 警告，与 dev25 / dev26 逐条一致）通过；API 30 TV 模拟器执行 65 项仪器化测试、失败 6 项，
+全部落在既有清单内，无新增（第 1、2 项本轮未复现，见 `docs/KNOWN-ISSUES.md`）。实体电视的画面裁切观感、
+真实 MP / Alist 链路的服务端兜底效果、以及自用版覆盖安装时的字体保留仍需用户实机确认，本轮不写成已完成。
+详见 `docs/UI-DEV27.md` 与 `docs/RELEASE-dev27.md`。
+
 ## 2026-09-21 dev26 更新（当前 · 公开版）
 
 按用户实机反馈修"首帧前读取超时"。报错为 `读取媒体超时，请检查电视到 Emby 的连接 · 错误码 2001 · 首帧前读取 · video/mp4`，异常链是 `HttpDataSourceException → IOException → ExecutionException → SocketTimeoutException`，出问题的媒体是别人用 MP（MoviePilot）生成的 STRM（与 MediaIndex 无关）。反编译本地 Maven 缓存里的 `media3-datasource-okhttp-1.9.4` 确认两件事：`OkHttpDataSource.executeCall` 用 `call.enqueue(...)` + `SettableFuture.get()` 取响应、`catch ExecutionException` 后包成普通 `IOException`，而它只在 `open()` 里调用 —— 所以这个链等于"请求已发出、响应头没在预算内到达"，不是读 body 中断；错误码 2001（而非 2002 连接超时）只是 `createForIOException` 的 `cause instanceof SocketTimeoutException` 看不到那层包装，分类变粗。当时全项目共用 8 秒连接 / 25 秒读取，首帧失败没有任何自动重试。

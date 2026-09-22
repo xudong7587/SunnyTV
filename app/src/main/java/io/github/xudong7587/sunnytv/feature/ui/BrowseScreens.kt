@@ -675,11 +675,20 @@ import coil.request.ImageRequest
                         reserveFocusSpace=false) {
                         item {Action(Presentation.sorts.firstOrNull {it.first==sort}?.second.orEmpty(),id="library-sort",
                             modifier=Modifier.focusRequester(sortEntry),
-                            collapseWhenIdle=true,icon=librarySortIcon(sort),secondaryIcon=if(sort=="Random") null else if(ascending) "ascending" else "descending") {chooser="sort"}}
+                            collapseWhenIdle=true,
+                            // The direction lives on the left as one equal-height up/down pair: the
+                            // active direction is bright, the other one faint. 随机 has no direction.
+                            leading={ink->if(sort=="Random") LineIcon("shuffle",ink) else SortDirectionArrows(ascending,ink)}) {chooser="sort"}}
                         item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==subtitlePreference}?.second ?: "媒体默认"}",
                             collapseWhenIdle=true) {chooser="subtitle"}}
                         if(episodeContainer) item {EpisodeLayoutButtons(library,episodeLayout,collapseWhenIdle=true)}
-                        else item {Action("视图：$mode",collapseWhenIdle=true) {chooser="view"}}
+                        // One click walks 海报 → 背景 → 横幅; no submenu, the button already shows the
+                        // mode it is in.
+                        else item {Action("视图：${when(mode) {"Thumb"->"背景";"Banner"->"横幅";else->"海报"}}",id="library-view",
+                            collapseWhenIdle=true) {
+                            val next=when(mode) {"Poster"->"Thumb";"Thumb"->"Banner";else->"Poster"}
+                            model.saveSettings(model.settings.copy(libraryArtworkModes=model.settings.libraryArtworkModes+(library.key to next)))
+                        }}
                         // Every library can switch to folder browsing, movie libraries included.
                         if(!episodeContainer) item {Action(if(folderMode) "按海报" else "按文件夹",
                             id="library-folder-mode",active=folderMode,collapseWhenIdle=true) {folderMode=!folderMode}}
@@ -738,7 +747,9 @@ import coil.request.ImageRequest
     if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"字幕优先级（未匹配时跟随媒体默认）";else->"展现方式"},
         when(chooser) {"sort"->Presentation.sorts.map {(key,label)->key to if(key==sort) "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
             else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
-        when(chooser) {"sort"->sort;"subtitle"->subtitlePreference;else->mode},onDismiss={chooser=""}) {value->
+        when(chooser) {"sort"->sort;"subtitle"->subtitlePreference;else->mode},onDismiss={chooser=""},
+        // Twelve sort keys fit three to a row, so every option is reachable without scrolling.
+        columns=if(chooser=="sort") 3 else 1) {value->
         when(chooser) {"sort"->{ascending=if(sort==value) !ascending else value=="SortName";sort=value;model.loadLibrary(library,sort,ascending=ascending)}
             "subtitle"->model.saveSettings(model.settings.copy(librarySubtitlePreferences=model.settings.librarySubtitlePreferences+(library.key to value)))
             else->model.saveSettings(model.settings.copy(libraryArtworkModes=model.settings.libraryArtworkModes+(library.key to value)))}
@@ -808,14 +819,15 @@ import coil.request.ImageRequest
     fun run() {if(text.isNotBlank()) model.search(text.trim())}
     Column(Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)) {
         SectionTitle("搜索你的媒体库")
-        Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-            Field("片名或关键词",text,{text=it},Modifier.weight(1f))
-            Action("搜索",primary=true) {run()}
-        }
-        // Remote keyboard laid out like a TV input method: letters on the left in three rows,
-        // digits and the function keys on the right in two rows.
+        // Remote keyboard first, the field under it: the D-pad starts on the letters and the text
+        // being typed stays on screen right below the keys. Letters and digits share one centred
+        // block with 退格 / 清除 sitting between them, so the hand does not travel to the far right
+        // for a correction.
         Text("拼音首字母 · 数字",color=SunnyColors.Secondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
-        Row(Modifier.padding(vertical=4.dp).focusGroup(),horizontalArrangement=Arrangement.spacedBy(26.dp)) {
+        val scrollableKeys=LocalCompact.current||LocalHandset.current||LocalTouchFirst.current
+        Row(Modifier.fillMaxWidth().padding(vertical=4.dp)
+            .then(if(scrollableKeys) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+            .focusGroup(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
                 listOf("ABCDEFGHI","JKLMNOPQR","STUVWXYZ").forEach {row->
                     Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -823,16 +835,22 @@ import coil.request.ImageRequest
                     }
                 }
             }
+            Column(Modifier.padding(horizontal=12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                SearchIconKey("key:backspace","backspace","退格") {if(text.isNotEmpty()) text=text.dropLast(1)}
+                SearchIconKey("key:clear","trash","清除") {text=""}
+            }
             Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
                 Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
                     listOf("1","2","3","4","5").forEach {digit->SearchKey("key:$digit",digit) {text=text+digit}}
                 }
                 Row(horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
                     listOf("6","7","8","9","0").forEach {digit->SearchKey("key:$digit",digit) {text=text+digit}}
-                    SearchIconKey("key:backspace","back","退格") {if(text.isNotEmpty()) text=text.dropLast(1)}
-                    SearchIconKey("key:clear","trash","清除") {text=""}
                 }
             }
+        }
+        Row(Modifier.padding(vertical=6.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            Field("片名或关键词",text,{text=it},Modifier.weight(1f))
+            Action("搜索",primary=true) {run()}
         }
         LazyColumn(contentPadding=PaddingValues(bottom=30.dp)) {
             if(pinyinMatches.isNotEmpty()) item {
@@ -849,7 +867,7 @@ import coil.request.ImageRequest
 /** Keyboard key: text only, no fill and no border; focus only changes the colour. */
 @Composable private fun SearchKey(id:String,label:String,onClick:()->Unit) {
     var focused by remember {mutableStateOf(false)}
-    Box(Modifier.clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}.size(38.dp),
+    Box(Modifier.testTag(id).clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}.size(38.dp),
         contentAlignment=Alignment.Center) {
         Text(label,color=if(focused) SunnyColors.Accent else SunnyColors.Text,fontSize=17.sp,
             fontWeight=if(focused) FontWeight.Bold else FontWeight.Normal,maxLines=1)
@@ -859,7 +877,7 @@ import coil.request.ImageRequest
 /** Backspace / clear: icon only, no button frame. */
 @Composable private fun SearchIconKey(id:String,icon:String,label:String,onClick:()->Unit) {
     var focused by remember {mutableStateOf(false)}
-    Box(Modifier.clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}
+    Box(Modifier.testTag(id).clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}
         .semantics {contentDescription=label}.padding(horizontal=6.dp,vertical=8.dp)) {
         LineIcon(icon,if(focused) SunnyColors.Accent else SunnyColors.Text,Modifier.size(22.dp))
     }

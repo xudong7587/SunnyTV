@@ -196,6 +196,16 @@ class MainActivity: ComponentActivity() {
     val compact=LocalCompact.current
     val topInset=LocalTopInset.current
     val scope=rememberCoroutineScope()
+    // "Up" from page content returns to the tile of the page the user is on, not always 首页.
+    LaunchedEffect(bridge,activeRoot) {
+        bridge.navEntryId=when(activeRoot) {
+            Route.Home -> "nav:首页"
+            Route.Libraries -> "nav:媒体库"
+            Route.Search -> "nav:搜索"
+            Route.Settings -> "nav:设置"
+            else -> null
+        }
+    }
     Row(Modifier.fillMaxWidth().padding(top=topInset).height(68.dp).padding(horizontal=if(compact) 12.dp else 28.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
         // Only the wordmark carries the light-theme elevation. A shadow around the round logo mark

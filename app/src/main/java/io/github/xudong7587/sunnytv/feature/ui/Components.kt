@@ -100,7 +100,10 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     }.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
-            if(it.isFocused && pageActive) { model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
+            // The pinned navigation is shared by every page, so remembering it as "the last place
+            // this page was" would send the next visit back up to the top bar instead of the content
+            // the user was on. Content tiles keep the memory.
+            if(it.isFocused && pageActive) {if(!id.startsWith("nav:")) model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
         }.clip(shape)
         .drawWithCache {
             val edge=shape.createOutline(size,layoutDirection,this)
@@ -138,7 +141,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
 
 @Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,
     icon:String=actionIcon(text),modifier:Modifier=Modifier,alwaysShowLabel:Boolean=false,collapseWhenIdle:Boolean=false,
-    secondaryIcon:String?=null,onClick:()->Unit) {
+    secondaryIcon:String?=null,leading:(@Composable (Color)->Unit)?=null,onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=RoundedCornerShape(28.dp),button=true,onClick=onClick) { focused ->
@@ -146,12 +149,14 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
         Row(Modifier.height(48.dp).widthIn(min=48.dp)
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             Box(Modifier.size(20.dp),contentAlignment=Alignment.Center) {
-                LineIcon(icon,ink,Modifier.fillMaxSize())
-                secondaryIcon?.let { overlay ->
-                    Box(Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(11.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape).background(SunnyColors.Background.copy(.92f)),
-                        contentAlignment=Alignment.Center) {
-                        LineIcon(overlay,ink,Modifier.size(8.dp))
+                if(leading!=null) leading(ink) else {
+                    LineIcon(icon,ink,Modifier.fillMaxSize())
+                    secondaryIcon?.let { overlay ->
+                        Box(Modifier.align(Alignment.BottomEnd).offset(x=4.dp,y=4.dp).size(11.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape).background(SunnyColors.Background.copy(.92f)),
+                            contentAlignment=Alignment.Center) {
+                            LineIcon(overlay,ink,Modifier.size(8.dp))
+                        }
                     }
                 }
             }

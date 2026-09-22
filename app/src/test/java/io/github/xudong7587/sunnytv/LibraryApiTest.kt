@@ -28,6 +28,30 @@ class LibraryApiTest {
         }
     }
     private fun source(server:MockWebServer)=EmbySource(SourceConfig("s",SourceKind.EMBY,"Test",server.url("/").toString(),"u","","token"),SafeHttp(),"test")
+
+    /** dev27: a direct-play STRM keeps Emby's own entry as the fallback route, and the switch forces it. */
+    @Test fun directPlayKeepsAServerRouteAndThePreferenceForcesIt()=runBlocking {
+        MockWebServer().use {server->
+            val api=source(server)
+            val item=MediaEntry("film","s","Film","Movie")
+            val body="""{"MediaSources":[{"Id":"v","Container":"mkv","SupportsDirectPlay":true,
+                "Path":"http://192.168.31.12:3005/d/115/movie.mkv"}]}"""
+            server.enqueue(MockResponse().setBody(body))
+            val direct=api.playback(item)
+            assertEquals("/Items/film/PlaybackInfo",server.takeRequest().path)
+            assertEquals("http://192.168.31.12:3005/d/115/movie.mkv",direct.stableUrl)
+            assertEquals("DirectPlay",direct.playMethod)
+            assertTrue(direct.fallbackUrl!!.startsWith(server.url("/").toString()))
+            assertTrue(direct.fallbackUrl!!.contains("Videos/film/stream"))
+            server.enqueue(MockResponse().setBody(body))
+            val serverRoute=api.playback(item,preferServerStream=true)
+            server.takeRequest()
+            assertTrue(serverRoute.stableUrl.startsWith(server.url("/").toString()))
+            assertTrue(serverRoute.stableUrl.contains("Videos/film/stream"))
+            assertEquals("DirectStream",serverRoute.playMethod)
+            assertNull(serverRoute.fallbackUrl)
+        }
+    }
     @Test fun latestIsScopedAndBounded()=runBlocking {
         MockWebServer().use {server->
             server.enqueue(MockResponse().setBody("[]"));source(server).latest("library-A",10)

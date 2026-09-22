@@ -7,6 +7,7 @@ import coil.memory.MemoryCache
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.core.network.SafeHttp
 import io.github.xudong7587.sunnytv.core.storage.ConfigStore
+import io.github.xudong7587.sunnytv.core.storage.FontLibrary
 import io.github.xudong7587.sunnytv.core.storage.StartupCache
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
 import io.github.xudong7587.sunnytv.source.clouddrive.WebDavSource
@@ -32,6 +33,9 @@ class SunnyApp : Application() {
         // Do not let engine exception logs expose signed media URLs. Our diagnostic panel
         // reports numeric error codes and elapsed times instead of exception.toString().
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF)
+        // A private build's bundled fonts are copied out of the APK once, off the main thread, so
+        // replacing it with a public build does not take those fonts away from the user.
+        Thread({runCatching {FontLibrary.adopt(this)}},"sunnytv-font-adopt").apply {isDaemon=true}.start()
     }
     fun emby(config: SourceConfig) = EmbySource(config,http,store.deviceId)
     fun dav(config: SourceConfig) = WebDavSource(config,http)

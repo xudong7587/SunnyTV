@@ -82,8 +82,9 @@ fun actionIcon(text:String):String=when {
         "backspace"->"M9.5 5 L21 5 L21 19 L9.5 19 L3 12 Z M12 9.4 L17 14.6 M17 9.4 L12 14.6"
         "play"->"M6 3 L21 12 L6 21 Z"
         "pause"->"M7 4 L7 20 M17 4 L17 20"
-        "rewind"->"M7 7 L3 7 L3 3 M3 7 C5 3 9 2 12 2 C18 2 22 6 22 12 C22 18 18 22 12 22 C6 22 2 18 2 12"
-        "forward"->"M17 7 L21 7 L21 3 M21 7 C19 3 15 2 12 2 C6 2 2 6 2 12 C2 18 6 22 12 22 C18 22 22 18 22 12"
+        // Two solid triangles per side, the shape every video player uses for rewind / fast forward.
+        "rewind"->"M12 5 L12 19 L3 12 Z M21 5 L21 19 L12 12 Z"
+        "forward"->"M12 5 L12 19 L21 12 Z M3 5 L3 19 L12 12 Z"
         "frame"->"M9 3 L3 3 L3 9 M15 3 L21 3 L21 9 M21 15 L21 21 L15 21 M9 21 L3 21 L3 15"
         "close"->"M5 5 L19 19 M19 5 L5 19"
         "exit"->"M10 3 L3 3 L3 21 L10 21 M10 12 L22 12 M17 7 L22 12 L17 17"
@@ -94,7 +95,8 @@ fun actionIcon(text:String):String=when {
         "next"->"M19 4 L19 20 M5 5 L16 12 L5 19 Z"
         "chapters"->"M4 6 L5 6 M9 6 L21 6 M4 12 L5 12 M9 12 L21 12 M4 18 L5 18 M9 18 L21 18"
         "cast"->"M12 11 C16 11 16 4 12 4 C8 4 8 11 12 11 Z M4 21 C4 14 20 14 20 21 M18 5 C21 6 22 9 21 12"
-        "sleep"->"M18 3 C10 4 7 13 12 19 C8 18 4 15 4 10 C4 5 9 2 14 3"
+        // A crescent whose bite sits in the upper right: two arcs of the same sweeping direction.
+        "sleep"->"M6.45 4.92 A9 9 0 1 0 19.08 17.55 A11 11 0 0 1 6.45 4.92"
         "skip"->"M4 5 L13 12 L4 19 Z M13 5 L22 12 L13 19 Z"
         "info"->"M12 2 C25 2 25 22 12 22 C-1 22 -1 2 12 2 Z M12 11 L12 17 M12 7 L12 7.2"
         "arrow"->"M3 12 L21 12 M14 5 L21 12 L14 19"
@@ -105,6 +107,26 @@ fun actionIcon(text:String):String=when {
     Canvas(modifier.size(19.dp)) {
         scale(size.width/24,size.height/24,pivot=androidx.compose.ui.geometry.Offset.Zero) {
             drawPath(path,color,style=Stroke(1.7f,cap=StrokeCap.Round,join=StrokeJoin.Round))
+        }
+    }
+}
+
+/**
+ * The sort indicator: an up arrow and a down arrow of exactly the same height, stacked. The active
+ * direction is drawn at full strength and the other one faintly, so the current order reads at a
+ * glance without any extra text.
+ */
+@Composable fun SortDirectionArrows(ascending:Boolean,color:Color,modifier:Modifier=Modifier,enabled:Boolean=true) {
+    val up=remember {"M12 10 L12 3 M7 8 L12 3 L17 8"}
+    val down=remember {"M12 14 L12 21 M7 16 L12 21 L17 16"}
+    val upPath=remember(up) {PathParser().parsePathString(up).toPath()}
+    val downPath=remember(down) {PathParser().parsePathString(down).toPath()}
+    val active=if(enabled) color else color.copy(alpha=.45f)
+    Canvas(modifier.size(19.dp)) {
+        scale(size.width/24,size.height/24,pivot=androidx.compose.ui.geometry.Offset.Zero) {
+            val stroke=Stroke(1.7f,cap=StrokeCap.Round,join=StrokeJoin.Round)
+            drawPath(upPath,if(enabled && ascending) active else active.copy(alpha=.42f),style=stroke)
+            drawPath(downPath,if(enabled && !ascending) active else active.copy(alpha=.42f),style=stroke)
         }
     }
 }

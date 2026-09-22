@@ -78,15 +78,27 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     suspend fun library(parent: String, start: Int = 0, sort: String = "DateCreated", query: String = "", favorites: Boolean = false,
         ascending:Boolean=sort=="SortName", foldersOnly:Boolean=false, limit:Int=48, mixed:Boolean=false): MediaPage {
         require(Presentation.sorts.any {it.first==sort}) {"Unsupported sort"}
-        val q = mutableMapOf("Recursive" to (!foldersOnly).toString(), "StartIndex" to "${start.coerceAtLeast(0)}",
-            "Limit" to limit.coerceIn(1,48).toString(), "SortBy" to sort, "SortOrder" to if(ascending) "Ascending" else "Descending",
-            "Fields" to fields, "ImageTypeLimit" to "1")
-        if(foldersOnly) q["IsFolder"]="true"
-        else q["IncludeItemTypes"]=if(mixed) "Movie,Episode,Video" else "Movie,Series,Video"
-        q.putAll(optionalParent(parent))
-        if(query.isNotBlank()) q["SearchTerm"] = query
-        if(favorites) q["Filters"] = "IsFavorite"
-        return parsePage(get("Users/${config.userId}/Items",q))
+        // Measured on a real Emby (2026-09-22): SortBy=SortName reorders the result, SortBy=Bitrate
+        // returns the default order — the query endpoint accepts the parameter and ignores that key,
+        // even though Emby's own web client offers 比特率 / 文件尺寸. So bitrate and size are ordered
+        // here, with MediaSources requested so the page carries each file's bitrate and size.
+        val local=MediaLogic.isLocalSort(sort)
+        // One request covers a whole normal library, so the on-device order is the library's order.
+        val pageLimit=if(local) 200 else limit.coerceIn(1,48)
+        suspend fun load(sortBy:String):MediaPage {
+            val q = mutableMapOf("Recursive" to (!foldersOnly).toString(), "StartIndex" to "${start.coerceAtLeast(0)}",
+                "Limit" to pageLimit.toString(), "SortBy" to sortBy,
+                "SortOrder" to if(ascending) "Ascending" else "Descending",
+                "Fields" to if(local) "$fields,MediaSources" else fields, "ImageTypeLimit" to "1")
+            if(foldersOnly) q["IsFolder"]="true"
+            else q["IncludeItemTypes"]=if(mixed) "Movie,Episode,Video" else "Movie,Series,Video"
+            q.putAll(optionalParent(parent))
+            if(query.isNotBlank()) q["SearchTerm"] = query
+            if(favorites) q["Filters"] = "IsFavorite"
+            return parsePage(get("Users/${config.userId}/Items",q))
+        }
+        val page=if(local) load("DateCreated") else load(sort)
+        return if(local) MediaPage(MediaLogic.localSort(page.items,sort,ascending),page.total) else page
     }
     suspend fun children(item: MediaEntry): List<MediaEntry> = when(item.type) {
         "Series" -> parsePage(get("Shows/${item.id}/Seasons", mapOf("UserId" to config.userId, "Fields" to fields))).items
@@ -136,7 +148,8 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         return url("Items/${art.itemId}/Images/${art.type}$index", mapOf("tag" to art.tag,
             "MaxWidth" to width.toString(), "Quality" to "90"))
     }
-    suspend fun playback(item: MediaEntry, fromStart: Boolean = false, versionId:String=""): PlaybackRequest {
+    suspend fun playback(item: MediaEntry, fromStart: Boolean = false, versionId:String="",
+                         preferServerStream:Boolean=false): PlaybackRequest {
         val start = if(fromStart) 0 else item.positionMs
         val info = JSONObject(post("Items/${item.id}/PlaybackInfo", JSONObject()
             .put("UserId",config.userId).put("StartTimeTicks", start * 10_000)
@@ -157,20 +170,22 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         // Respect server-provided HTTP source; never hand /volume/... or /strm/... to Android.
         val needsProviderHeaders = (source.optJSONObject("RequiredHttpHeaders")?.length() ?: 0) > 0
         // Provider Cookie/Referer requirements remain at the server, not on the TV.
-        val direct = remote != null && source.optBoolean("SupportsDirectPlay",false) && !needsProviderHeaders
-        val stable = when {
-            direct -> remote!!
-            streamPath != null -> absolute(streamPath)
-            else -> url("Videos/${item.id}/stream", mapOf("Static" to "true", "MediaSourceId" to sid,
+        // The server entry stays available even when direct play wins, so a TV-side failure (target
+        // host unreachable, HTTP 409, no response headers) can fall back to Emby reading the STRM itself.
+        val serverStream = streamPath?.let {absolute(it)}
+            ?: url("Videos/${item.id}/stream", mapOf("Static" to "true", "MediaSourceId" to sid,
                 "PlaySessionId" to info.text("PlaySessionId").orEmpty()))
-        }
+        val direct = remote != null && source.optBoolean("SupportsDirectPlay",false) && !needsProviderHeaders &&
+            !preferServerStream
+        val stable = if(direct) remote!! else serverStream
         HttpPolicy.validate(stable)
         val resolved = StrmResolver(client).resolve(stable)
         val subtitles = externalSubtitles(item.id,sid,source.optJSONArray("MediaStreams") ?: JSONArray())
         return PlaybackRequest(config.id, resolved, item.title, start,
             MediaLogic.mime(source.optString("Container")), scope, subtitles,
             item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key,
-            mediaLogo=item.logo)
+            mediaLogo=item.logo,
+            fallbackUrl=serverStream.takeIf {direct && it != resolved})
     }
     internal fun externalSubtitles(itemId:String,sourceId:String,streams:JSONArray):List<ExternalSubtitle> = streams.objects()
         .filter {it.optString("Type")=="Subtitle" && it.optBoolean("IsExternal")}

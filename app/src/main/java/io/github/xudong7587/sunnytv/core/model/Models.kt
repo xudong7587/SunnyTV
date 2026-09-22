@@ -63,6 +63,8 @@ data class PlaybackRequest(
     val audioLanguage:String = "", val audioTitle:String = "", val subtitlePreference:String = "default",
     val subtitleTitle:String = "", val mediaLogo:Artwork? = null,
     val subtitleTrackId:String = "", val subtitleOrdinal:Int = -1, val explicitSubtitle:Boolean=false
+    /** Set when the direct-play URL is chosen: the same item through Emby, used if the direct route fails. */
+    , val fallbackUrl:String? = null
 ) : Serializable
 
 data class AppSettings(
@@ -81,7 +83,7 @@ data class AppSettings(
     val customFontFile:String = "", val customFontName:String = "", val shadowsEnabled:Boolean = true,
     val artworkCacheMiB:Int = 512, val performanceMode:String = "auto",
     val displayModePreference:String = DisplayModePolicy.AUTO,
-    // Self-use build: the two bundled fonts live in FontCatalog and are listed in 外观 · 字体.
+    // Font choices are ids from `FontCatalog` plus `FontLibrary`'s file entries (see 外观 · 字体).
     val fontChoice:String = FontCatalog.SYSTEM,
     val subtitleFontChoice:String = FontCatalog.SYSTEM,
     val subtitleScaleLevel:Int = 2,
@@ -90,4 +92,9 @@ data class AppSettings(
     val subtitleBackground:String = SubtitleAppearance.BACKGROUND_BLACK
     /** Only this Emby source is browsed; empty means the first configured Emby source. */
     , val activeSourceId:String = ""
+    /**
+     * Workaround switch: play Emby items through the server's own stream entry instead of handing the
+     * STRM's remote URL to the television. Needed when the source only answers the server, not the TV.
+     */
+    , val preferServerPlayback:Boolean = false
 )

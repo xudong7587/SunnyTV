@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import io.github.xudong7587.sunnytv.core.storage.FontStore
+import io.github.xudong7587.sunnytv.core.storage.FontLibrary
 import io.github.xudong7587.sunnytv.BuildConfig
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -122,6 +123,8 @@ import kotlinx.coroutines.*
     var chooser by remember {mutableStateOf("")}
     var librariesExpanded by remember {mutableStateOf(false)}
     var importingFont by remember {mutableStateOf(false)}
+    // Re-read every time a chooser opens: fonts can be imported or copied in while the app runs.
+    val fontCatalog=remember(chooser,importingFont) {FontLibrary.catalog(context)}
     // Which font slot the document picker feeds: the interface font or the subtitle font.
     var fontTarget by remember {mutableStateOf(FontCatalog.SYSTEM)}
     val fontPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {uri->
@@ -301,6 +304,12 @@ import kotlinx.coroutines.*
                     item {Action("清理图片与首屏缓存") {coroutine.launch {withContext(Dispatchers.IO) {model.app.clearArtwork()}; model.message="图片与首屏缓存已清理"}}}
                 }
                 "播放" -> {
+                    item {ToggleRow("STRM 经 Emby 服务端读取",
+                        "电视直连媒体源失败时的兜底；开启后 Emby 条目一律由服务端取流再传给电视",
+                        model.settings.preferServerPlayback) {
+                        model.saveSettings(model.settings.copy(preferServerPlayback=!model.settings.preferServerPlayback))
+                    }}
+                    item {Text("默认由电视直连 STRM 里的地址。电视连不上时（第三方源超时、来源返回 409/403 等），SunnyTV 会自动改用 Emby 服务端读取一次；开启上面的开关则一律走服务端，适合只认服务器、不认电视的来源。",color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)}
                     item {Action("字幕偏好：${Presentation.subtitles.firstOrNull {it.first==model.settings.subtitlePreference}?.second ?: "跟随媒体默认"}") {chooser="subtitle"}}
                     item {Field("直接播放测试 · HTTP 媒体地址（网盘直链或播放入口）",directUrl,{directUrl=it})}
                     item {Action("打开媒体地址") {try {HttpPolicy.validate(directUrl.trim());context.startActivity(PlayerActivity.intent(context,PlaybackRequest("",directUrl.trim(),"手动媒体地址",requestedAtMs=SystemClock.elapsedRealtime(),sourceReadyAtMs=SystemClock.elapsedRealtime())))} catch(_: Exception) {model.message="地址无效，仅支持完整 HTTP / HTTPS 媒体地址"}}}
@@ -334,7 +343,9 @@ import kotlinx.coroutines.*
             "hero"->listOf("random" to "随机推荐","latest" to "最新入库推荐","resume" to "继续观看")
             "interval"->listOf(3,5,8,12,20,30,60).map {it.toString() to "$it 秒"}
             "motion"->MotionPolicy.speeds.map {it.toString() to MotionPolicy.label(it)}
-            "font","subtitle-font"->FontCatalog.entries.map {it.id to it.label}
+            // Fonts come from the font folder, not from the APK: an imported file, a file copied
+            // into the folder, and a private build's bundled font are all listed the same way.
+            "font","subtitle-font"->fontCatalog.map {it.id to it.label}
             "subtitle-scale"->SubtitleAppearance.scales.indices.map {it.toString() to SubtitleAppearance.scaleNames[it]}
             "subtitle-edge"->SubtitleAppearance.edges
             "subtitle-position"->SubtitleAppearance.positions
@@ -452,8 +463,8 @@ import kotlinx.coroutines.*
     }
 }
 
-private fun fontChoiceLabel(choice:String,customName:String):String =
-    if(choice==FontCatalog.CUSTOM) customName.ifBlank {"用户自定义字体"} else FontCatalog.label(choice)
+@Composable private fun fontChoiceLabel(choice:String,customName:String):String =
+    FontLibrary.labelFor(LocalContext.current,choice,customName.ifBlank {"用户自定义字体"})
 
 @Composable private fun SettingChoiceRow(title:String,value:String,modifier:Modifier=Modifier,onClick:()->Unit) {
     FocusTile("setting:$title",Modifier.fillMaxWidth().then(modifier),onClick=onClick) {

@@ -16,6 +16,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Account tokens and CD2 passwords use Android Keystore AES/GCM; no backup or plaintext exports. */
 class ConfigStore(context: Context) {
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("sunny-config", Context.MODE_PRIVATE)
     private val alias = "sunnytv-source-key-v1"
     val deviceId: String = prefs.getString("device", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("device", it).apply() }
@@ -55,12 +56,19 @@ class ConfigStore(context: Context) {
     }
     /**
      * Reads a stored font id. A dev21 install only kept the custom font file, so a missing value
-     * falls back to that upload before the system default.
+     * falls back to that upload before the system default. A font file that is no longer on the
+     * device also falls back, and a file that is still there stays selected — which is what keeps a
+     * private build's font usable after a public build replaces it.
      */
     private fun fontChoicePreference(key:String,customFile:String):String {
         val stored=prefs.getString(key,"").orEmpty()
         val resolved=stored.ifBlank {if(customFile.isNotBlank()) FontCatalog.CUSTOM else FontCatalog.SYSTEM}
-        return resolved.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM
+        return normalizeFontChoice(resolved)
+    }
+    private fun normalizeFontChoice(id:String):String = when {
+        FontCatalog.entry(id)!=null -> id
+        id.startsWith(FontLibrary.FILE_PREFIX) && FontLibrary.file(appContext,id)!=null -> id
+        else -> FontCatalog.SYSTEM
     }
     fun resetSources() {
         val editor = prefs.edit().remove("sources")
@@ -103,6 +111,7 @@ class ConfigStore(context: Context) {
         SubtitleAppearance.position(prefs.getString("subtitlePosition",SubtitleAppearance.POSITION_STANDARD).orEmpty()),
         SubtitleAppearance.background(prefs.getString("subtitleBackground",SubtitleAppearance.BACKGROUND_BLACK).orEmpty())
         ,prefs.getString("activeSource","").orEmpty()
+        ,prefs.getBoolean("preferServerPlayback",false)
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -121,13 +130,14 @@ class ConfigStore(context: Context) {
         .putStringSet("heroLibraries",s.heroLibraryKeys).putBoolean("heroAll",s.heroAllLibraries)
         .putFloat("animationSpeed",s.animationSpeed).putInt("fontScale",s.fontScaleLevel.coerceIn(0,4))
         .putString("customFontFile",s.customFontFile).putString("customFontName",s.customFontName)
-        .putString("fontChoice",s.fontChoice.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM)
-        .putString("subtitleFont",s.subtitleFontChoice.takeIf {FontCatalog.entry(it)!=null} ?: FontCatalog.SYSTEM)
+        .putString("fontChoice",normalizeFontChoice(s.fontChoice))
+        .putString("subtitleFont",normalizeFontChoice(s.subtitleFontChoice))
         .putInt("subtitleScale",s.subtitleScaleLevel.coerceIn(0,4))
         .putString("subtitleEdge",SubtitleAppearance.edge(s.subtitleEdge))
         .putString("subtitlePosition",SubtitleAppearance.position(s.subtitlePosition))
         .putString("subtitleBackground",SubtitleAppearance.background(s.subtitleBackground))
         .putString("activeSource",s.activeSourceId)
+        .putBoolean("preferServerPlayback",s.preferServerPlayback)
         .putInt("heroInterval",s.heroIntervalSeconds.coerceIn(3,60)).putInt("uiScale",s.uiScaleLevel.coerceIn(0,4)).apply() }
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }

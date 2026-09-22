@@ -120,6 +120,26 @@ import kotlinx.coroutines.withContext
         else -> 1
     }
     val similarIndex=3+(if(item.versions.isNotEmpty()) 1 else 0)+childRows+(if(item.people.isNotEmpty()) 1 else 0)
+    // The first control of the page: the pinned navigation's Down lands here and "Up" from the
+    // sections below always has one concrete tile to return to.
+    val entryActionId=when {
+        item.isPlayable -> "detail-play"
+        item.type in setOf("Series","Season") -> "detail-resume"
+        else -> "detail-favorite"
+    }
+    val entryActionFocus=remember(item.key) {FocusRequester()}
+    // First section under the action row: Up there scrolls the row back in and focuses it, instead of
+    // skipping to the pinned navigation and leaving the buttons behind.
+    val upToActions=Modifier.onPreviewKeyEvent {event->
+        if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp) {moveContent(2,entryActionFocus);true} else false
+    }
+    val bridge=LocalNavigationBridge.current
+    DisposableEffect(bridge,item.key,entryActionId) {
+        bridge?.contentEntryId=entryActionId
+        // Focusing the pinned navigation asks the page to show its top again.
+        bridge?.revealTop={list.animateScrollToItem(0)}
+        onDispose {if(bridge?.contentEntryId==entryActionId) bridge.contentEntryId=null;bridge?.revealTop=null}
+    }
     CompositionLocalProvider(LocalSunnyPalette provides themed) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // dev22: the media page keeps the same fixed, full-screen backdrop as the library page,
@@ -148,9 +168,12 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item(key="detail-actions") {
+                    // Up from the first content row hands focus back to the pinned navigation. The
+                    // row used to swallow Up to scroll the header into view, which left no way back
+                    // to the top bar once the user had come down from it.
                     val moveIntoContent:Modifier.()->Modifier={onPreviewKeyEvent {
                         if(it.type!=KeyEventType.KeyDown) false else when(it.key) {
-                            Key.DirectionUp -> {moveContent(0,alignTop=true);true}
+                            Key.DirectionUp -> {bridge?.enterNavigation();true}
                             Key.DirectionDown -> if(lowerTarget.isNotEmpty()) {
                                 moveContent(3,lowerContentFocus)
                                 true
@@ -160,7 +183,8 @@ import kotlinx.coroutines.withContext
                     }}
                     StableLazyRow(modifier=Modifier.moveIntoContent().focusGroup(),contentPadding=PaddingValues(horizontal=pageSidePadding,vertical=18.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         if(item.isPlayable) {
-                            item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true,modifier=Modifier.moveIntoContent()) {onPlay(item,false)}}
+                            item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true,
+                                modifier=Modifier.focusRequester(entryActionFocus).moveIntoContent()) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放",icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
                             item {Action("≋  音频",modifier=Modifier.moveIntoContent()) {panel="audio"}}
                             item {Action("▱  版本",modifier=Modifier.moveIntoContent()) {panel="version"}}
@@ -168,10 +192,14 @@ import kotlinx.coroutines.withContext
                         }
                         if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played,modifier=Modifier.moveIntoContent()) {panel="played"}}
                         if(item.type in setOf("Series","Season")) {
-                            item {Action("从头播放",id="detail-start",primary=false,autoFocus=true,icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
-                            item {Action("继续播放",id="detail-resume",primary=true,icon="play",modifier=Modifier.moveIntoContent()) {onPlay(item,false)}}
+                            // Resume first: entering a series should offer what the user came back for.
+                            item {Action("继续播放",id="detail-resume",primary=true,autoFocus=true,icon="play",
+                                modifier=Modifier.focusRequester(entryActionFocus).moveIntoContent()) {onPlay(item,false)}}
+                            item {Action("从头播放",id="detail-start",primary=false,icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
                         }
-                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),modifier=Modifier.moveIntoContent()) {model.favorite(item)}}
+                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,
+                            autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),
+                            modifier=Modifier.then(if(entryActionId=="detail-favorite") Modifier.focusRequester(entryActionFocus) else Modifier).moveIntoContent()) {model.favorite(item)}}
                         if(model.canDelete(item)) item {Action("删除",id="detail-delete",icon="trash",
                             modifier=Modifier.moveIntoContent()) {model.requestDelete(item)}}
                         item {Action("返回",modifier=Modifier.moveIntoContent()) {model.back()}}
@@ -183,7 +211,8 @@ import kotlinx.coroutines.withContext
                 if(item.versions.isNotEmpty()) item {
                     // dev22 acceptance: heading and cards share one left edge. The row keeps a small
                     // gutter inside its own bounds so the focus shadow is not clipped.
-                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
+                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))
+                        .then(if(lowerTarget=="versions") upToActions else Modifier)) {
                         Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("播放资源", "${item.versions.size} 个版本")}
                         StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),reserveFocusSpace=false,
                             contentPadding=PaddingValues(horizontal=detailRowGutter,vertical=18.dp)) {
@@ -202,7 +231,8 @@ import kotlinx.coroutines.withContext
                 }
                 if(children.isNotEmpty()) {
                     if(children.any {it.type=="Episode"}) {
-                        item {Column(Modifier.padding(horizontal=pageSidePadding),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        item {Column(Modifier.padding(horizontal=pageSidePadding).then(if(lowerTarget=="episodes") upToActions else Modifier),
+                            verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             SectionTitle("剧集")
                             EpisodeLayoutButtons(item,episodeLayout,if(lowerTarget=="episodes") lowerContentFocus else null)
                         }}
@@ -217,13 +247,14 @@ import kotlinx.coroutines.withContext
                             else -> item {Box(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
                                 EpisodeHorizontal(children,gutter=detailRowGutter)}}
                         }
-                    } else item {Column(Modifier.padding(horizontal=pageSidePadding)) {
+                    } else item {Column(Modifier.padding(horizontal=pageSidePadding).then(if(lowerTarget=="seasons") upToActions else Modifier)) {
                         SectionTitle("选择季","查看全部") {model.navigate(Route.Library(item))}
                         AccordionCards(children,childSelected,{childSelected=it},if(lowerTarget=="seasons") Modifier.focusRequester(lowerContentFocus) else Modifier,id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
                     }}
                 }
                 if(item.people.isNotEmpty()) item {
-                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))) {
+                    Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))
+                        .then(if(lowerTarget=="people") upToActions else Modifier)) {
                         Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("演员表")}
                         StableLazyRow(modifier=Modifier.onPreviewKeyEvent {event->
                             if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && similar.isNotEmpty()) {

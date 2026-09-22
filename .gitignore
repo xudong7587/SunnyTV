@@ -20,3 +20,5 @@ dist/
 /SunnyTV_dev*/
 /_dev21_baseline/
 /SunnyTV_dev19.zip
+# Fonts a private "self-use" build bundles: local only, never committed or published.
+/app/src/selfUse/
