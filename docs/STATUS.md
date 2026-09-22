@@ -25,7 +25,7 @@
 真实 MP / Alist 链路的服务端兜底效果、以及自用版覆盖安装时的字体保留仍需用户实机确认，本轮不写成已完成。
 详见 `docs/UI-DEV27.md` 与 `docs/RELEASE-dev27.md`。
 
-## 2026-09-21 dev26 更新（当前 · 公开版）
+## 2026-09-21 dev26 更新（公开版）
 
 按用户实机反馈修"首帧前读取超时"。报错为 `读取媒体超时，请检查电视到 Emby 的连接 · 错误码 2001 · 首帧前读取 · video/mp4`，异常链是 `HttpDataSourceException → IOException → ExecutionException → SocketTimeoutException`，出问题的媒体是别人用 MP（MoviePilot）生成的 STRM（与 MediaIndex 无关）。反编译本地 Maven 缓存里的 `media3-datasource-okhttp-1.9.4` 确认两件事：`OkHttpDataSource.executeCall` 用 `call.enqueue(...)` + `SettableFuture.get()` 取响应、`catch ExecutionException` 后包成普通 `IOException`，而它只在 `open()` 里调用 —— 所以这个链等于"请求已发出、响应头没在预算内到达"，不是读 body 中断；错误码 2001（而非 2002 连接超时）只是 `createForIOException` 的 `cause instanceof SocketTimeoutException` 看不到那层包装，分类变粗。当时全项目共用 8 秒连接 / 25 秒读取，首帧失败没有任何自动重试。
 
