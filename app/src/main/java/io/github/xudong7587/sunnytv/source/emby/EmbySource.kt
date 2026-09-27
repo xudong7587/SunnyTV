@@ -78,28 +78,51 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     suspend fun library(parent: String, start: Int = 0, sort: String = "DateCreated", query: String = "", favorites: Boolean = false,
         ascending:Boolean=sort=="SortName", foldersOnly:Boolean=false, limit:Int=48, mixed:Boolean=false): MediaPage {
         require(Presentation.sorts.any {it.first==sort}) {"Unsupported sort"}
-        // Measured on a real Emby (2026-09-22): SortBy=SortName reorders the result, SortBy=Bitrate
-        // returns the default order — the query endpoint accepts the parameter and ignores that key,
-        // even though Emby's own web client offers 比特率 / 文件尺寸. So bitrate and size are ordered
-        // here, with MediaSources requested so the page carries each file's bitrate and size.
-        val local=MediaLogic.isLocalSort(sort)
-        // One request covers a whole normal library, so the on-device order is the library's order.
-        val pageLimit=if(local) 200 else limit.coerceIn(1,48)
-        suspend fun load(sortBy:String):MediaPage {
-            val q = mutableMapOf("Recursive" to (!foldersOnly).toString(), "StartIndex" to "${start.coerceAtLeast(0)}",
+        val local = MediaLogic.isLocalSort(sort)
+        var responseChars = 0L
+        suspend fun load(offset: Int, pageLimit: Int, sortBy: String): MediaPage {
+            val q = mutableMapOf("Recursive" to (!foldersOnly).toString(), "StartIndex" to offset.toString(),
                 "Limit" to pageLimit.toString(), "SortBy" to sortBy,
-                "SortOrder" to if(ascending) "Ascending" else "Descending",
+                "SortOrder" to if(local || ascending) "Ascending" else "Descending",
                 "Fields" to if(local) "$fields,MediaSources" else fields, "ImageTypeLimit" to "1")
             if(foldersOnly) q["IsFolder"]="true"
             else q["IncludeItemTypes"]=if(mixed) "Movie,Episode,Video" else "Movie,Series,Video"
             q.putAll(optionalParent(parent))
             if(query.isNotBlank()) q["SearchTerm"] = query
             if(favorites) q["Filters"] = "IsFavorite"
-            return parsePage(get("Users/${config.userId}/Items",q))
+            val body = get("Users/${config.userId}/Items",q)
+            if(local) {
+                responseChars += body.length
+                if(responseChars > LOCAL_SORT_MAX_CHARS) throw SourceException("媒体库排序数据超过安全容量，请进入较小的文件夹后排序")
+            }
+            return parsePage(body)
         }
-        val page=if(local) load("DateCreated") else load(sort)
-        return if(local) MediaPage(MediaLogic.localSort(page.items,sort,ascending),page.total) else page
+        if(!local) return load(start.coerceAtLeast(0), limit.coerceIn(1,48), sort)
+        // Emby ignores Size/Bitrate on supported servers. Never advertise page-local order as global.
+        // One bounded, cancellable snapshot is returned in full; the UI cannot append differently sorted pages.
+        return withTimeoutOrNull(LOCAL_SORT_TIMEOUT_MS) {
+            val all = linkedMapOf<String,MediaEntry>()
+            var offset = 0
+            var expected: Int? = null
+            do {
+                ensureActive()
+                val page = load(offset, 200, "SortName")
+                if(page.total !in 0..LOCAL_SORT_MAX_ITEMS) throw SourceException("此媒体库超过全库排序上限（10000 项），请进入较小的文件夹后排序")
+                if(expected != null && page.total != expected) throw SourceException("媒体库在排序期间发生变化，请重试")
+                expected = page.total
+                if(page.items.isEmpty() && offset < page.total) throw SourceException("服务端未返回完整排序数据，请重试")
+                page.items.forEach {entry ->
+                    if(all.put(entry.key,entry) != null) throw SourceException("服务端排序分页包含重复条目，请刷新后重试")
+                }
+                offset += page.items.size
+                if(offset > page.total) throw SourceException("服务端排序条目数量不一致，请重试")
+            } while(offset < expected!!)
+            withContext(Dispatchers.Default) {
+                MediaPage(MediaLogic.localSort(all.values.toList(),sort,ascending),all.size)
+            }
+        } ?: throw SourceException("全库排序超过 90 秒，请进入较小的文件夹后重试")
     }
+
     suspend fun children(item: MediaEntry): List<MediaEntry> = when(item.type) {
         "Series" -> parsePage(get("Shows/${item.id}/Seasons", mapOf("UserId" to config.userId, "Fields" to fields))).items
         "Season" -> parsePage(get("Shows/${item.seriesId}/Episodes", mapOf("UserId" to config.userId, "SeasonId" to item.id, "Fields" to fields))).items
@@ -272,6 +295,9 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             })
     }
     companion object {
+        internal const val LOCAL_SORT_MAX_ITEMS = 10_000
+        internal const val LOCAL_SORT_MAX_CHARS = 8L * 1024 * 1024
+        internal const val LOCAL_SORT_TIMEOUT_MS = 90_000L
         private fun parseLastPlayed(value:String?):Long {
             if(value==null) return 0
             val normalized=value.replace(Regex("(\\.\\d{3})\\d+"),"$1")

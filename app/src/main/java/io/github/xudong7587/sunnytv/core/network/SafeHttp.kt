@@ -8,15 +8,16 @@ import java.util.concurrent.TimeUnit
 /** One request path for API, images, STRM and video. Redirects are bounded and auth is origin/path scoped. */
 class SafeHttp {
     /** API, image and STRM text: a LAN server that stays silent this long is treated as down. */
-    val client: OkHttpClient = create(HttpPolicy.CONNECT_TIMEOUT_SECONDS, HttpPolicy.READ_TIMEOUT_SECONDS)
+    val client: OkHttpClient = create(HttpPolicy.CONNECT_TIMEOUT_SECONDS, HttpPolicy.READ_TIMEOUT_SECONDS, HttpPolicy.API_CALL_TIMEOUT_SECONDS)
     /**
      * Video transport. Same redirect handling, header scoping, TLS policy and user agent as [client];
      * only the connect/read budget is larger, because a cloud-drive or STRM source may need to resolve
      * a provider link before it can answer at all. Never used for API, image or STRM text requests.
      */
     val playbackClient: OkHttpClient = create(HttpPolicy.PLAYBACK_CONNECT_TIMEOUT_SECONDS, HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS)
-    private fun create(connectSeconds: Int, readSeconds: Int): OkHttpClient = OkHttpClient.Builder()
+    private fun create(connectSeconds: Int, readSeconds: Int, callSeconds: Int = 0): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(connectSeconds.toLong(), TimeUnit.SECONDS).readTimeout(readSeconds.toLong(), TimeUnit.SECONDS)
+        .callTimeout(callSeconds.toLong(), TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS).retryOnConnectionFailure(false)
         .followRedirects(false).followSslRedirects(false)
         .addInterceptor { chain ->
@@ -72,6 +73,7 @@ class SourceException(message: String) : IOException(message)
 fun safeError(error: Throwable): String = when (error) {
     is SourceException, is IllegalArgumentException -> error.message ?: "请求失败"
     is java.net.SocketTimeoutException -> "连接超时，请检查电视与服务的网络连接"
+    is java.io.InterruptedIOException -> "请求超过总时限，请检查服务后重试"
     is javax.net.ssl.SSLException -> "TLS 证书验证失败；不会跳过证书校验"
     else -> "连接或读取失败，请检查服务地址与权限（诊断不记录凭据）"
 }

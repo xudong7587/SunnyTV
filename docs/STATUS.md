@@ -1,3 +1,7 @@
+## 2026-09-27 dev29 审查修复入口
+
+本版修复 dev27 审查的五项问题，不含 Carlink。实现与本地验证见 [SEC-01](iterations/SEC-01-dev29.md)，用户可见变化见 [发布说明](RELEASE-dev29.md)。核心172项、Gradle单测79项、Android定向9项通过，debug/release lint各0错误/28警告。使用非调试release变体，安装ID与既有签名不变；签名发布状态以SEC-01追加记录和GitHub Release为准。下方为历史记录。
+
 # SunnyTV 0.1.0-dev2 — 真实开发状态
 
 ## 2026-09-22 dev27 更新（当前）

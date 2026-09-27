@@ -808,9 +808,8 @@ import coil.request.ImageRequest
 
 @Composable fun SearchScreen(onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current; var text by rememberSaveable {mutableStateOf("")}
-    val pool=remember(model.feeds.keys.toList(),model.libraryLatest.keys.toList(),model.pages.keys.toList()) {
-        model.knownEntries()
-    }
+    // Observe map values as well as source identity; key-only memoization retained stale results.
+    val pool=model.knownEntries()
     // Typed latin letters match pinyin initials locally, so "sdyq" finds 速度与激情 on a remote.
     val latin=text.any {it.code<128 && it.isLetterOrDigit()}
     val pinyinMatches=remember(pool,text,latin) {

@@ -1,3 +1,7 @@
+## 2026-09-27 dev29 审查修复入口
+
+本版修复 dev27 审查的五项问题，不含 Carlink。实现与本地验证见 [SEC-01](iterations/SEC-01-dev29.md)，用户可见变化见 [发布说明](RELEASE-dev29.md)。核心172项、Gradle单测79项、Android定向9项通过，debug/release lint各0错误/28警告。使用非调试release变体，安装ID与既有签名不变；签名发布状态以SEC-01追加记录和GitHub Release为准。下方为历史记录。
+
 # 网页优先开发的补充
 
 当前先按 `docs/WEB_SETUP.md` 建立 GitHub CI。仅当真机/本地工具链需要时转 Codex；不要要求用户现在重开项目。新增计时和初始化器代码详见 CHANGELOG，所有未编译/未联调状态仍有效。

@@ -119,6 +119,35 @@ fun runContractSuite() {
     test("DAV XML byte limit") {rejects {parseDav(ByteArray(DavXmlParser.MAX_XML_BYTES+1))}}
     test("DAV invalid directory scope") {rejects {DavXmlParser.parse(dav(),"https://other.test/","https://nas.test/dav/")}}
     test("DAV no-ns response is not accepted") {rejects {parseDav("<multistatus/>".toByteArray())}}
+    test("DAV huge attribute table rejected before SAX allocation") {
+        val attributes=(0..5000).joinToString(" ") {"a$it='value'"}
+        rejects {parseDav(dav("<x $attributes/>"))}
+    }
+    test("DAV markup scanner preserves quoted angle brackets and CDATA") {
+        val xml="""<d:response note="a > b"><d:href>/dav/movie.mp4</d:href><d:propstat><d:prop>
+            <d:displayname><![CDATA[A < B > C]]></d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status>
+            </d:propstat></d:response>"""
+        eq(parseDav(dav(xml)).single().name,"A < B > C")
+    }
+    test("DAV excessive elements rejected before building a DOM") {
+        rejects {parseDav(dav("<x/>".repeat(DavXmlParser.MAX_ELEMENTS)))}
+    }
+    test("DAV excessive depth rejected") {
+        rejects {parseDav(dav("<x>".repeat(40)+"</x>".repeat(40)))}
+    }
+    test("DAV field text bounded") {
+        rejects {parseDav(dav(prop("/dav/a", "x".repeat(DavXmlParser.MAX_FIELD_CHARS+1))))}
+    }
+    test("DAV response count bounded during parsing") {
+        rejects {parseDav(dav("<d:response/>".repeat(DavXmlParser.MAX_ENTRIES+1)))}
+    }
+    test("DAV successful propstat groups merged and failed properties ignored") {
+        val row = """<d:response><d:href>/dav/movie</d:href>
+            <d:propstat><d:prop><d:displayname>Wrong</d:displayname></d:prop><d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat>
+            <d:propstat><d:prop><d:displayname>Right</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+            <d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"""
+        val node=parseDav(dav(row)).single();eq(node.name,"Right");check(node.directory)
+    }
     test("DAV XML empty collection is valid") {eq(parseDav(dav()).size,0)}
     test("DAV merges successful propstats") {
         val row="""<d:response><d:href>/dav/folder</d:href><d:propstat><d:prop><d:displayname>合集</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"""

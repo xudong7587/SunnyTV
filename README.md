@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新版</a> ·
-  <a href="docs/RELEASE-dev27.md">本版说明</a> ·
+  <a href="docs/RELEASE-dev29.md">本版说明</a> ·
   <a href="docs/STATUS.md">开发状态</a> ·
   <a href="docs/KNOWN-ISSUES.md">已知问题</a> ·
   <a href="docs/BUILD.md">构建说明</a>
@@ -81,18 +81,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 首次使用进入「设置 → 媒体来源」填写 Emby 地址与账号；云盘填 CloudDrive2 的 **WebDAV** 地址
 （不是管理后台地址）。凭据按来源保存，只在本机。
 
-## 验证状态（0.1.0-dev27）
+## 验证状态（0.1.0-dev29）
 
 | 项目 | 结果 |
 | --- | --- |
-| 单元测试 | 72 项方法全部通过（纯 Kotlin 契约检查 165/165） |
+| 单元测试 | 79 项方法全部通过（纯 Kotlin 契约检查 172/172） |
 | `lintDebug` | 0 错误 / 28 警告 |
 | Android 编译与测试 APK | `assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease` 均通过 |
-| 模拟器交互测试（API 30） | 65 项执行，6 项是落后于现有界面行为的旧断言，见 [已知问题](docs/KNOWN-ISSUES.md) |
+| 模拟器交互测试（API 30） | 本轮安全与 dev27 UI 定向回归 9/9；完整 TV 历史失败仍见 [已知问题](docs/KNOWN-ISSUES.md) |
 | 发布签名 | 使用仓库既有签名 Secret 签名并校验证书一致；[签名策略](docs/SIGNING.md) |
-| 实体设备 | 电视端交互与手机/平板触摸布局已由使用者人工验收；HDR、杜比、高帧率与部分机型的播放兼容性未验证 |
+| 实体设备 | 本轮未重测真实服务和实体设备；HDR、杜比、高帧率与部分机型的播放兼容性仍待验证 |
 
-本版改动记录：[详情焦点、排序窗口、裁切与搜索布局](docs/UI-DEV27.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
+本版改动记录：[账号隔离、安全边界与全库排序](docs/RELEASE-dev29.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 实现取向
 
@@ -100,7 +100,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - 网络策略集中在 `core/network`（来源与路径作用域凭据、有界重定向、严格 TLS、统一播放 UA、可取消请求、不记录签名 URL）。
 - API URL 只在 `source/` 适配器里拼装，UI 不直接构造接口地址，播放器不接触云盘 Cookie。
 - 焦点效果不改变卡片几何；柔和阴影用缓存的轮廓描边带绘制，描边与卡片圆角同心，行内预留阴影留白。
-- 多来源互不合并：同一时间只显示所选 Emby 来源，切换来源不影响缓存与配置。
+- 多来源互不合并：同一时间只显示所选 Emby 来源，切换来源保留浏览配置，取消旧搜索并清理搜索结果。
 
 主要目录：
 

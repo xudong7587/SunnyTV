@@ -70,6 +70,14 @@
       "passed": true
     },
     {
+      "name": "Python syntax test-release-package.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax verify-release-package.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax verify-release-signer.py",
       "passed": true
     },

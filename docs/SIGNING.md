@@ -10,3 +10,7 @@
 - 不修改既有 dev14 标签或安装包。证书指纹可写入验证报告；私钥和密码不得写入日志/报告。
 
 旧安装包证书不同的设备不保证覆盖安装；不自动卸载或清数据，不宣称 dev14 覆盖升级已验证。
+
+## dev29 起的发行检查
+
+公开包使用 `release` 变体，显式 `isDebuggable=false`，保留 `.debug` 安装 ID。`SUNNYTV_SIGNING_KEYSTORE` 未指定时 release 只生成 unsigned APK，禁止作为发行包；发布 workflow 必须从既有 Secret 选择密钥。签名验证外，运行 `scripts/verify-release-package.py` 检查最终 APK 身份、调试/testOnly 标志及内容。Media3 1.9.4 自带数字字体按已核实内容哈希允许，其它随包字体和密钥文件拒绝。

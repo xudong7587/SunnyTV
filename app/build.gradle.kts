@@ -15,15 +15,17 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.1.0-dev27"
+        versionCode = 29
+        versionName = "0.1.0-dev29"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
         release {
+            isDebuggable = false
             applicationIdSuffix = ".debug"
-            signingConfig = signingConfigs.getByName("debug")
+            // Without an explicitly selected existing key, produce an unsigned APK only.
+            signingConfig = if(providers.environmentVariable("SUNNYTV_SIGNING_KEYSTORE").isPresent) signingConfigs.getByName("debug") else null
             // Keep the complete playback, reflection, STRM, and network surface for dev21.
             isMinifyEnabled = false
             isShrinkResources = false

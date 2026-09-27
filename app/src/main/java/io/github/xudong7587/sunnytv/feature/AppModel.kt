@@ -393,12 +393,12 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     fun knownEntries():List<MediaEntry> {
         val out=LinkedHashMap<String,MediaEntry>()
         val active=activeSourceId
-        fun add(entries:Collection<MediaEntry>) {entries.forEach {out[it.key]=it}}
+        fun add(entries:Collection<MediaEntry>) {entries.filter {it.sourceId==active}.forEach {out[it.key]=it}}
         activeEmbySources().forEach {config->feeds[config.id]?.let {feed->
             add(feed.libraries); add(feed.latest); add(feed.resume); add(feed.nextUp)
         }}
         libraryLatest.filterKeys {active.isBlank() || it.startsWith("$active:")}.values.forEach {add(it)}
-        pages.filterKeys {active.isBlank() || it.startsWith("$active:")||it.startsWith("search:")}.values.forEach {add(it.items)}
+        pages.filterKeys {active.isBlank() || it.startsWith("$active:")||it=="search:$active"}.values.forEach {add(it.items)}
         personWorks.filterKeys {active.isBlank() || it.startsWith("$active:")}.values.forEach {add(it.items)}
         if(active.isBlank() || heroCandidates.all {it.sourceId==active}) add(heroCandidates)
         return out.values.toList()
@@ -432,6 +432,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     fun loadLibrary(item: MediaEntry, sort: String = "DateCreated", more: Boolean = false,ascending:Boolean=sort=="SortName") {
         val sortKey="$sort:$ascending"
         val append = more && librarySort[item.key] == sortKey
+        if(!append && librarySort[item.key] != sortKey) pages.remove(item.key)
         launchLoad("library:${item.key}", replace = !more) {
             val api = app.emby(source(item.sourceId))
             val old = pages[item.key]
@@ -568,7 +569,11 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         val old=settings;settings=value;if(restoreSources) app.store.saveSettings(value)
         if(old.heroMode!=value.heroMode || old.heroAllLibraries!=value.heroAllLibraries || old.heroLibraryKeys!=value.heroLibraryKeys) loadHero()
         // Switching the browsed source re-reads that source only; other caches are kept.
-        if(old.activeSourceId!=value.activeSourceId) {heroCandidates=emptyList();refresh()}
+        if(old.activeSourceId!=value.activeSourceId) {
+            loads.keys.filter {it.startsWith("search:")}.toList().forEach {loads.remove(it)?.cancel();loading.remove(it)}
+            pages.keys.filter {it.startsWith("search:")}.toList().forEach {pages.remove(it);errors.remove(it)}
+            heroCandidates=emptyList();refresh()
+        }
     }
 
     fun addSource(kind: SourceKind, name: String, base: String, user: String, password: String, onSuccess: () -> Unit) {
