@@ -22,3 +22,6 @@ dist/
 /SunnyTV_dev19.zip
 # Fonts a private "self-use" build bundles: local only, never committed or published.
 /app/src/selfUse/
+
+# Existing local signing material must stay private.
+/.local-secrets/

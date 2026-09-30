@@ -103,6 +103,14 @@ class PlayerActivity: ComponentActivity() {
     private var switchingEpisode by mutableStateOf(false)
     private var nextUpDismissed by mutableStateOf(false)
     private var playbackSpeed by mutableFloatStateOf(1f)
+    private var orientationLocked by mutableStateOf(false)
+    private var manualOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    private fun fixedOrientation():Int {
+        @Suppress("DEPRECATION") val rotation=windowManager.defaultDisplay.rotation
+        val landscape=resources.configuration.orientation==Configuration.ORIENTATION_LANDSCAPE
+        val naturalLandscape=if(rotation%2==0) landscape else !landscape
+        return fixedPlayerOrientation(rotation,naturalLandscape)
+    }
     private var tvPlayback = false
     private var returnControl by mutableStateOf("transport")
     private var controlInteractionSerial by mutableIntStateOf(0)
@@ -117,9 +125,11 @@ class PlayerActivity: ComponentActivity() {
         val config=resources.configuration
         @Suppress("DEPRECATION")
         val playbackDisplayId=windowManager.defaultDisplay.displayId
-        tvPlayback=(config.uiMode and Configuration.UI_MODE_TYPE_MASK)==Configuration.UI_MODE_TYPE_TELEVISION ||
-            config.smallestScreenWidthDp>=600 || playbackDisplayId!=Display.DEFAULT_DISPLAY
-        requestedOrientation=playerOrientation(tvPlayback)
+        tvPlayback=((config.uiMode and Configuration.UI_MODE_TYPE_MASK)==Configuration.UI_MODE_TYPE_TELEVISION ||
+            playbackDisplayId!=Display.DEFAULT_DISPLAY)
+        orientationLocked=savedInstanceState?.getBoolean("orientationLocked") ?: false
+        manualOrientation=savedInstanceState?.getInt("manualOrientation") ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        requestedOrientation=if(orientationLocked) manualOrientation else playerOrientation(tvPlayback)
         playbackSpeed=savedInstanceState?.getFloat("speed",1f) ?: 1f
         // Activity recreation and resume must not count time spent in the background.
         originalLaunch = savedInstanceState == null
@@ -133,6 +143,7 @@ class PlayerActivity: ComponentActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {panel.isNotBlank()->panel=""; controls->controls=false; else->finish()}
         }
+        // Video, subtitles and the translucent OSD keep bright controls on a dark surface in daylight too.
         setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
     }
 
@@ -159,7 +170,7 @@ class PlayerActivity: ComponentActivity() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
     }
-    override fun onSaveInstanceState(outState: Bundle) {outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
     override fun onStop() {
         player?.let {p ->
             lastPosition=p.currentPosition; app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
@@ -242,7 +253,7 @@ class PlayerActivity: ComponentActivity() {
         p.addListener(object:Player.Listener {
             override fun onVideoSizeChanged(videoSize:VideoSize) {
                 if(!tvPlayback && videoSize.width>0 && videoSize.height>0) {
-                    requestedOrientation=playerOrientation(false,videoSize.width,videoSize.height,videoSize.pixelWidthHeightRatio)
+                    if(!orientationLocked) requestedOrientation=playerOrientation(false,videoSize.width,videoSize.height,videoSize.pixelWidthHeightRatio)
                 }
             }
             override fun onTracksChanged(tracks:Tracks) {
@@ -455,7 +466,8 @@ class PlayerActivity: ComponentActivity() {
         val remainingMs=(duration-position).coerceAtLeast(0)
         val showNextUp=context?.next!=null && !nextUpDismissed && rendered && duration>0 &&
             remainingMs in 1..90_000 && activeSkip==null
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+            val titleWidth=if(tvPlayback) 300.dp else (maxWidth-120.dp).coerceIn(70.dp,300.dp)
             AndroidView(factory={androidContext->PlayerView(androidContext).apply {
                 useController=false;keepScreenOn=true
                 isFocusable=false
@@ -561,8 +573,17 @@ class PlayerActivity: ComponentActivity() {
                         .padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
             }
 
+            if(controls && panel.isBlank() && error.isBlank() && !tvPlayback) {
+                Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
+                        orientationLocked=!orientationLocked
+                        if(orientationLocked) {manualOrientation=fixedOrientation();requestedOrientation=manualOrientation}
+                        else {val size=player?.videoSize;requestedOrientation=playerOrientation(false,size?.width ?: 0,size?.height ?: 0,size?.pixelWidthHeightRatio ?: 1f)}
+                    }
+                }
+            }
             if(controls && panel.isBlank() && error.isBlank()) {
-                Box(Modifier.align(Alignment.TopStart).padding(start=40.dp,top=30.dp).width(300.dp).height(82.dp)) {PlayerMediaTitle()}
+                Box(Modifier.align(Alignment.TopStart).padding(start=if(tvPlayback) 40.dp else 24.dp,top=30.dp).width(titleWidth).height(82.dp)) {PlayerMediaTitle()}
                 LaunchedEffect(controls,playing,panel,error,gestureActive,controlInteractionSerial) {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }

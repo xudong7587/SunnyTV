@@ -33,3 +33,11 @@ Network policies live in core/network; metadata/URLs in source adapters; UI cann
 ## Signing policy from dev16 onward
 
 The user explicitly removed the dev14 certificate restriction on 2026-09-18. Read docs/SIGNING.md. Use the existing repository signing Secret; never generate a replacement key as a fallback. Publishing requires a valid APK signature matching the public certificate of that existing key. No dev14 APK/certificate gate applies. Keep the current application ID and never replace an existing release tag or asset silently.
+
+## Local WebDAV update distribution (dev30 onward)
+
+用户要求：以后 SunnyTV 新版本将经过现有签名及发行检查的升级包同步到 `Z:\V1 Tools\SunnyTV-updata`。
+使用 `scripts/publish-webdav-update.py` 发布：先写带版本和哈希的不可变 APK，再更新固定入口 `latest.json`；不覆盖同版本不同内容，不删除历史包。
+这是用户明确授权的 SunnyTV 升级目录写入例外，不允许操作该目录以外 NAS 媒体。挂载缺失时记录未同步，不改写其它位置假装成功。
+以公开 dev29（`543b25d`）为本轮基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
+WebDAV 地址、用户名和密码由用户在终端「设置 → 实验升级」填写，不推断或导出私有凭据。自动模式为应用启动时检查并下载，安装交给系统确认。

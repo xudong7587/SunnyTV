@@ -325,6 +325,7 @@ import kotlinx.coroutines.*
                     }}
                     item {Text("设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\nABI：${Build.SUPPORTED_ABIS.joinToString()}\n应用：${BuildConfig.VERSION_NAME}\n网络日志不包含 Token、Cookie 或完整媒体地址。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=25.sp)}
                 }
+                "实验升级" -> {item {io.github.xudong7587.sunnytv.feature.update.UpdateSettings()}}
                 "关于" -> {
                     item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
                     item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n针对电视遥控器操作与流畅浏览设计。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
@@ -408,7 +409,7 @@ import kotlinx.coroutines.*
 
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
     // 字体 merged into 外观; the data-source page sits below 性能.
-    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","关于")
+    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","实验升级","关于")
     @Composable fun Category(cat:String) {
         FocusTile("settings:$cat",Modifier.width(if(LocalCompact.current) 140.dp else 165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))

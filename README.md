@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新版</a> ·
-  <a href="docs/RELEASE-dev29.md">本版说明</a> ·
+  <a href="CHANGELOG.md">版本记录</a> ·
   <a href="docs/STATUS.md">开发状态</a> ·
   <a href="docs/KNOWN-ISSUES.md">已知问题</a> ·
   <a href="docs/BUILD.md">构建说明</a>
@@ -44,11 +44,13 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 - **播放器**：Media3 直连与 STRM/重定向播放、音轨与字幕轨道选择、章节、片头/片尾跳过提示、
   1x / 1.25x / 1.5x / 2x 倍速、字幕外观（字体、大小、描边、位置、背景，带实时预览）、
   电视遥控器长按左右连续快进快退、手机分区手势（亮度/音量/进度）与双击控制。
+  手机和平板可在播放页锁定当前方向，躺卧观看时画面保持稳定；解锁后恢复自动旋转。
 - **外观**：深浅主题、十组重点色、五档界面大小与独立字号、五档动画速度与完全关闭。
 - **字体**：系统默认字体，或自己导入 TTF / OTF / TTC（只保存在本机）。**仓库与安装包不含任何字体文件。**
 - **搜索**：遥控器键盘 + 本地拼音首字母匹配（输入 `sdyq` 可命中「速度与激情」，无需联网、不内置词典）。
 - **云盘**：CloudDrive2 WebDAV 只读浏览与播放，不提供删除、移动、重命名。
 - **性能**：启动快照缓存、图片按「来源 + 条目 + 类型 + tag + 尺寸」缓存、低负载模式、界面分辨率偏好。
+- **实验升级**：在设置中保存 WebDAV 升级目录和账号，手动检查更新，或开启自动更新。安装由 Android 系统确认。
 
 ## 界面示意
 
@@ -81,18 +83,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 首次使用进入「设置 → 媒体来源」填写 Emby 地址与账号；云盘填 CloudDrive2 的 **WebDAV** 地址
 （不是管理后台地址）。凭据按来源保存，只在本机。
 
-## 验证状态（0.1.0-dev29）
+## 配置实验升级
 
-| 项目 | 结果 |
-| --- | --- |
-| 单元测试 | 79 项方法全部通过（纯 Kotlin 契约检查 172/172） |
-| `lintDebug` | 0 错误 / 28 警告 |
-| Android 编译与测试 APK | `assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease` 均通过 |
-| 模拟器交互测试（API 30） | 本轮安全与 dev27 UI 定向回归 9/9；完整 TV 历史失败仍见 [已知问题](docs/KNOWN-ISSUES.md) |
-| 发布签名 | 使用仓库既有签名 Secret 签名并校验证书一致；[签名策略](docs/SIGNING.md) |
-| 实体设备 | 本轮未重测真实服务和实体设备；HDR、杜比、高帧率与部分机型的播放兼容性仍待验证 |
+在「设置 → 实验升级」填写设备能访问的 WebDAV 升级目录 URL、用户名和密码，然后点「保存设置」。
+保存成功会弹出提示，密码在本机加密保存。URL 示例：`https://nas.example/dav/updates/`；目录中需提供
+`latest.json` 和它指向的 APK。带空格的路径使用 `%20`，Windows 盘符不能作为终端地址。
 
-本版改动记录：[账号隔离、安全边界与全库排序](docs/RELEASE-dev29.md)；更早的轮次见 [docs/](docs) 与 [CHANGELOG.md](CHANGELOG.md)。
+点「检查更新」可下载新版本；开启「自动更新」后，每次启动应用或从后台回到前台都会检查并下载，
+然后打开系统安装确认。首次需要允许 SunnyTV 安装未知应用，授权后返回点「安装更新」或下次启动应用。
+Android 仍需要用户确认安装。
+
+升级目录的发布方法与清单格式见 [升级分发说明](docs/WEBDAV_UPDATES.md)。APK 必须与已安装应用的包名和签名一致，
+版本号更高；下载会核对大小、SHA-256 和 APK 身份。
+
+## 验证与设备兼容
+
+编译、单元测试、HTTP 回归与模拟器测试的执行结果见 [开发状态](docs/STATUS.md)，
+遗留问题见 [已知问题](docs/KNOWN-ISSUES.md)。模拟器结果不能代替实体电视或手机验收；
+高码率播放、HDR、杜比与不同厂商的安装权限仍需实机反馈。
 
 ## 实现取向
 
