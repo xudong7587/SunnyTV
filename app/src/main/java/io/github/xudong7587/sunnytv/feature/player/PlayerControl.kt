@@ -36,7 +36,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
  * kept optically heavier than utility icons without changing the D-pad hit target.
  */
 @Composable internal fun PlayerControl(label:String,icon:String,modifier:Modifier=Modifier,
-    initial:Boolean=false,emphasis:Boolean=false,badge:String?=null,showFocusLabel:Boolean=true,onClick:()->Unit) {
+    initial:Boolean=false,emphasis:Boolean=false,badge:String?=null,selected:Boolean=false,showFocusLabel:Boolean=true,onClick:()->Unit) {
     val requester=remember {FocusRequester()}
     var focused by remember {mutableStateOf(false)}
     val motion=LocalMotion.current
@@ -44,15 +44,17 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
     val size=if(emphasis) 56.dp else 48.dp
     val fill=when {
         focused -> Color.White.copy(.16f)
+        selected -> SunnyColors.Accent.copy(.12f)
         emphasis -> Color.White.copy(.10f)
         else -> Color.White.copy(.025f)
     }
     val ring=when {
         focused -> SunnyColors.Accent
+        selected -> SunnyColors.Accent.copy(.48f)
         emphasis -> Color.White.copy(.20f)
         else -> Color.White.copy(.08f)
     }
-    val glyph=if(focused) SunnyColors.Accent else Color.White.copy(if(emphasis) .96f else .84f)
+    val glyph=if(focused || selected) SunnyColors.Accent else Color.White.copy(if(emphasis) .96f else .84f)
     LaunchedEffect(initial) {if(initial) {withFrameNanos {};requester.requestFocus()}}
     Box(modifier.size(size).testTag("player:$icon").semantics {contentDescription=label}
         .graphicsLayer {scaleX=scale;scaleY=scale}
@@ -91,6 +93,17 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
             fun y(v:Float)=h*v/24f
             fun triangle(points:List<Offset>) {drawPath(Path().apply {moveTo(points[0].x,points[0].y);lineTo(points[1].x,points[1].y);lineTo(points[2].x,points[2].y);close()},color)}
             when(icon) {
+                "lock", "unlock" -> {
+                    val stroke=Stroke(x(1.8f),cap=StrokeCap.Round,join=StrokeJoin.Round)
+                    drawRoundRect(color,Offset(x(5.5f),y(10.5f)),Size(x(13f),y(10f)),CornerRadius(x(2.2f)),style=stroke)
+                    val shackle=Path().apply {
+                        moveTo(x(8f),y(10.5f));lineTo(x(8f),y(7f))
+                        cubicTo(x(8f),y(1.7f),x(16f),y(1.7f),x(16f),y(7f))
+                        if(icon=="lock") lineTo(x(16f),y(10.5f))
+                    }
+                    drawPath(shackle,color,style=stroke)
+                    drawLine(color,Offset(x(12f),y(14.3f)),Offset(x(12f),y(17f)),strokeWidth=x(1.8f),cap=StrokeCap.Round)
+                }
                 "play" -> triangle(listOf(Offset(x(7f),y(4f)),Offset(x(20f),y(12f)),Offset(x(7f),y(20f))))
                 "pause" -> {
                     drawRoundRect(color,Offset(x(6.5f),y(4f)),Size(x(4f),y(16f)),CornerRadius(x(1.2f)))
@@ -174,7 +187,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
         }
         if(icon=="rewind" || icon=="forward") {
             Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else if(icon !in setOf("speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","exit","rewind","forward")) {
+        } else if(icon !in setOf("lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","exit","rewind","forward")) {
             LineIcon(icon,color,Modifier.size(18.dp))
         }
     }

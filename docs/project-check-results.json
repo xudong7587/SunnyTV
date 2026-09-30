@@ -30,6 +30,10 @@
       "passed": true
     },
     {
+      "name": "XML app\\src\\main\\res\\xml\\update_paths.xml",
+      "passed": true
+    },
+    {
       "name": "Python syntax apply-dev14-hotfix.py",
       "passed": true
     },
@@ -55,6 +59,10 @@
     },
     {
       "name": "Python syntax generate-readme-art.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax publish-webdav-update.py",
       "passed": true
     },
     {

@@ -38,6 +38,13 @@ class ConfigStore(context: Context) {
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, raw.copyOfRange(0, 12)))
         return String(c.doFinal(raw.copyOfRange(12, raw.size)), Charsets.UTF_8)
     }
+    fun updateConfig(): Triple<String,String,String> = Triple(prefs.getString("updateUrl","").orEmpty(),
+        prefs.getString("updateUser","").orEmpty(),prefs.getString("updateSecret",null)?.let {decrypt(it)} ?: "")
+    fun saveUpdateConfig(url:String,user:String,password:String) {
+        prefs.edit().putString("updateUrl",url).putString("updateUser",user).putString("updateSecret",encrypt(password)).apply()
+    }
+    fun automaticUpdates():Boolean=prefs.getBoolean("automaticUpdates",false)
+    fun setAutomaticUpdates(enabled:Boolean) {prefs.edit().putBoolean("automaticUpdates",enabled).apply()}
     fun sources(): List<SourceConfig> {
         val a = JSONArray(prefs.getString("sources", "[]"))
         return (0 until a.length()).map { i ->

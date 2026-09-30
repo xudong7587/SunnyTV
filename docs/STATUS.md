@@ -1,3 +1,7 @@
+# 2026-09-30 当前版本：dev32
+
+已基于公开dev29增量加入方向锁定与WebDAV实验升级，取消dev28车联和手动旋转。源码、功能、验证结果见 [RELEASE-dev32](RELEASE-dev32.md)，变更列表仅放 [CHANGELOG](../CHANGELOG.md)。本地核心172/172、JUnit85/85、Android定向5/5，debug/release lint各0错误/31警告；旧完整TV失败仍保留，实体在线升级待反馈。
+
 ## 2026-09-27 dev29 审查修复入口
 
 本版修复 dev27 审查的五项问题，不含 Carlink。实现与本地验证见 [SEC-01](iterations/SEC-01-dev29.md)，用户可见变化见 [发布说明](RELEASE-dev29.md)。核心172项、Gradle单测79项、Android定向9项通过，debug/release lint各0错误/28警告。使用非调试release变体，安装ID与既有签名不变；已由既有Secret签名发布，下载后哈希/证书复核及API30模拟器dev27覆盖升级成功；证据见SEC-01。下方为历史记录。

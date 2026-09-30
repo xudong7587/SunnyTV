@@ -1,5 +1,6 @@
 package io.github.xudong7587.sunnytv
 
+import androidx.lifecycle.lifecycleScope
 import android.os.Bundle
 import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
@@ -94,6 +95,26 @@ class MainActivity: ComponentActivity() {
             }
         }
     }
+    private var startupUpdateJob:kotlinx.coroutines.Job?=null
+    private var returningFromUpdateInstaller=false
+    override fun onStart() {
+        super.onStart()
+        if(returningFromUpdateInstaller) {returningFromUpdateInstaller=false;return}
+        if(io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).automaticUpdates()) {
+            startupUpdateJob=lifecycleScope.launch {
+                try {
+                    val ready=io.github.xudong7587.sunnytv.feature.update.ExperimentalUpdater(this@MainActivity).download()
+                    if(ready!=null) {
+                        returningFromUpdateInstaller=true
+                        try {io.github.xudong7587.sunnytv.feature.update.ExperimentalUpdater(this@MainActivity).install(ready)}
+                        catch(_:Exception) {returningFromUpdateInstaller=false;android.widget.Toast.makeText(this@MainActivity,"无法打开安装器，请在实验升级中手动安装",android.widget.Toast.LENGTH_LONG).show()}
+                    }
+                } catch(e:kotlinx.coroutines.CancellationException) {throw e}
+                catch(_:Exception) { /* Optional startup checks remain quiet offline. */ }
+            }
+        }
+    }
+    override fun onStop() {startupUpdateJob?.cancel();startupUpdateJob=null;super.onStop()}
     override fun onRestart() { super.onRestart(); model.afterPlayback() }
     override fun onResume() {
         super.onResume()
