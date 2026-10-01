@@ -189,6 +189,7 @@ import kotlinx.coroutines.withContext
                             item {Action("≋  音频",modifier=Modifier.moveIntoContent()) {panel="audio"}}
                             item {Action("▱  版本",modifier=Modifier.moveIntoContent()) {panel="version"}}
                             item {Action("CC  字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle"}}
+                            item {Action("查找字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle-search"}}
                         }
                         if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played,modifier=Modifier.moveIntoContent()) {panel="played"}}
                         if(item.type in setOf("Series","Season")) {
@@ -288,6 +289,14 @@ import kotlinx.coroutines.withContext
             }
         }
         when(panel) {
+            "subtitle-search" -> model.sources.firstOrNull {it.id==item.sourceId}?.let {config->
+                SubtitleSearchDialog(model.app.emby(config),model.app.store,item,version?.id.orEmpty(),{panel=""}) {track->
+                    model.selectedSubtitleTrack[item.key]=track
+                    model.selectedSubtitle.remove(item.key)
+                    version?.let {model.selectedVersion[item.key]=it.id}
+                    model.loadDetail(item);panel=""
+                }
+            }
             "played" -> ChoiceDialog(if(item.played) "取消这部影片/单集的已看状态？" else "将这部影片/单集标记为已看？",
                 listOf("cancel" to "取消","confirm" to "确认"),"cancel",{panel=""}) {choice->
                 panel="";if(choice=="confirm") model.played(item)

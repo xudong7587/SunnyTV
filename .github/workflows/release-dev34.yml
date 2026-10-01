@@ -1,0 +1,80 @@
+name: Publish verified SunnyTV dev34
+on:
+  push:
+    branches: [codex/dev32-playback-subtitles]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sunnytv-dev34-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/codex/dev32-playback-subtitles'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Select existing repository signing key
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$KEY_B64" || { echo 'Existing signing Secret missing; no replacement key permitted.' >&2; exit 1; }
+          mkdir -p "$HOME/.android" build-logs
+          printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          printf 'keystoreCertificateSha256=%s\n' "$certificate" > build-logs/keystore-certificate.txt
+          echo "SUNNYTV_SIGNING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+      - name: Build and verify release
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          chmod +x gradlew
+          python3 scripts/test-bootstrap.py
+          python3 scripts/check-project.py
+          python3 scripts/test-release-package.py
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug lintRelease assembleRelease assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
+          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code 34 --version-name 0.1.0-dev34
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate app/build/outputs/apk/release/app-release.apk --out build-logs/signing-validation.json
+      - name: Publish a new immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.0-dev34 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release exists; refusing to replace it.' >&2; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin refs/tags/v0.1.0-dev34 >/dev/null 2>&1; then
+            echo 'Tag exists; refusing to replace it.' >&2; exit 1
+          fi
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v0.1.0-dev34.apk
+          cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
+          printf 'version=0.1.0-dev34\nversionCode=34\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\ndebuggable=false\nbundledUserFonts=none\ncarlink=false\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
+          (cd dist && sha256sum *.apk *.json *.txt > SHA256SUMS.txt)
+          gh release create v0.1.0-dev34 dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'SunnyTV v0.1.0-dev34 · 音频兼容、字幕下载与片尾修复' --notes-file docs/RELEASE-dev34.md --prerelease --latest=false
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SunnyTV-dev34-validation
+          path: |
+            build-logs/
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
+      - name: Remove ephemeral runner key copy
+        if: always()
+        run: rm -f "$HOME/.android/debug.keystore"

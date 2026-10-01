@@ -89,6 +89,16 @@ class ConfigStore(context: Context) {
     }
     fun savePlaybackDiagnostic(text:String) {prefs.edit().putString("playbackDiagnostic",text.take(1500)).apply()}
     fun playbackDiagnostic():String = prefs.getString("playbackDiagnostic","").orEmpty()
+    fun seriesSubtitle(sourceId:String,seriesId:String):SeriesSubtitleChoice? {
+        if(seriesId.isBlank()) return null
+        val raw=prefs.getString("seriesSubtitle:$sourceId:$seriesId",null) ?: return null
+        return runCatching {val j=JSONObject(raw);SeriesSubtitleChoice(j.getString("provider"),j.getString("language"),j.getString("format"))}.getOrNull()
+    }
+    fun saveSeriesSubtitle(sourceId:String,seriesId:String,choice:SeriesSubtitleChoice) {
+        if(seriesId.isBlank()) return
+        prefs.edit().putString("seriesSubtitle:$sourceId:$seriesId",JSONObject().put("provider",choice.provider)
+            .put("language",choice.language).put("format",choice.format).toString()).apply()
+    }
     fun settings(): AppSettings = AppSettings(
         prefs.getBoolean("motion",false), prefs.getBoolean("hq",false), prefs.getBoolean("backdrop",true),
         prefs.getBoolean("resume",true), prefs.getBoolean("next",true), prefs.getBoolean("diag",false),

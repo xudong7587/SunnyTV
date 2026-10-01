@@ -172,12 +172,15 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             "MaxWidth" to width.toString(), "Quality" to "90"))
     }
     suspend fun playback(item: MediaEntry, fromStart: Boolean = false, versionId:String="",
-                         preferServerStream:Boolean=false): PlaybackRequest {
+                         preferServerStream:Boolean=false, audioIndex:Int=-1): PlaybackRequest {
         val start = if(fromStart) 0 else item.positionMs
-        val info = JSONObject(post("Items/${item.id}/PlaybackInfo", JSONObject()
+        val body=JSONObject()
             .put("UserId",config.userId).put("StartTimeTicks", start * 10_000)
             .put("IsPlayback",true).put("AutoOpenLiveStream",false)
-            .put("EnableDirectPlay",true).put("EnableDirectStream",true).put("EnableTranscoding",false)))
+            .put("EnableDirectPlay",true).put("EnableDirectStream",true).put("EnableTranscoding",false)
+        if(versionId.isNotBlank()) body.put("MediaSourceId",versionId)
+        if(audioIndex>=0) body.put("AudioStreamIndex",audioIndex)
+        val info = JSONObject(post("Items/${item.id}/PlaybackInfo",body))
         if(info.text("ErrorCode") != null) throw SourceException("服务器没有返回可直放的媒体源")
         val sources = info.optJSONArray("MediaSources") ?: throw SourceException("没有媒体源")
         val list = (0 until sources.length()).map { sources.getJSONObject(it) }
@@ -203,15 +206,18 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         val stable = if(direct) remote!! else serverStream
         HttpPolicy.validate(stable)
         val resolved = StrmResolver(client).resolve(stable)
-        val subtitles = externalSubtitles(item.id,sid,source.optJSONArray("MediaStreams") ?: JSONArray())
+        val streams=source.optJSONArray("MediaStreams") ?: JSONArray()
+        val subtitles = externalSubtitles(item.id,sid,streams,extractText=true)
         return PlaybackRequest(config.id, resolved, item.title, start,
             MediaLogic.mime(source.optString("Container")), scope, subtitles,
             item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key,
             mediaLogo=item.logo,
-            fallbackUrl=serverStream.takeIf {direct && it != resolved})
+            fallbackUrl=serverStream.takeIf {direct && it != resolved},
+            audioStreamIndex=audioIndex,sourceTracks=streams.objects().map {parseTrack(it)},
+            audioOrdinal=streams.objects().filter {it.optString("Type")=="Audio"}.indexOfFirst {it.optInt("Index")==audioIndex})
     }
-    internal fun externalSubtitles(itemId:String,sourceId:String,streams:JSONArray):List<ExternalSubtitle> = streams.objects()
-        .filter {it.optString("Type")=="Subtitle" && it.optBoolean("IsExternal")}
+    internal fun externalSubtitles(itemId:String,sourceId:String,streams:JSONArray,extractText:Boolean=false):List<ExternalSubtitle> = streams.objects()
+        .filter {it.optString("Type")=="Subtitle" && (it.optBoolean("IsExternal") || (extractText && it.optBoolean("IsTextSubtitleStream")))}
         .mapNotNull {stream->
             val format=stream.text("DeliveryFormat") ?: stream.optString("Codec")
             val mime=when(format.lowercase()) {
@@ -224,6 +230,67 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             delivery?.let {ExternalSubtitle(it,mime,stream.optString("Language"),parseTrack(stream).title,
                 "emby-sub:${stream.optInt("Index")}",stream.optBoolean("IsDefault"))}
         }
+
+    /** A separate, visible audio-only fallback. No replacement key, provider cookies or video encode. */
+    suspend fun compatibleAudio(request:PlaybackRequest,audioIndex:Int):PlaybackRequest {
+        require(request.embyItemId.isNotBlank())
+        val user=JSONObject(get("Users/${config.userId}"))
+        if(user.optJSONObject("Policy")?.optBoolean("EnableAudioPlaybackTranscoding",true)==false)
+            throw SourceException("Emby 账号未允许音频转码，请在服务端启用音频转码权限")
+        val video=request.sourceTracks.firstOrNull {it.type=="Video"}
+        if(video?.codec?.lowercase() !in setOf("h264","hevc","h265","mpeg2video"))
+            throw SourceException("此视频暂不支持保留原视频的音频兼容模式")
+        val session=UUID.randomUUID().toString().replace("-","")
+        val stream=url("Videos/${request.embyItemId}/master.m3u8",mapOf(
+            "MediaSourceId" to request.mediaSourceId,"DeviceId" to deviceId,"PlaySessionId" to session,
+            "UserId" to config.userId,"VideoCodec" to "copy","AudioCodec" to "aac",
+            "AudioBitrate" to "320000","MaxAudioChannels" to "2","TranscodingMaxAudioChannels" to "2",
+            "AudioStreamIndex" to audioIndex.toString(),"SubtitleStreamIndex" to "-1",
+            "AllowVideoStreamCopy" to "true","AllowAudioStreamCopy" to "false",
+            "StartTimeTicks" to "0","SegmentContainer" to "ts","MinSegments" to "2"))
+        return request.copy(stableUrl=stream,mimeHint="application/x-mpegURL",fallbackUrl=null,
+            playSessionId=session,playMethod="Transcode",audioCompatibility=true,audioStreamIndex=audioIndex,audioOrdinal=0)
+    }
+    suspend fun searchSubtitles(itemId:String,sourceId:String,language:String):List<RemoteSubtitle> {
+        require(language in setOf("chi","eng","fre","jpn","kor"))
+        val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
+            .addPathSegments("RemoteSearch/Subtitles").addPathSegment(language)
+            .addQueryParameter("MediaSourceId",sourceId).build()
+        val data=JSONArray(client.bytes(Request.Builder().url(endpoint).build()).toString(Charsets.UTF_8))
+        return data.objects().mapNotNull {j->j.text("Id")?.let {RemoteSubtitle(it,j.optString("Name"),
+            j.optString("ProviderName"),language,j.optString("Format"),j.optBoolean("IsHashMatch"))}}
+    }
+    suspend fun downloadSubtitle(itemId:String,sourceId:String,subtitle:RemoteSubtitle):Int {
+        val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
+            .addPathSegments("RemoteSearch/Subtitles").addPathSegment(subtitle.id)
+            .addQueryParameter("MediaSourceId",sourceId).build()
+        val raw=client.bytes(Request.Builder().url(endpoint).post(ByteArray(0).toRequestBody(null)).build()).toString(Charsets.UTF_8)
+        return raw.takeIf {it.isNotBlank()}?.let {JSONObject(it).optInt("NewIndex",-1)} ?: -1
+    }
+    suspend fun ensureSeriesSubtitle(item:MediaEntry,choice:SeriesSubtitleChoice,versionId:String=""):MediaTrack? {
+        val current=item(item.id)
+        val version=current.versions.firstOrNull {it.id==versionId} ?: current.versions.firstOrNull()
+        val tracks=version?.tracks ?: current.tracks
+        tracks.firstOrNull {it.type=="Subtitle" && it.external && subtitleLanguageMatches(choice.language,it.language)}?.let {return it}
+        val result=searchSubtitles(item.id,version?.id.orEmpty(),choice.language)
+            .firstOrNull {it.provider==choice.provider && it.format.equals(choice.format,true) && it.hashMatch} ?: return null
+        val index=downloadSubtitle(item.id,version?.id.orEmpty(),result)
+        return downloadedSubtitle(item.id,version?.id.orEmpty(),index)
+    }
+    suspend fun downloadedSubtitle(itemId:String,sourceId:String,index:Int):MediaTrack? {
+        repeat(5) {
+            val updated=item(itemId)
+            val tracks=updated.versions.firstOrNull {it.id==sourceId}?.tracks ?: updated.tracks
+            tracks.firstOrNull {it.type=="Subtitle" && it.index==index}?.let {return it}
+            delay(400)
+        }
+        return null
+    }
+    private fun subtitleLanguageMatches(language:String,actual:String)=when(language) {
+        "chi"->actual.lowercase() in setOf("chi","zho","zh","zh-hans","zh-hant")
+        "eng"->actual.lowercase() in setOf("eng","en")
+        else->actual.equals(language,true)
+    }
     private fun parseTrack(t:JSONObject):MediaTrack {
         val file=if(t.optBoolean("IsExternal")) t.text("Path")?.replace('\\','/')?.substringAfterLast('/') else null
         return MediaTrack(t.optInt("Index"),t.optString("Type"),t.optString("Language"),

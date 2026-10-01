@@ -95,6 +95,10 @@ class PlayerActivity: ComponentActivity() {
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
     private var subtitleManuallySelected=false
+    private var audioManuallySelected=false
+    private var audioFallbackAttempted=false
+    private var routeSwitchJob:Job?=null
+    private var audioModeNotice by mutableStateOf("")
     private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
     private var dismissedSegments by mutableStateOf<Set<String>>(emptySet())
     private var metadataJob:Job?=null
@@ -172,6 +176,7 @@ class PlayerActivity: ComponentActivity() {
     }
     override fun onSaveInstanceState(outState: Bundle) {outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
     override fun onStop() {
+        routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
             lastPosition=p.currentPosition; app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
             resumePlayWhenReady = p.playWhenReady
@@ -237,6 +242,7 @@ class PlayerActivity: ComponentActivity() {
         var audioPreferenceApplied=false
         var subtitlePreferenceApplied=false
         subtitleManuallySelected=false
+        audioManuallySelected=false
         availableTracks=Tracks.EMPTY
         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT,request.subtitlePreference=="none" && !request.explicitSubtitle)
@@ -279,8 +285,23 @@ class PlayerActivity: ComponentActivity() {
                     }
                     return true
                 }
-                if(!audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
+                val audioOptions=tracks.groups.filter {it.type==C.TRACK_TYPE_AUDIO}.flatMap {g->(0 until g.length).map {g to it}}
+                if(!audioManuallySelected && !audioPreferenceApplied && request.audioOrdinal>=0 && audioOptions.isNotEmpty()) {
+                    audioPreferenceApplied=true
+                    val exact=audioOptions.getOrNull(request.audioOrdinal)
+                    if(exact!=null && exact.first.isTrackSupported(exact.second)) {
+                        p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,false)
+                            .setOverrideForType(TrackSelectionOverride(exact.first.mediaTrackGroup,exact.second)).build()
+                    } else if(!request.audioCompatibility) switchCompatibleAudio(request.audioStreamIndex)
+                } else if(!audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
                     audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
+                }
+                if(!request.audioCompatibility && !audioFallbackAttempted && audioOptions.isNotEmpty() &&
+                    audioOptions.none {(g,i)->g.isTrackSupported(i)}) {
+                    val track=request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}
+                        ?: request.sourceTracks.firstOrNull {it.type=="Audio"}
+                    if(track!=null) switchCompatibleAudio(track.index)
+                    else selectionNotice="设备不支持此音频，请在音轨面板使用兼容模式"
                 }
                 if(!subtitleManuallySelected && !subtitlePreferenceApplied && (request.explicitSubtitle || request.subtitlePreference !in setOf("default","none"))) {
                     val options=tracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}.flatMap {g->(0 until g.length).map {g to it}}
@@ -350,6 +371,16 @@ class PlayerActivity: ComponentActivity() {
             }
         })
         p.addAnalyticsListener(object:AnalyticsListener {
+            override fun onAudioCodecError(eventTime:AnalyticsListener.EventTime,audioCodecError:Exception) {
+                if(!request.audioCompatibility && !audioFallbackAttempted) switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)
+            }
+            override fun onAudioSinkError(eventTime:AnalyticsListener.EventTime,audioSinkError:Exception) {
+                if(!request.audioCompatibility && !audioFallbackAttempted) switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)
+            }
             override fun onRenderedFirstFrame(eventTime:AnalyticsListener.EventTime,output:Any,renderTimeMs:Long) {
                 if(!rendered) {
                     rendered=true
@@ -403,12 +434,65 @@ class PlayerActivity: ComponentActivity() {
                 val started=SystemClock.elapsedRealtime()
                 val next=withContext(Dispatchers.IO) {
                     val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
-                    app.emby(config).playback(item,false,preferServerStream=settings.preferServerPlayback)
+                    val api=app.emby(config)
+                    val chosen=app.store.seriesSubtitle(config.id,item.seriesId)?.let {choice->
+                        try {withTimeout(15_000) {api.ensureSeriesSubtitle(item,choice)}}
+                        catch(e:TimeoutCancellationException) {null}
+                        catch(e:CancellationException) {throw e}
+                        catch(_:Exception) {null}
+                    }
+                    api.playback(item,false,preferServerStream=settings.preferServerPlayback).let {next->
+                        if(chosen==null) next.copy(subtitlePreference=request.subtitlePreference)
+                        else next.copy(explicitSubtitle=true,subtitleTrackId="emby-sub:${chosen.index}",subtitleTitle=chosen.title)
+                    }
                 }.copy(requestedAtMs=started,sourceReadyAtMs=SystemClock.elapsedRealtime())
                 startActivity(intent(this@PlayerActivity,next));finish()
             } catch(_:CancellationException) {throw CancellationException()}
             catch(_:Exception) {error="无法打开相邻剧集，请返回详情页重试。";controls=true}
             finally {switchingEpisode=false}
+        }
+    }
+    private fun replacePlayback(next:PlaybackRequest) {
+        val old=player
+        lastPosition=old?.currentPosition ?: lastPosition
+        resumePlayWhenReady=old?.playWhenReady ?: resumePlayWhenReady
+        reporter?.close(lastPosition,rendered);reporter=null
+        progressJob?.cancel();progressJob=null
+        old?.release();player=null
+        request=next;useFallbackRoute=false;fallbackRouteUsed=false
+        createPlayer()
+    }
+    private fun switchCompatibleAudio(index:Int) {
+        if(request.embyItemId.isBlank() || routeSwitchJob?.isActive==true) return
+        audioFallbackAttempted=true
+        audioModeNotice="正在切换 Emby 音频兼容模式…"
+        routeSwitchJob=lifecycleScope.launch {
+            try {
+                val next=withContext(Dispatchers.IO) {
+                    val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
+                    app.emby(config).compatibleAudio(request,index)
+                }
+                replacePlayback(next)
+                audioModeNotice="音频兼容模式：Emby 转为 AAC 双声道，原视频复制"
+                panel=""
+            } catch(e:CancellationException) {throw e}
+            catch(_:Exception) {audioModeNotice="音频兼容模式不可用，请检查 Emby 音频转码权限和服务端日志";controls=true}
+        }
+    }
+    private fun applyDownloadedSubtitle(track:MediaTrack) {
+        routeSwitchJob=lifecycleScope.launch {
+            try {
+                val refreshed=withContext(Dispatchers.IO) {
+                    val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
+                    val api=app.emby(config)
+                    api.playback(api.item(request.embyItemId),versionId=request.mediaSourceId,preferServerStream=settings.preferServerPlayback,
+                        audioIndex=request.audioStreamIndex)
+                }
+                val next=if(request.audioCompatibility) request.copy(subtitles=refreshed.subtitles) else refreshed
+                replacePlayback(next.copy(explicitSubtitle=true,subtitleTrackId="emby-sub:${track.index}",subtitleTitle=track.title))
+                panel=""
+            } catch(e:CancellationException) {throw e}
+            catch(_:Exception) {selectionNotice="字幕已下载，重新播放后可选择使用";panel=""}
         }
     }
     private fun setSleepTimer(minutes:Int?) {
@@ -612,8 +696,8 @@ class PlayerActivity: ComponentActivity() {
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             PlayerControl("倍速 ${speedLabel(playbackSpeed)}","speed",initial=returnControl=="speed",badge=speedLabel(playbackSpeed)) {returnControl="speed";panel="speed"}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
-                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
-                            if(availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
+                            if(request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
+                            if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
                                 resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}
@@ -647,6 +731,9 @@ class PlayerActivity: ComponentActivity() {
     }
     @Composable private fun PlayerPanel() {
         when(panel) {
+            "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId}?.let {config->
+                SubtitleSearchDialog(app.emby(config),app.store,item,request.mediaSourceId,{panel=""}) {applyDownloadedSubtitle(it)}
+            }}
             "audio","subtitles" -> TrackPanel()
             "chapters" -> ChapterPanel()
             "cast" -> CastPanel()
@@ -670,6 +757,13 @@ class PlayerActivity: ComponentActivity() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
+            if(audioModeNotice.isNotBlank()) Text(audioModeNotice,color=Color.White,fontSize=14.sp)
+            if(type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
+            if(type==C.TRACK_TYPE_AUDIO && request.embyItemId.isNotBlank()) {
+                PlayerOption("无声？使用 Emby 音频兼容模式") {switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
+                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)}
+            }
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
@@ -680,16 +774,29 @@ class PlayerActivity: ComponentActivity() {
                 groups.forEach {group->
                     for(i in 0 until group.length) {
                         val format=group.getTrackFormat(i)
-                        if(group.isTrackSupported(i)) item {
-                            PlayerOption(listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"},
+                        item {
+                            val supported=group.isTrackSupported(i)
+                            PlayerOption(listOfNotNull(format.label,format.language,format.sampleMimeType).distinct().joinToString(" · ").ifBlank {"轨道 ${i+1}"}+
+                                if(supported) "" else " · 设备不支持",
                                 selected=group.isTrackSelected(i) && player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)!=true) {
                                 if(type==C.TRACK_TYPE_TEXT) subtitleManuallySelected=true
-                                player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon()
+                                if(type==C.TRACK_TYPE_AUDIO) audioManuallySelected=true
+                                if(!supported) {
+                                    if(type==C.TRACK_TYPE_AUDIO) {
+                                        val ordinal=groups.flatMap {g->(0 until g.length).map {g to it}}.indexOf(group to i)
+                                        switchCompatibleAudio(request.sourceTracks.filter {it.type=="Audio"}.getOrNull(ordinal)?.index ?: -1)
+                                    } else selectionNotice="此字幕格式不受设备支持，请查找文本字幕"
+                                } else player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon()
                                     .setTrackTypeDisabled(type,false).setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,i)).build()}
                                 panel=""
                             }
                         }
                     }
+                }
+            }
+            if(type==C.TRACK_TYPE_AUDIO && request.audioCompatibility) {
+                request.sourceTracks.filter {it.type=="Audio"}.forEach {track->
+                    PlayerOption("${track.title} · AAC 兼容播放",selected=track.index==request.audioStreamIndex) {switchCompatibleAudio(track.index)}
                 }
             }
         }

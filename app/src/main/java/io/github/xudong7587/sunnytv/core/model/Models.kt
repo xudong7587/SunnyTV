@@ -64,8 +64,13 @@ data class PlaybackRequest(
     val subtitleTitle:String = "", val mediaLogo:Artwork? = null,
     val subtitleTrackId:String = "", val subtitleOrdinal:Int = -1, val explicitSubtitle:Boolean=false
     /** Set when the direct-play URL is chosen: the same item through Emby, used if the direct route fails. */
-    , val fallbackUrl:String? = null
+    , val fallbackUrl:String? = null,
+    val audioOrdinal:Int = -1, val audioStreamIndex:Int = -1,
+    val sourceTracks:List<MediaTrack> = emptyList(), val audioCompatibility:Boolean=false
 ) : Serializable
+
+data class RemoteSubtitle(val id:String,val name:String,val provider:String,val language:String,val format:String,val hashMatch:Boolean)
+data class SeriesSubtitleChoice(val provider:String,val language:String,val format:String)
 
 data class AppSettings(
     val reduceMotion: Boolean = false, val highQualityArtwork: Boolean = false,
