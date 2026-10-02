@@ -1,6 +1,18 @@
 package io.github.xudong7587.sunnytv.feature.ui
 
 import androidx.compose.runtime.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.Dialog
+import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.core.storage.ConfigStore
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
@@ -24,12 +36,12 @@ import kotlinx.coroutines.*
         finally {busy=false}
     }
     when {
-        language.isBlank()->ChoiceDialog("搜索字幕语言",listOf("chi" to "中文","eng" to "英语","fre" to "法语","jpn" to "日语","kor" to "韩语"),"chi",onDismiss) {language=it}
-        busy->MessageDialog("正在搜索或下载字幕，请稍候…",onDismiss)
-        notice.isNotBlank()->MessageDialog(notice) {notice="";language=""}
-        else->ChoiceDialog("Emby 字幕 · 下载后使用（剧集记住提供者与语言）",
+        language.isBlank()->SubtitleChoices("搜索字幕语言",listOf("chi" to "中文","eng" to "英语","fre" to "法语","jpn" to "日语","kor" to "韩语"),onDismiss) {language=it}
+        busy->SubtitleChoices("正在搜索或下载字幕，请稍候…",emptyList(),onDismiss) {}
+        notice.isNotBlank()->SubtitleChoices(notice,listOf("retry" to "重新搜索"),onDismiss) {notice="";language=""}
+        else->SubtitleChoices("Emby 字幕 · 下载后使用（剧集记住提供者与语言）",
             listOf("language" to "更换语言")+results.mapIndexed {i,s->i.toString() to
-                "${s.name} · ${s.provider} · ${s.format}${if(s.hashMatch) " · 精确匹配" else ""}"},"language",onDismiss) {key->
+                "${s.name} · ${s.provider} · ${s.format}${if(s.hashMatch) " · 精确匹配" else ""}"},onDismiss) {key->
             if(key=="language") language="" else results.getOrNull(key.toIntOrNull() ?: -1)?.let {result->
                 scope.launch {
                     busy=true
@@ -50,4 +62,26 @@ import kotlinx.coroutines.*
             }
         }
     }
+}
+
+/** Standalone native dialog: also works in PlayerActivity without an AppModel composition local. */
+@Composable private fun SubtitleChoices(title:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,onChoose:(String)->Unit) {
+    Dialog(onDismissRequest=onDismiss) {
+        Column(Modifier.width(520.dp).heightIn(max=520.dp).background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(22.dp),
+            verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text(title,color=SunnyColors.Text,fontSize=18.sp)
+            LazyColumn(Modifier.weight(1f,false),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                items(choices,key={it.first}) {(id,label)->SubtitleChoiceRow(label,id==choices.firstOrNull()?.first) {onChoose(id)}}
+            }
+            SubtitleChoiceRow("关闭",choices.isEmpty(),onDismiss)
+        }
+    }
+}
+@Composable private fun SubtitleChoiceRow(label:String,initial:Boolean,onClick:()->Unit) {
+    val focus=remember {FocusRequester()}
+    var focused by remember {mutableStateOf(false)}
+    LaunchedEffect(Unit) {if(initial) {withFrameNanos {};focus.requestFocus()}}
+    Text(label,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.fillMaxWidth().focusRequester(focus)
+        .onFocusChanged {focused=it.isFocused}.background(if(focused) SunnyColors.SurfaceRaised else SunnyColors.Surface,RoundedCornerShape(10.dp))
+        .border(1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(10.dp)).clickable(onClick=onClick).padding(12.dp))
 }

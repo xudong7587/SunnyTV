@@ -1,4 +1,4 @@
-name: Publish verified SunnyTV dev34
+name: Publish verified SunnyTV dev34.1
 on:
   push:
     branches: [codex/dev32-playback-subtitles]
@@ -6,8 +6,8 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: sunnytv-dev34-release
-  cancel-in-progress: false
+  group: sunnytv-dev34.1-release
+  cancel-in-progress: true
 jobs:
   release:
     if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/codex/dev32-playback-subtitles'
@@ -46,30 +46,32 @@ jobs:
           python3 scripts/check-project.py
           python3 scripts/test-release-package.py
           ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug lintRelease assembleRelease assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
-          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code 34 --version-name 0.1.0-dev34
+          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code 35 --version-name 0.1.0-dev34.1
           python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate app/build/outputs/apk/release/app-release.apk --out build-logs/signing-validation.json
       - name: Publish a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view v0.1.0-dev34 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/codex/dev32-playback-subtitles" --jq .object.sha)
+          test "$current_sha" = "$GITHUB_SHA" || { echo 'Superseded build; refusing publication.'; exit 1; }
+          if gh release view v0.1.0-dev34.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Release exists; refusing to replace it.' >&2; exit 1
           fi
-          if git ls-remote --exit-code --tags origin refs/tags/v0.1.0-dev34 >/dev/null 2>&1; then
+          if git ls-remote --exit-code --tags origin refs/tags/v0.1.0-dev34.1 >/dev/null 2>&1; then
             echo 'Tag exists; refusing to replace it.' >&2; exit 1
           fi
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v0.1.0-dev34.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v0.1.0-dev34.1.apk
           cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
-          printf 'version=0.1.0-dev34\nversionCode=34\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\ndebuggable=false\nbundledUserFonts=none\ncarlink=false\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
+          printf 'version=0.1.0-dev34.1\nversionCode=35\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\ndebuggable=false\nbundledUserFonts=none\ncarlink=false\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
           (cd dist && sha256sum *.apk *.json *.txt > SHA256SUMS.txt)
-          gh release create v0.1.0-dev34 dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'SunnyTV v0.1.0-dev34 · 音频兼容、字幕下载与片尾修复' --notes-file docs/RELEASE-dev34.md --prerelease --latest=false
+          gh release create v0.1.0-dev34.1 dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'SunnyTV v0.1.0-dev34.1 · 音频兼容、字幕下载与片尾修复' --notes-file docs/RELEASE-dev34.1.md --prerelease --latest=false
       - name: Preserve validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SunnyTV-dev34-validation
+          name: SunnyTV-dev34.1-validation
           path: |
             build-logs/
             app/build/reports/

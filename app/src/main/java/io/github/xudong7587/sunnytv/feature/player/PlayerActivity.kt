@@ -676,6 +676,7 @@ class PlayerActivity: ComponentActivity() {
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
                     .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
+                    if(audioModeNotice.isNotBlank()) Text(audioModeNotice,color=Color.White.copy(.8f),fontSize=12.sp)
                     PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus),
                         onSeekBy={seek(it)},onSeekTo={target->player?.seekTo(target);position=target})
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
