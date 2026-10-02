@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -38,6 +39,12 @@ class PlayerPanelFocusTest {
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithText("1.5x").performClick()
                 rule.onNodeWithTag("player:speed").assertIsFocused().assertContentDescriptionEquals("倍速 1.5x")
+                rule.onNodeWithTag("player:speed").performKeyInput {pressKey(Key.DirectionUp)}
+                rule.onNodeWithTag("player:progress").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+                rule.onNodeWithContentDescription("音频输出").assertIsFocused().performClick()
+                rule.onNodeWithText("原始声道（默认）").assertExists()
+                rule.onNodeWithTag("player:close").performClick()
+                rule.onNodeWithContentDescription("音频输出").assertIsFocused()
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithTag("player:close").performClick()
                 rule.onNodeWithTag("player:speed").assertIsFocused()

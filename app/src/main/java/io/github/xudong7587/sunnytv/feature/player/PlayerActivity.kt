@@ -642,7 +642,6 @@ class PlayerActivity: ComponentActivity() {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .focusProperties {up=progressFocus}
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
                     .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
@@ -652,7 +651,7 @@ class PlayerActivity: ComponentActivity() {
                         Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
                         Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
-                    Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                    Row((if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())).focusProperties {up=progressFocus},verticalAlignment=Alignment.CenterVertically) {
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
                             PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}

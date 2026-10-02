@@ -70,7 +70,7 @@ jobs:
           arch: x86_64
           profile: tv_1080p
           disable-animations: true
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
       - name: Publish a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
