@@ -23,6 +23,7 @@ import androidx.media3.common.Format;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.ParsableByteArray;
 import androidx.media3.common.util.Util;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.decoder.DecoderInputBuffer;
 import androidx.media3.decoder.SimpleDecoder;
 import androidx.media3.decoder.SimpleDecoderOutputBuffer;
@@ -30,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 /** FFmpeg audio decoder. */
+@UnstableApi
 /* package */ final class FfmpegAudioDecoder
     extends SimpleDecoder<DecoderInputBuffer, SimpleDecoderOutputBuffer, FfmpegDecoderException> {
 

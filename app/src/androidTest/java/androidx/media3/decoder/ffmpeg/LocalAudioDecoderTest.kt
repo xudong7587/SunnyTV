@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class LocalAudioDecoderTest {
     @Test fun nativeDecodersArePresent() {
         assertTrue(FfmpegLibrary.isAvailable())
