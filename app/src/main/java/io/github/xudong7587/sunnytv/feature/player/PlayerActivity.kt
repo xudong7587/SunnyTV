@@ -98,7 +98,6 @@ class PlayerActivity: ComponentActivity() {
     private var audioManuallySelected=false
     private var audioFallbackAttempted=false
     private var routeSwitchJob:Job?=null
-    private var audioModeNotice by mutableStateOf("")
     private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
     private var dismissedSegments by mutableStateOf<Set<String>>(emptySet())
     private var metadataJob:Job?=null
@@ -465,7 +464,7 @@ class PlayerActivity: ComponentActivity() {
     private fun switchCompatibleAudio(index:Int) {
         if(request.embyItemId.isBlank() || routeSwitchJob?.isActive==true) return
         audioFallbackAttempted=true
-        audioModeNotice="正在切换 Emby 音频兼容模式…"
+        status="正在准备播放…"
         routeSwitchJob=lifecycleScope.launch {
             try {
                 val next=withContext(Dispatchers.IO) {
@@ -473,10 +472,10 @@ class PlayerActivity: ComponentActivity() {
                     app.emby(config).compatibleAudio(request,index)
                 }
                 replacePlayback(next)
-                audioModeNotice="音频兼容模式：Emby 转为 AAC 双声道，原视频复制"
+                status=""
                 panel=""
             } catch(e:CancellationException) {throw e}
-            catch(_:Exception) {audioModeNotice="音频兼容模式不可用，请检查 Emby 音频转码权限和服务端日志";controls=true}
+            catch(_:Exception) {error="无法准备此音轨，请稍后重试。";controls=true}
         }
     }
     private fun applyDownloadedSubtitle(track:MediaTrack) {
@@ -676,7 +675,6 @@ class PlayerActivity: ComponentActivity() {
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
                     .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
-                    if(audioModeNotice.isNotBlank()) Text(audioModeNotice,color=Color.White.copy(.8f),fontSize=12.sp)
                     PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus),
                         onSeekBy={seek(it)},onSeekTo={target->player?.seekTo(target);position=target})
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
@@ -758,10 +756,9 @@ class PlayerActivity: ComponentActivity() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
-            if(audioModeNotice.isNotBlank()) Text(audioModeNotice,color=Color.White,fontSize=14.sp)
             if(type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
             if(type==C.TRACK_TYPE_AUDIO && request.embyItemId.isNotBlank()) {
-                PlayerOption("无声？使用 Emby 音频兼容模式") {switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
+                PlayerOption("重新尝试播放声音") {switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
                     ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
                     ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)}
             }
@@ -797,7 +794,7 @@ class PlayerActivity: ComponentActivity() {
             }
             if(type==C.TRACK_TYPE_AUDIO && request.audioCompatibility) {
                 request.sourceTracks.filter {it.type=="Audio"}.forEach {track->
-                    PlayerOption("${track.title} · AAC 兼容播放",selected=track.index==request.audioStreamIndex) {switchCompatibleAudio(track.index)}
+                    PlayerOption("${track.title}",selected=track.index==request.audioStreamIndex) {switchCompatibleAudio(track.index)}
                 }
             }
         }

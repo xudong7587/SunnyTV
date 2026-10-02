@@ -12,29 +12,50 @@ import org.junit.Test
 
 class Dev34PlaybackTest {
     private fun source(server:MockWebServer)=EmbySource(SourceConfig("s",SourceKind.EMBY,"Test",server.url("/emby/").toString(),"u","","test-token"),SafeHttp(),"test-device")
-    @Test fun compatibilityCopiesVideoAndConvertsOnlySelectedAudio()=runBlocking {
+    @Test fun compatibilityUsesServerNegotiatedUrlAndSelectedAudio()=runBlocking {
         MockWebServer().use {server->
             server.enqueue(MockResponse().setBody("""{"Policy":{"EnableAudioPlaybackTranscoding":true}}"""))
+            server.enqueue(MockResponse().setBody("""{"PlaySessionId":"server-session","MediaSources":[{"Id":"source","TranscodingUrl":"/emby/Videos/123/master.m3u8?AudioCodec=aac&AudioStreamIndex=3&VideoCodec=hevc&api_key=test-token&PlaySessionId=server-session"}]}"""))
             val request=PlaybackRequest("s","https://example.org/media.mkv","test",embyItemId="123",mediaSourceId="source",
                 sourceTracks=listOf(MediaTrack(0,"Video","","4K","hevc"),MediaTrack(3,"Audio","eng","English","eac3")))
             val compatible=source(server).compatibleAudio(request,3)
             val url=compatible.stableUrl.toHttpUrl()
             assertEquals("/emby/Videos/123/master.m3u8",url.encodedPath)
-            assertEquals("copy",url.queryParameter("VideoCodec"))
+            assertEquals("hevc",url.queryParameter("VideoCodec"))
             assertEquals("aac",url.queryParameter("AudioCodec"))
             assertEquals("3",url.queryParameter("AudioStreamIndex"))
-            assertEquals("false",url.queryParameter("AllowAudioStreamCopy"))
-            assertEquals("0",url.queryParameter("StartTimeTicks"))
+            server.takeRequest()
+            val negotiation=server.takeRequest()
+            assertEquals("/emby/Items/123/PlaybackInfo",negotiation.requestUrl!!.encodedPath)
+            val body=JSONObject(negotiation.body.readUtf8())
+            assertEquals(3,body.getInt("AudioStreamIndex"))
+            assertFalse(body.getBoolean("AllowAudioStreamCopy"))
+            assertTrue(body.getBoolean("AllowVideoStreamCopy"))
+            assertFalse(body.getBoolean("EnableDirectPlay"))
+            val profile=body.getJSONObject("DeviceProfile").getJSONArray("TranscodingProfiles").getJSONObject(0)
+            assertEquals("aac",profile.getString("AudioCodec"))
+            assertEquals("hevc",profile.getString("VideoCodec"))
+            assertEquals("server-session",compatible.playSessionId)
             assertTrue(compatible.audioCompatibility);assertNull(compatible.fallbackUrl)
             assertNotEquals(request.playSessionId,compatible.playSessionId)
             assertFalse(url.toString().contains("test-token"))
+        }
+    }
+    @Test fun compatibilityRejectsForeignServerUrl()=runBlocking {
+        MockWebServer().use {server->
+            server.enqueue(MockResponse().setBody("""{"Policy":{}}"""))
+            server.enqueue(MockResponse().setBody("""{"PlaySessionId":"session","MediaSources":[{"Id":"source","TranscodingUrl":"https://foreign.invalid/video.m3u8?api_key=secret"}]}"""))
+            val request=PlaybackRequest("s","https://example.org/media.mkv","test",embyItemId="123",mediaSourceId="source",
+                sourceTracks=listOf(MediaTrack(0,"Video","","HD","h264"),MediaTrack(1,"Audio","eng","English","eac3")))
+            try {source(server).compatibleAudio(request,1);fail("expected refusal")}
+            catch(e:IllegalArgumentException) {assertTrue(e.message.orEmpty().contains("当前服务器"))}
         }
     }
     @Test fun deniedAudioTranscodeIsExplicit()=runBlocking {
         MockWebServer().use {server->
             server.enqueue(MockResponse().setBody("""{"Policy":{"EnableAudioPlaybackTranscoding":false}}"""))
             val request=PlaybackRequest("s","https://example.org/media.mkv","test",embyItemId="123")
-            try {source(server).compatibleAudio(request,1);fail("expected refusal")} catch(e:Exception) {assertTrue(e.message.orEmpty().contains("音频转码"))}
+            try {source(server).compatibleAudio(request,1);fail("expected refusal")} catch(e:Exception) {assertTrue(e.message.orEmpty().contains("音频播放转换"))}
         }
     }
     @Test fun searchUsesInstalledProviderAndDownloadEncodesItsOpaqueId()=runBlocking {
