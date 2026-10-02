@@ -43,6 +43,8 @@ class PlayerPanelFocusTest {
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/fixture.mp4","焦点测试")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario->
+                // TV navigation starts with hardware keys; semantic clicks alone leave Android in touch mode.
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithText("1.5x").performClick()
                 awaitFocus(rule.onNodeWithTag("player:speed"))
