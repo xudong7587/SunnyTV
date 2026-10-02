@@ -435,14 +435,15 @@ class PlayerActivity: ComponentActivity() {
             finally {switchingEpisode=false}
         }
     }
-    private fun replacePlayback(next:PlaybackRequest) {
+    private fun replacePlayback(next:PlaybackRequest,preserveRoute:Boolean=false) {
         val old=player
         lastPosition=old?.currentPosition ?: lastPosition
         resumePlayWhenReady=old?.playWhenReady ?: resumePlayWhenReady
         reporter?.close(lastPosition,rendered);reporter=null
         progressJob?.cancel();progressJob=null
         old?.release();player=null
-        request=next;useFallbackRoute=false;fallbackRouteUsed=false
+        request=next
+        if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
         createPlayer()
     }
     private fun applyDownloadedSubtitle(track:MediaTrack) {
@@ -720,7 +721,7 @@ class PlayerActivity: ComponentActivity() {
                         // Preserve chosen tracks, subtitles, speed and playback position across a sink rebuild.
                         val parameters=player?.trackSelectionParameters
                         audioOutputMaximum=maximum
-                        replacePlayback(request)
+                        replacePlayback(request,preserveRoute=true)
                         parameters?.let {player?.trackSelectionParameters=it}
                     }
                     panel=""
