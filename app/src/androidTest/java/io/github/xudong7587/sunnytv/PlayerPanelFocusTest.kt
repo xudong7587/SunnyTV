@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class PlayerPanelFocusTest {
     @get:Rule val rule=createEmptyComposeRule()
 
