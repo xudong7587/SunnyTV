@@ -15,8 +15,8 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 32
-        versionName = "0.1.0-dev32"
+        versionCode = 37
+        versionName = "0.1.0-dev34.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -55,6 +55,7 @@ if (selfUseBuild) {
     android.sourceSets.getByName("main").assets.srcDir("src/selfUse/assets")
 }
 dependencies {
+    implementation(project(":decoder-ffmpeg"))
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.16.0")

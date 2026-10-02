@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SegmentLogicTest {
+    @Test fun earlyCreditsAndNamesContainingEndingAreNotAnOutro() {
+        assertTrue(SegmentLogic.segments(listOf(MediaChapter("Credits",10_000)),3_000_000).isEmpty())
+        assertTrue(SegmentLogic.segments(listOf(MediaChapter("Unexpected ending",2_900_000)),3_000_000).isEmpty())
+        assertTrue(SegmentLogic.segments(listOf(MediaChapter("marker",0,"CreditsStart")),3_000_000).isEmpty())
+    }
     @Test fun markerTypesProduceIntroAndCreditsRanges() {
         val chapters=listOf(
             MediaChapter("marker",10_000,"IntroStart"),

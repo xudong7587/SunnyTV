@@ -5,3 +5,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "SunnyTV"
 include(":app")
+
+include(":decoder-ffmpeg")

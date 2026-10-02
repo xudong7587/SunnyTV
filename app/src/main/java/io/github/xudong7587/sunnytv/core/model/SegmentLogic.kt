@@ -6,7 +6,7 @@ object SegmentLogic {
         val n=normalized(name)
         return when {
             listOf("title sequence","intro","opening","片头","开场","op ").any {n.contains(it)} -> "intro"
-            listOf("credits","credit sequence","outro","ending","片尾","演职员","ed ").any {n.contains(it)} -> "outro"
+            n in setOf("credits","end credits","credit sequence","outro","ending","片尾","演职员","ed") -> "outro"
             else -> null
         }
     }
@@ -20,11 +20,14 @@ object SegmentLogic {
             result+=SkipSegment("intro:" + introStart.startMs,"intro",introStart.startMs,introEnd.startMs)
         }
         val credits=sorted.firstOrNull {it.markerType.equals("CreditsStart",true)}
-        if(credits!=null && durationMs>credits.startMs+1_000) {
+        if(credits!=null && durationMs>credits.startMs+1_000 && credits.startMs>=durationMs*4/5) {
             result+=SkipSegment("outro:" + credits.startMs,"outro",credits.startMs,durationMs)
         }
         sorted.forEachIndexed {index,chapter->
             val type=namedType(chapter.name) ?: return@forEachIndexed
+            // Chapter names are a weak fallback, never an early-film credits cue.
+            if(type=="outro" && (durationMs<=0 || chapter.startMs<durationMs*4/5 ||
+                durationMs-chapter.startMs>300_000)) return@forEachIndexed
             if(result.any {it.type==type}) return@forEachIndexed
             val end=sorted.getOrNull(index+1)?.startMs ?: durationMs
             if(end>chapter.startMs+1_000) result+=SkipSegment(type + ":" + chapter.startMs,type,chapter.startMs,end)

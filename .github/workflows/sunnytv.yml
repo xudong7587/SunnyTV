@@ -216,7 +216,9 @@ jobs:
         with:
           packages: 'platform-tools'
       - name: Install the pinned Android SDK
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;26.1.10909125' 'cmake;3.22.1'
+      - name: Build local audio decoder libraries
+        run: bash scripts/build-audio-decoders.sh
       - name: Optional persistent debug signing identity
         if: github.event_name != 'pull_request'
         env:

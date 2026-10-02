@@ -516,19 +516,29 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             try {
                 val config = source(item.sourceId)
                 val playable=if(config.kind==SourceKind.EMBY && item.type in setOf("Series","Season")) app.emby(config).playableEpisode(item,fromStart) else item
+                val selectedAudioTrack=selectedAudio[playable.key] ?: selectedAudio[item.key]
+                if(config.kind==SourceKind.EMBY && selectedSubtitleTrack[playable.key]==null && selectedSubtitle[playable.key]!="none") {
+                    app.store.seriesSubtitle(config.id,playable.seriesId)?.let {choice->
+                        try {withTimeout(15_000) {app.emby(config).ensureSeriesSubtitle(playable,choice,selectedVersion[playable.key].orEmpty())}
+                            ?.let {selectedSubtitleTrack[playable.key]=it}}
+                        catch(e:TimeoutCancellationException) {message="自动字幕搜索超时，仍可正常播放"}
+                        catch(e:CancellationException) {throw e}
+                        catch(_:Exception) {message="自动字幕暂不可用，仍可正常播放"}
+                    }
+                }
                 val request = if (config.kind == SourceKind.EMBY) app.emby(config).playback(playable, fromStart,
-                    selectedVersion[playable.key].orEmpty(),app.store.settings().preferServerPlayback)
+                    selectedVersion[playable.key].orEmpty(),app.store.settings().preferServerPlayback,selectedAudioTrack?.index ?: -1)
                 else app.dav(config).playback(item, if (fromStart) 0 else app.store.position(item.key))
                 ensureActive()
                 val chosenSubtitle=selectedSubtitleTrack[playable.key]
                 val version=details[playable.key]?.versions?.firstOrNull {it.id==request.mediaSourceId}
                 val embedded=(version?.tracks ?: details[playable.key]?.tracks ?: playable.tracks).filter {it.type=="Subtitle" && !it.external}
                 ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),
-                    audioLanguage=selectedAudio[item.key]?.language.orEmpty(),audioTitle=selectedAudio[item.key]?.title.orEmpty(),
+                    audioLanguage=selectedAudioTrack?.language.orEmpty(),audioTitle=selectedAudioTrack?.title.orEmpty(),
                     subtitlePreference=if(selectedSubtitle[playable.key]=="none") "none" else subtitlePreference(item),
                     subtitleTitle=chosenSubtitle?.title.orEmpty(),
                     explicitSubtitle=chosenSubtitle!=null,
-                    subtitleTrackId=chosenSubtitle?.takeIf {it.external}?.let {"emby-sub:${it.index}"}.orEmpty(),
+                    subtitleTrackId=chosenSubtitle?.takeIf {chosen->request.subtitles.any {it.id=="emby-sub:${chosen.index}"}}?.let {"emby-sub:${it.index}"}.orEmpty(),
                     subtitleOrdinal=if(chosenSubtitle!=null && !chosenSubtitle.external) embedded.indexOfFirst {it.index==chosenSubtitle.index} else -1))
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = safeError(e) }
