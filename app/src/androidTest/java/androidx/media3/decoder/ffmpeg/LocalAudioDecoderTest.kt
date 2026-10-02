@@ -18,7 +18,7 @@ class LocalAudioDecoderTest {
     @Test fun eac3SixChannelsDecodeToNonSilentPcm() = decode("tone.eac3",MimeTypes.AUDIO_E_AC3,6)
     @Test fun dtsSixChannelsDecodeToNonSilentPcm() = decode("tone.dts",MimeTypes.AUDIO_DTS,6)
     @Test fun centerOnlySixAndEightChannelsReachBothStereoSpeakers() {
-        for(channels in listOf(6,7,8)) {
+        for(channels in listOf(3,5,6,7,8)) {
             val processor=io.github.xudong7587.sunnytv.feature.player.AudioOutputMixing.processor(2)
             val format=processor.configure(androidx.media3.common.audio.AudioProcessor.AudioFormat(48000,channels,androidx.media3.common.C.ENCODING_PCM_16BIT))
             assertEquals(2,format.channelCount)
