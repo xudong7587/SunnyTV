@@ -25,3 +25,8 @@ dist/
 
 # Existing local signing material must stay private.
 /.local-secrets/
+
+# Generated decoder licenses and synthetic test packets are supplied by CI.
+/app/src/main/assets/licenses/
+/app/src/androidTest/assets/tone.eac3
+/app/src/androidTest/assets/tone.dts

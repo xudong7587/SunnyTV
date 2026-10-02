@@ -96,7 +96,6 @@ class PlayerActivity: ComponentActivity() {
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
     private var subtitleManuallySelected=false
     private var audioManuallySelected=false
-    private var audioFallbackAttempted=false
     private var routeSwitchJob:Job?=null
     private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
     private var dismissedSegments by mutableStateOf<Set<String>>(emptySet())
@@ -222,7 +221,7 @@ class PlayerActivity: ComponentActivity() {
                     return PlaybackRecovery.RETRY_DELAY_MS
                 }
             })
-        val p=ExoPlayer.Builder(this).setMediaSourceFactory(sourceFactory)
+        val p=ExoPlayer.Builder(this,DefaultRenderersFactory(this).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
             .setLoadControl(DefaultLoadControl.Builder()
@@ -291,16 +290,9 @@ class PlayerActivity: ComponentActivity() {
                     if(exact!=null && exact.first.isTrackSupported(exact.second)) {
                         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,false)
                             .setOverrideForType(TrackSelectionOverride(exact.first.mediaTrackGroup,exact.second)).build()
-                    } else if(!request.audioCompatibility) switchCompatibleAudio(request.audioStreamIndex)
+                    } else selectionNotice="无法播放所选音轨，请选择其他音轨"
                 } else if(!audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
                     audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
-                }
-                if(!request.audioCompatibility && !audioFallbackAttempted && audioOptions.isNotEmpty() &&
-                    audioOptions.none {(g,i)->g.isTrackSupported(i)}) {
-                    val track=request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}
-                        ?: request.sourceTracks.firstOrNull {it.type=="Audio"}
-                    if(track!=null) switchCompatibleAudio(track.index)
-                    else selectionNotice="设备不支持此音频，请在音轨面板使用兼容模式"
                 }
                 if(!subtitleManuallySelected && !subtitlePreferenceApplied && (request.explicitSubtitle || request.subtitlePreference !in setOf("default","none"))) {
                     val options=tracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}.flatMap {g->(0 until g.length).map {g to it}}
@@ -370,16 +362,6 @@ class PlayerActivity: ComponentActivity() {
             }
         })
         p.addAnalyticsListener(object:AnalyticsListener {
-            override fun onAudioCodecError(eventTime:AnalyticsListener.EventTime,audioCodecError:Exception) {
-                if(!request.audioCompatibility && !audioFallbackAttempted) switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)
-            }
-            override fun onAudioSinkError(eventTime:AnalyticsListener.EventTime,audioSinkError:Exception) {
-                if(!request.audioCompatibility && !audioFallbackAttempted) switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)
-            }
             override fun onRenderedFirstFrame(eventTime:AnalyticsListener.EventTime,output:Any,renderTimeMs:Long) {
                 if(!rendered) {
                     rendered=true
@@ -460,23 +442,6 @@ class PlayerActivity: ComponentActivity() {
         old?.release();player=null
         request=next;useFallbackRoute=false;fallbackRouteUsed=false
         createPlayer()
-    }
-    private fun switchCompatibleAudio(index:Int) {
-        if(request.embyItemId.isBlank() || routeSwitchJob?.isActive==true) return
-        audioFallbackAttempted=true
-        status="正在准备播放…"
-        routeSwitchJob=lifecycleScope.launch {
-            try {
-                val next=withContext(Dispatchers.IO) {
-                    val config=app.store.sources().firstOrNull {it.id==request.sourceId} ?: error("source")
-                    app.emby(config).compatibleAudio(request,index)
-                }
-                replacePlayback(next)
-                status=""
-                panel=""
-            } catch(e:CancellationException) {throw e}
-            catch(_:Exception) {error="无法准备此音轨，请稍后重试。";controls=true}
-        }
     }
     private fun applyDownloadedSubtitle(track:MediaTrack) {
         routeSwitchJob=lifecycleScope.launch {
@@ -757,11 +722,6 @@ class PlayerActivity: ComponentActivity() {
         val groups=availableTracks.groups.filter {it.type==type}
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
             if(type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
-            if(type==C.TRACK_TYPE_AUDIO && request.embyItemId.isNotBlank()) {
-                PlayerOption("重新尝试播放声音") {switchCompatibleAudio(request.audioStreamIndex.takeIf {it>=0}
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
-                    ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index ?: -1)}
-            }
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
@@ -780,10 +740,7 @@ class PlayerActivity: ComponentActivity() {
                                 if(type==C.TRACK_TYPE_TEXT) subtitleManuallySelected=true
                                 if(type==C.TRACK_TYPE_AUDIO) audioManuallySelected=true
                                 if(!supported) {
-                                    if(type==C.TRACK_TYPE_AUDIO) {
-                                        val ordinal=groups.flatMap {g->(0 until g.length).map {g to it}}.indexOf(group to i)
-                                        switchCompatibleAudio(request.sourceTracks.filter {it.type=="Audio"}.getOrNull(ordinal)?.index ?: -1)
-                                    } else selectionNotice="此字幕格式不受设备支持，请查找文本字幕"
+                                    selectionNotice=if(type==C.TRACK_TYPE_AUDIO) "此音轨无法播放，请选择其他音轨" else "此字幕格式不受设备支持，请查找文本字幕"
                                 } else player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon()
                                     .setTrackTypeDisabled(type,false).setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,i)).build()}
                                 panel=""
@@ -792,11 +749,7 @@ class PlayerActivity: ComponentActivity() {
                     }
                 }
             }
-            if(type==C.TRACK_TYPE_AUDIO && request.audioCompatibility) {
-                request.sourceTracks.filter {it.type=="Audio"}.forEach {track->
-                    PlayerOption("${track.title}",selected=track.index==request.audioStreamIndex) {switchCompatibleAudio(track.index)}
-                }
-            }
+
         }
     }
     @Composable private fun ChapterPanel() {

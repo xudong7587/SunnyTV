@@ -231,51 +231,6 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
                 "emby-sub:${stream.optInt("Index")}",stream.optBoolean("IsDefault"))}
         }
 
-    /** Let Emby choose the stream and encoder parameters for the selected audio. */
-    suspend fun compatibleAudio(request:PlaybackRequest,audioIndex:Int):PlaybackRequest {
-        require(request.embyItemId.isNotBlank())
-        val user=JSONObject(get("Users/${config.userId}"))
-        if(user.optJSONObject("Policy")?.optBoolean("EnableAudioPlaybackTranscoding",true)==false)
-            throw SourceException("Emby 账号未允许音频播放转换")
-        val videoCodec=request.sourceTracks.firstOrNull {it.type=="Video"}?.codec?.lowercase()
-        if(videoCodec !in setOf("h264","hevc","h265","mpeg2video"))
-            throw SourceException("此视频暂不支持兼容播放")
-        val selected=audioIndex.takeIf {it>=0}
-            ?: request.sourceTracks.firstOrNull {it.type=="Audio" && it.isDefault}?.index
-            ?: request.sourceTracks.firstOrNull {it.type=="Audio"}?.index
-            ?: throw SourceException("没有可播放的音轨")
-        val profile=JSONObject().put("Name","SunnyTV AAC playback").put("SupportedMediaTypes","Video")
-            .put("MaxStreamingBitrate",200_000_000)
-            .put("DirectPlayProfiles",JSONArray())
-            .put("TranscodingProfiles",JSONArray().put(JSONObject()
-                .put("Type","Video").put("Context","Streaming").put("Protocol","hls")
-                .put("Container","ts").put("VideoCodec",if(videoCodec=="h265") "hevc" else videoCodec)
-                .put("AudioCodec","aac").put("MaxAudioChannels","2")
-                .put("MinSegments",2).put("BreakOnNonKeyFrames",false)))
-        val body=JSONObject().put("UserId",config.userId).put("DeviceId",deviceId)
-            .put("MediaSourceId",request.mediaSourceId).put("AudioStreamIndex",selected)
-            .put("SubtitleStreamIndex",-1).put("StartTimeTicks",0)
-            .put("IsPlayback",true).put("AutoOpenLiveStream",false)
-            .put("EnableDirectPlay",false).put("EnableDirectStream",false).put("EnableTranscoding",true)
-            .put("AllowVideoStreamCopy",true).put("AllowAudioStreamCopy",false)
-            .put("MaxStreamingBitrate",200_000_000).put("DeviceProfile",profile)
-        val info=JSONObject(post("Items/${request.embyItemId}/PlaybackInfo",body))
-        if(info.text("ErrorCode")!=null) throw SourceException("服务器无法准备此音轨")
-        val source=info.optJSONArray("MediaSources")?.objects()
-            ?.firstOrNull {it.text("Id")==request.mediaSourceId}
-            ?: throw SourceException("服务器没有返回所选版本")
-        if(source.optBoolean("RequiresOpening")) throw SourceException("此媒体源需要打开专用会话")
-        val path=source.text("TranscodingUrl") ?: throw SourceException("服务器没有返回可播放地址")
-        val resolved=absolute(path)
-        require(HttpPolicy.isScoped(resolved,config.baseUrl)) {"播放地址不属于当前服务器"}
-        // Authenticate using the existing scoped header, never persist a token from the response URL.
-        val builder=resolved.toHttpUrl().newBuilder()
-        resolved.toHttpUrl().queryParameterNames.filter {it.equals("api_key",true) || it.equals("X-Emby-Token",true)}
-            .forEach {builder.removeAllQueryParameters(it)}
-        val session=info.text("PlaySessionId") ?: throw SourceException("服务器没有返回播放会话")
-        return request.copy(stableUrl=builder.build().toString(),mimeHint="application/x-mpegURL",fallbackUrl=null,
-            playSessionId=session,playMethod="Transcode",audioCompatibility=true,audioStreamIndex=selected,audioOrdinal=0)
-    }
     suspend fun searchSubtitles(itemId:String,sourceId:String,language:String):List<RemoteSubtitle> {
         require(language in setOf("chi","eng","fre","jpn","kor"))
         val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
