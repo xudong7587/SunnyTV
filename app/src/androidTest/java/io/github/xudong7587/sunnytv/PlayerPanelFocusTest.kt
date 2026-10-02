@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,8 +14,15 @@ import java.util.concurrent.TimeUnit
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class PlayerPanelFocusTest {
     @get:Rule val rule=createEmptyComposeRule()
+
+    private fun awaitFocus(node:SemanticsNodeInteraction) {
+        // Production restores focus on the next frame after the panel leaves composition.
+        rule.mainClock.advanceTimeBy(100)
+        rule.waitUntil(5_000) {node.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Focused]}
+    }
 
     @Test fun selectingSpeedAndDismissingPanelsRestoreTheirOpeningControl() {
         // A local response held before media bytes keeps preparation deterministic, without private media or services.
@@ -35,14 +43,28 @@ class PlayerPanelFocusTest {
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/fixture.mp4","焦点测试")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario->
+                // TV navigation starts with hardware keys; semantic clicks alone leave Android in touch mode.
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithText("1.5x").performClick()
+                awaitFocus(rule.onNodeWithTag("player:speed"))
                 rule.onNodeWithTag("player:speed").assertIsFocused().assertContentDescriptionEquals("倍速 1.5x")
+                rule.onNodeWithTag("player:speed").performKeyInput {pressKey(Key.DirectionUp)}
+                awaitFocus(rule.onNodeWithTag("player:progress"))
+                rule.onNodeWithTag("player:progress").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+                awaitFocus(rule.onNodeWithContentDescription("音频输出"))
+                rule.onNodeWithContentDescription("音频输出").assertIsFocused().performClick()
+                rule.onNodeWithText("原始声道（默认）").assertExists()
+                rule.onNodeWithTag("player:close").performClick()
+                awaitFocus(rule.onNodeWithContentDescription("音频输出"))
+                rule.onNodeWithContentDescription("音频输出").assertIsFocused()
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithTag("player:close").performClick()
+                awaitFocus(rule.onNodeWithTag("player:speed"))
                 rule.onNodeWithTag("player:speed").assertIsFocused()
                 rule.onNodeWithTag("player:info").performClick()
                 scenario.onActivity {it.onBackPressedDispatcher.onBackPressed()}
+                awaitFocus(rule.onNodeWithTag("player:info"))
                 rule.onNodeWithTag("player:info").assertIsFocused()
             }
         } finally {

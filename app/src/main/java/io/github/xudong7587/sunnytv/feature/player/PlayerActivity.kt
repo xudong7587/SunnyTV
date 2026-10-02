@@ -95,6 +95,7 @@ class PlayerActivity: ComponentActivity() {
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
     private var subtitleManuallySelected=false
+    private var audioOutputMaximum by mutableIntStateOf(0)
     private var audioManuallySelected=false
     private var routeSwitchJob:Job?=null
     private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
@@ -136,6 +137,7 @@ class PlayerActivity: ComponentActivity() {
         // Activity recreation and resume must not count time spent in the background.
         originalLaunch = savedInstanceState == null
         lastPosition=savedInstanceState?.getLong("position",request.startMs) ?: request.startMs
+        audioOutputMaximum=savedInstanceState?.getInt("audioOutputMaximum",0) ?: 0
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window,false)
         WindowInsetsControllerCompat(window,window.decorView).apply {
@@ -172,7 +174,7 @@ class PlayerActivity: ComponentActivity() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
     }
-    override fun onSaveInstanceState(outState: Bundle) {outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
     override fun onStop() {
         routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
@@ -221,7 +223,7 @@ class PlayerActivity: ComponentActivity() {
                     return PlaybackRecovery.RETRY_DELAY_MS
                 }
             })
-        val p=ExoPlayer.Builder(this,DefaultRenderersFactory(this).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
+        val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
             .setLoadControl(DefaultLoadControl.Builder()
@@ -433,14 +435,15 @@ class PlayerActivity: ComponentActivity() {
             finally {switchingEpisode=false}
         }
     }
-    private fun replacePlayback(next:PlaybackRequest) {
+    private fun replacePlayback(next:PlaybackRequest,preserveRoute:Boolean=false) {
         val old=player
         lastPosition=old?.currentPosition ?: lastPosition
         resumePlayWhenReady=old?.playWhenReady ?: resumePlayWhenReady
         reporter?.close(lastPosition,rendered);reporter=null
         progressJob?.cancel();progressJob=null
         old?.release();player=null
-        request=next;useFallbackRoute=false;fallbackRouteUsed=false
+        request=next
+        if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
         createPlayer()
     }
     private fun applyDownloadedSubtitle(track:MediaTrack) {
@@ -504,6 +507,7 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun PlayerContent() {
         val context=mediaContext
         val progressFocus=remember {FocusRequester()}
+        val audioOutputFocus=remember {FocusRequester()}
         val subtitleInk=SunnyColors.Text.toArgb()
         val subtitleAccent=SunnyColors.Accent.toArgb()
         val resolvedSubtitleFont by produceState<android.graphics.Typeface?>(null,settings.subtitleFontChoice,settings.customFontFile) {
@@ -621,9 +625,11 @@ class PlayerActivity: ComponentActivity() {
                         .padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
             }
 
-            if(controls && panel.isBlank() && error.isBlank() && !tvPlayback) {
+            if(controls && panel.isBlank() && error.isBlank()) {
                 Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
+                    PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=progressFocus},
+                        initial=returnControl=="audio-output",showFocusLabel=true) {returnControl="audio-output";panel="audio-output"}
+                    if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
                         orientationLocked=!orientationLocked
                         if(orientationLocked) {manualOrientation=fixedOrientation();requestedOrientation=manualOrientation}
                         else {val size=player?.videoSize;requestedOrientation=playerOrientation(false,size?.width ?: 0,size?.height ?: 0,size?.pixelWidthHeightRatio ?: 1f)}
@@ -636,17 +642,16 @@ class PlayerActivity: ComponentActivity() {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .focusProperties {up=progressFocus}
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
                     .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
-                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus),
+                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus).focusProperties {up=audioOutputFocus},
                         onSeekBy={seek(it)},onSeekTo={target->player?.seekTo(target);position=target})
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                         Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
                         Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
-                    Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                    Row((if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())).focusProperties {up=progressFocus},verticalAlignment=Alignment.CenterVertically) {
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
                             PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
@@ -698,12 +703,30 @@ class PlayerActivity: ComponentActivity() {
             "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId}?.let {config->
                 SubtitleSearchDialog(app.emby(config),app.store,item,request.mediaSourceId,{panel=""}) {applyDownloadedSubtitle(it)}
             }}
+            "audio-output" -> AudioOutputPanel()
             "audio","subtitles" -> TrackPanel()
             "chapters" -> ChapterPanel()
             "cast" -> CastPanel()
             "sleep" -> SleepPanel()
             "speed" -> SpeedPanel()
             "info" -> InfoPanel()
+        }
+    }
+    @Composable private fun AudioOutputPanel() {
+        PlayerSheet("音频输出",{panel=""}) {
+            listOf(0 to "原始声道（默认）",2 to "双声道 · 电视扬声器",6 to "5.1 声道").forEach {(maximum,label)->
+                PlayerOption(label,selected=audioOutputMaximum==maximum) {
+                    if(audioOutputMaximum!=maximum) {
+                        // Preserve chosen tracks, subtitles, speed and playback position across a sink rebuild.
+                        val parameters=player?.trackSelectionParameters
+                        audioOutputMaximum=maximum
+                        replacePlayback(request,preserveRoute=true)
+                        parameters?.let {player?.trackSelectionParameters=it}
+                    }
+                    panel=""
+                }
+            }
+            Text("只合并超出所选数量的声道；不会把双声道扩成 5.1。",color=Color.White.copy(.7f),fontSize=13.sp)
         }
     }
     @Composable private fun SpeedPanel() {

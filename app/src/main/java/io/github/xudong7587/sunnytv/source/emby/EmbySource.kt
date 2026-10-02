@@ -11,6 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /** All Emby URL building and DTO interpretation stays out of UI. User-token access only. */
 class EmbySource(val config: SourceConfig, private val http: SafeHttp, private val deviceId: String) {
@@ -244,8 +245,9 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
             .addPathSegments("RemoteSearch/Subtitles").addPathSegment(subtitle.id)
             .addQueryParameter("MediaSourceId",sourceId).build()
-        val raw=client.bytes(Request.Builder().url(endpoint).post(ByteArray(0).toRequestBody(null)).build()).toString(Charsets.UTF_8)
-        return raw.takeIf {it.isNotBlank()}?.let {JSONObject(it).optInt("NewIndex",-1)} ?: -1
+        val raw=client.newBuilder().readTimeout(90,TimeUnit.SECONDS).callTimeout(120,TimeUnit.SECONDS).build()
+            .bytes(Request.Builder().url(endpoint).post("{}".toRequestBody(JSON)).build()).toString(Charsets.UTF_8)
+        return runCatching {JSONObject(raw.trim().removePrefix("\uFEFF")).optInt("NewIndex",-1)}.getOrDefault(-1)
     }
     suspend fun ensureSeriesSubtitle(item:MediaEntry,choice:SeriesSubtitleChoice,versionId:String=""):MediaTrack? {
         val current=item(item.id)
@@ -254,17 +256,29 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         tracks.firstOrNull {it.type=="Subtitle" && it.external && subtitleLanguageMatches(choice.language,it.language)}?.let {return it}
         val result=searchSubtitles(item.id,version?.id.orEmpty(),choice.language)
             .firstOrNull {it.provider==choice.provider && it.format.equals(choice.format,true) && it.hashMatch} ?: return null
-        val index=downloadSubtitle(item.id,version?.id.orEmpty(),result)
-        return downloadedSubtitle(item.id,version?.id.orEmpty(),index)
+        return downloadAndSelectSubtitle(item.id,version?.id.orEmpty(),result)
     }
-    suspend fun downloadedSubtitle(itemId:String,sourceId:String,index:Int):MediaTrack? {
-        repeat(5) {
+    suspend fun downloadAndSelectSubtitle(itemId:String,sourceId:String,subtitle:RemoteSubtitle):MediaTrack? {
+        val before=item(itemId)
+        val version=before.versions.firstOrNull {it.id==sourceId} ?: before.versions.firstOrNull()
+        val resolvedSource=version?.id ?: sourceId
+        if(resolvedSource.isBlank()) throw SourceException("无法确定要下载字幕的媒体版本")
+        val previous=(version?.tracks ?: before.tracks).filter {it.type=="Subtitle"}.map {it.index}.toSet()
+        val index=downloadSubtitle(itemId,resolvedSource,subtitle)
+        return downloadedSubtitle(itemId,resolvedSource,index,previous,subtitle.language)
+    }
+    suspend fun downloadedSubtitle(itemId:String,sourceId:String,index:Int,
+        previousIndices:Set<Int> = emptySet(),language:String=""):MediaTrack? = withTimeoutOrNull(20_000) {
+        repeat(20) {
             val updated=item(itemId)
             val tracks=updated.versions.firstOrNull {it.id==sourceId}?.tracks ?: updated.tracks
-            tracks.firstOrNull {it.type=="Subtitle" && it.index==index}?.let {return it}
-            delay(400)
+            if(index>=0) tracks.firstOrNull {it.type=="Subtitle" && it.index==index}?.let {return@withTimeoutOrNull it}
+            else tracks.filter {it.type=="Subtitle" && it.external && it.index !in previousIndices &&
+                (language.isBlank() || subtitleLanguageMatches(language,it.language))}
+                .singleOrNull()?.let {return@withTimeoutOrNull it}
+            delay(500)
         }
-        return null
+        null
     }
     private fun subtitleLanguageMatches(language:String,actual:String)=when(language) {
         "chi"->actual.lowercase() in setOf("chi","zho","zh","zh-hans","zh-hant")
