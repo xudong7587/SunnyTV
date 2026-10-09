@@ -29,6 +29,26 @@ class Dev34PlaybackTest {
             assertEquals("source",download.requestUrl!!.queryParameter("MediaSourceId"))
         }
     }
+    @Test fun successfulEmptyDownloadResponseFindsNewExternalTrack()=runBlocking {
+        MockWebServer().use {server->
+            server.enqueue(MockResponse().setBody("""{"Id":"film","Name":"test","Type":"Movie","MediaSources":[{"Id":"source","MediaStreams":[]}]}"""))
+            server.enqueue(MockResponse().setResponseCode(204))
+            server.enqueue(MockResponse().setBody("""{"Id":"film","Name":"test","Type":"Movie","MediaSources":[{"Id":"source","MediaStreams":[{"Index":7,"Type":"Subtitle","IsExternal":true,"Codec":"srt","Language":"chi"}]}]}"""))
+            val result=source(server).downloadAndSelectSubtitle("film","source",RemoteSubtitle("id","subtitle","provider","chi","srt",false))
+            assertEquals(7,result?.index)
+            server.takeRequest()
+            assertEquals("POST",server.takeRequest().method)
+            assertEquals("GET",server.takeRequest().method)
+        }
+    }
+    @Test fun permissionFailureRetainsActualHttpCode()=runBlocking {
+        MockWebServer().use {server->
+            server.enqueue(MockResponse().setResponseCode(403))
+            try {source(server).downloadSubtitle("film","source",RemoteSubtitle("id","subtitle","provider","chi","srt",false));fail("expected refusal")}
+            catch(e:Exception) {assertTrue(e.message.orEmpty().contains("HTTP 403"))}
+            assertEquals(1,server.requestCount)
+        }
+    }
     @Test fun playbackCarriesAudioIndexAndStableExtractedSubtitleIdentity()=runBlocking {
         MockWebServer().use {server->
             server.enqueue(MockResponse().setBody("""{"PlaySessionId":"session","MediaSources":[{"Id":"version","Container":"mkv","SupportsDirectStream":true,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":1,"Type":"Audio","Language":"eng","Codec":"eac3"},{"Index":2,"Type":"Audio","Language":"fre","Codec":"eac3"},{"Index":3,"Type":"Subtitle","Codec":"srt","IsTextSubtitleStream":true,"SupportsExternalStream":true}]}]}"""))

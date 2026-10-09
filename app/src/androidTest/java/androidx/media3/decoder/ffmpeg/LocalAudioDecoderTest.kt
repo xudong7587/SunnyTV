@@ -17,6 +17,29 @@ class LocalAudioDecoderTest {
     }
     @Test fun eac3SixChannelsDecodeToNonSilentPcm() = decode("tone.eac3",MimeTypes.AUDIO_E_AC3,6)
     @Test fun dtsSixChannelsDecodeToNonSilentPcm() = decode("tone.dts",MimeTypes.AUDIO_DTS,6)
+    @Test fun centerOnlySixAndEightChannelsReachBothStereoSpeakers() {
+        for(channels in listOf(3,5,6,7,8)) {
+            val processor=io.github.xudong7587.sunnytv.feature.player.AudioOutputMixing.processor(2)
+            val format=processor.configure(androidx.media3.common.audio.AudioProcessor.AudioFormat(48000,channels,androidx.media3.common.C.ENCODING_PCM_16BIT))
+            assertEquals(2,format.channelCount)
+            processor.flush()
+            val input=java.nio.ByteBuffer.allocateDirect(channels*2).order(java.nio.ByteOrder.nativeOrder())
+            repeat(channels) {input.putShort(if(it==2) 12000.toShort() else 0.toShort())};input.flip()
+            processor.queueInput(input)
+            val output=processor.output.order(java.nio.ByteOrder.nativeOrder())
+            assertEquals(4,output.remaining())
+            assertTrue("center lost from left",output.short>0)
+            assertTrue("center lost from right",output.short>0)
+            processor.reset()
+        }
+    }
+    @Test fun fivePointOnePreservesCenterAndStereoIsNotUpmixed() {
+        val matrix=io.github.xudong7587.sunnytv.feature.player.AudioOutputMixing.matrix(8,6)
+        assertTrue(matrix.getMixingCoefficient(2,2)>0)
+        val stereo=io.github.xudong7587.sunnytv.feature.player.AudioOutputMixing.matrix(2,6)
+        assertEquals(2,stereo.outputChannelCount)
+        assertTrue(stereo.isIdentity)
+    }
     private fun decode(asset:String,mime:String,channels:Int) {
         val packet=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
         val decoder=FfmpegAudioDecoder(Format.Builder().setSampleMimeType(mime).setChannelCount(channels)

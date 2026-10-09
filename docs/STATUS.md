@@ -1,3 +1,13 @@
+# 2026-10-08 对齐 main 后继续转码开发（未发布）
+
+开发入口为 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/transcode-main-alignment`，基线 `origin/main` @ `5f7ca4c`（dev34.3，versionCode 37）。原 SunnyTV 工作区的未提交开发覆盖层未修改。
+
+在最新 main 上整合原 dev33 的清晰度菜单、MediaIndex API 客户端和 HLS VOD 时间轴；保留 Media3 1.9.4 官方 FFmpeg 本地音频解码优先渲染器、原画精确音轨选择、字幕搜索下载和片尾修复。替换播放请求时释放转码会话并重新识别当前来源，避免沿用旧请求的播放令牌。转码后的音轨不套用原片的音轨序号。
+
+正常构建不设内网测试 origin；仅明确设置 `mediaindexTranscodeTestOrigin` 时覆盖转码 API 地址。此次未改 NAS 部署、升级目录、发行版本或 GitHub。MediaIndex 转码工作区同步至 `github/main` @ `dbc4f2c`（v0.7.37），保留全部转码改动，无数据库变更。
+
+验证完成：Gradle testDebugUnitTest、lintDebug、assembleDebug通过；JUnit93项无失败，核心契约172项通过；lint为0错误/32警告。调试APK核验四种ABI的FFmpeg JNI及两份许可证。实体设备播放、NAS新版本联调和发布未执行。 MediaIndex转码定向28项通过。
+
 # 2026-09-30 当前版本：dev32
 
 已基于公开dev29增量加入方向锁定与WebDAV实验升级，取消dev28车联和手动旋转。源码、功能、验证结果见 [RELEASE-dev32](RELEASE-dev32.md)，变更列表仅放 [CHANGELOG](../CHANGELOG.md)。本地核心172/172、JUnit85/85、Android定向5/5，debug/release lint各0错误/31警告；旧完整TV失败仍保留，实体在线升级待反馈。
@@ -257,3 +267,29 @@ APK 已生成并下载，本机 SHA-256 与 CI 一致。详见 [BUILD-01.md](BUI
 ## 不变约束
 
 不改 MediaIndex；不让播放器执行 NAS 或网盘删除/移动；不嵌入账号、个人地址、网盘 Cookie 或签名凭据。身份信息仅由用户在本机/应用设置输入。内嵌初始化源码排除评审海报及原始截图；发布前还要确定原创代码许可证、签名与依赖声明。
+# 2026-10-08 播放优化开发进度（未发布）
+
+当前集成工作区以公开 `v0.1.0-dev34.4`（`0db697d`）为基线，保留本地 FFmpeg 音频解码及音频输出合并功能。
+新增服务端声明的分辨率 / 码率档位，旧 worker 保留原分辨率选择；请求 HLS VOD，原画仍走原播放入口。
+增加 NAS 原片测速、缓存不足估算提示及暂停预读请求；客户端另用实际 Media3 传输样本提示低码率选择。
+演员区域 Down 显式滚动至推荐区，推荐未加载时也可滚动到底部；新增 Android 界面回归测试。
+按用户本轮明确要求增加 GitHub 官方发行 WebView，限本仓库页面，下载走受控传输并校验哈希、包名、较新版本及原签名；安装由系统确认。现有原生页面不变。
+GitHub 发行中含预发布版本，因此入口使用 releases 列表，避免 latest 忽略最新开发版。
+本地编译、单元测试与 lint 已执行；没有连接电视 / Android 设备，界面测试只编译，未实机执行。
+未覆盖 GitHub 既有版本、未同步 NAS 升级目录、未发布；本地 APK 保留基线版本，只作编译验证，不能作为同版本正式更新分发。
+
+## 2026-10-08 USB 手机生产测试包
+
+用户授权后构建 dev35（versionCode 39）release，沿用现有签名和安装 ID；已核对连接手机 dev34.4 证书一致，ADB install -r 成功，dumpsys 确认 dev35，am start 成功。没有卸载或清除应用数据。安装包签名及发行内容检查通过，并通过标准发布脚本同步 Z:\V1 Tools\SunnyTV-updata，latest.json 指向 dev35。未发布 GitHub SunnyTV 版本，电视焦点与 NAS 播放仍待实机验证。
+
+dev35.1（versionCode 40）按用户反馈把清晰度改为圆角方形 HD 按钮，与圆形画面裁切按钮分开。修复分辨率@码率 ID 在 OSD 标签查找时异常，新增标签回归测试；单元测试及 release 构建通过。覆盖安装、签名/发行检查和升级目录同步见实际命令输出。
+
+2026-10-08 dev35.2（code41）已签名验证、发行检查、单元测试、release构建并USB覆盖安装成功，版本核对成功。升级目录 latest.json 已指向 dev35.2。画质菜单只显示原画和分辨率@码率选项，旧接口ID保留兼容；按钮恢复统一圆形，按Media3实际视频尺寸显示8K/4K/2K/1K/0.75K/SD，非按用户选择目标虚报分辨率。字幕烧录由MediaIndex插件执行器负责；客户端不再单独绘制转码轨道字幕。
+
+2026-10-09 dev35.4（code43）：已完成单元测试和release编译，沿用既有证书和包名，签名/发行校验通过。升级目录latest.json指向SunnyTV-v0.1.0-dev35.4-b41e34eb2d67.apk。此前dev35.3已发布，保留其不可变文件；没有覆盖同版本内容。新增已知服务端格式/GPU/字幕错误提示，HLS分片504最多重试两次，保持同一会话而不回退原片。原画恢复策略不变。ADB当前无设备，因此本次没有宣称USB安装完成；电视实际播放验收待用户。
+
+2026-10-09 dev35.5（code44）：播放清晰度按钮改为仅跟随选择档位，显示原片／4K／2K／1080P／720P，不再由视频尺寸回调覆盖。release编译和单元测试通过；新增选择标签回归检查通过，签名与发行检查通过。升级目录 latest.json 已指向 SunnyTV-v0.1.0-dev35.5-b914a6282c6e.apk。未宣称手机或电视已安装或实机验收。
+
+2026-10-09 dev35.6（code45）：修复清晰度文字绘制后又进入 LineIcon 兜底、叠加十字图标的问题；质量按钮只保留选择档位文字。转码 HTTP 失败提示具体状态码，不显示 URL 或令牌。单元测试与 release 编译通过，沿用既有签名和包名；升级目录 latest.json 指向 SunnyTV-v0.1.0-dev35.6-2017d93dfa33.apk。未宣称设备已安装。
+
+2026-10-09 dev35.7（code46）：用户明确要求两仓 GitHub 全量更新，本轮开始提交本地转码、详情焦点及官方升级入口增量，新增独立 dev35.7 发布工作流；保留既有签名和音频解码验证，不替换历史 tag/asset。远程发布结果待工作流完成后追加。

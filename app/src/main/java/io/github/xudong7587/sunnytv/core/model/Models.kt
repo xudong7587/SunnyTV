@@ -66,7 +66,9 @@ data class PlaybackRequest(
     /** Set when the direct-play URL is chosen: the same item through Emby, used if the direct route fails. */
     , val fallbackUrl:String? = null,
     val audioOrdinal:Int = -1, val audioStreamIndex:Int = -1,
-    val sourceTracks:List<MediaTrack> = emptyList(), val audioCompatibility:Boolean=false
+    val sourceTracks:List<MediaTrack> = emptyList(), val audioCompatibility:Boolean=false,
+    /** Server-provided remote source retained when playback prefers Emby's route. */
+    val sourceMediaUrl:String? = null
 ) : Serializable
 
 data class RemoteSubtitle(val id:String,val name:String,val provider:String,val language:String,val format:String,val hashMatch:Boolean)

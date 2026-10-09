@@ -1,5 +1,7 @@
 package io.github.xudong7587.sunnytv.feature.player
 
+import io.github.xudong7587.sunnytv.BuildConfig
+
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -54,6 +56,7 @@ import okhttp3.Interceptor
 import java.util.concurrent.atomic.AtomicLong
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import io.github.xudong7587.sunnytv.source.transcode.TranscodeSource
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerActivity: ComponentActivity() {
@@ -83,8 +86,31 @@ class PlayerActivity: ComponentActivity() {
     private var fallbackRouteUsed=false
     private var progressJob: Job?=null
     private var reporter: PlaybackReporter? = null
+    private var reporterHasStarted = false
     private var resumePlayWhenReady = true
     private var reportFailures by mutableIntStateOf(0)
+    private var transcodeSourceRequest: PlaybackRequest? = null
+    private var cachedTranscodeSource: TranscodeSource? = null
+    private val transcodeSource: TranscodeSource?
+        get() {
+            if(transcodeSourceRequest !== request) {
+                cachedTranscodeSource=TranscodeSource.from(app.http,request.stableUrl,BuildConfig.MEDIAINDEX_TRANSCODE_TEST_ORIGIN)
+                    ?: request.sourceMediaUrl?.let {TranscodeSource.from(app.http,it,BuildConfig.MEDIAINDEX_TRANSCODE_TEST_ORIGIN)}
+                transcodeSourceRequest=request
+            }
+            return cachedTranscodeSource
+        }
+    private var quality by mutableStateOf("original")
+    private var qualityProfiles by mutableStateOf<List<String>>(emptyList())
+    private var qualityNotice by mutableStateOf("")
+    private var bufferNotice by mutableStateOf("")
+    private var clientNetworkNotice by mutableStateOf("")
+    private var qualitySwitching by mutableStateOf(false)
+    private var qualityJob: Job? = null
+    private var transcodeSession: TranscodeSource.Session? = null
+    private var transcodeOffset = 0L
+    private var transcodeDuration = 0L
+    private var transcodePausedPosition: Long? = null
     private var gestureActive by mutableStateOf(false)
     private var gestureNotice by mutableStateOf("")
     private var gestureStartPosition = 0L
@@ -95,6 +121,7 @@ class PlayerActivity: ComponentActivity() {
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
     private var subtitleManuallySelected=false
+    private var audioOutputMaximum by mutableIntStateOf(0)
     private var audioManuallySelected=false
     private var routeSwitchJob:Job?=null
     private var mediaContext by mutableStateOf<PlayerMediaContext?>(null)
@@ -136,6 +163,7 @@ class PlayerActivity: ComponentActivity() {
         // Activity recreation and resume must not count time spent in the background.
         originalLaunch = savedInstanceState == null
         lastPosition=savedInstanceState?.getLong("position",request.startMs) ?: request.startMs
+        audioOutputMaximum=savedInstanceState?.getInt("audioOutputMaximum",0) ?: 0
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window,false)
         WindowInsetsControllerCompat(window,window.decorView).apply {
@@ -167,23 +195,28 @@ class PlayerActivity: ComponentActivity() {
         if(controls && panel.isBlank() && error.isBlank()) controlInteractionSerial++
     }
 
-    override fun onStart() {super.onStart();if(::request.isInitialized && player==null) createPlayer()}
+    override fun onStart() {super.onStart();if(::request.isInitialized && player==null) {
+        if(quality=="original") createPlayer() else changeQuality(quality,lastPosition,resumePlayWhenReady)
+    }}
     override fun onResume() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
     }
-    override fun onSaveInstanceState(outState: Bundle) {outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",player?.currentPosition ?: lastPosition);outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+
     override fun onStop() {
         routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
-            lastPosition=p.currentPosition; app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
+            lastPosition=absolutePosition(); app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
             resumePlayWhenReady = p.playWhenReady
-            reporter?.close(lastPosition, rendered)
+            reporter?.close(lastPosition, reporterHasStarted)
             p.release()
         }
-        player=null; rendered=false; progressJob?.cancel(); reporter=null
+        player=null; rendered=false; progressJob?.cancel(); reporter=null;reporterHasStarted=false
         metadataJob?.cancel();metadataJob=null
         sleepJob?.cancel();sleepJob=null
+        qualityJob?.cancel();qualityJob=null
+        releaseTranscode()
         super.onStop()
     }
     private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
@@ -195,7 +228,7 @@ class PlayerActivity: ComponentActivity() {
         val started=SystemClock.elapsedRealtime()
         val firstHeader=AtomicLong(-1)
         // Video gets the longer first-byte budget; header scoping, TLS and redirect limits are identical.
-        val client=app.http.scopedClient(request.scope,playback=true).newBuilder()
+        val client=app.http.scopedClient(if(quality=="original") request.scope else null,playback=true).newBuilder()
             .addNetworkInterceptor(Interceptor {chain ->
                 val response=chain.proceed(chain.request())
                 firstHeader.compareAndSet(-1,SystemClock.elapsedRealtime()-started)
@@ -210,6 +243,14 @@ class PlayerActivity: ComponentActivity() {
             // before the first frame. Everything else stays fatal and keeps the explicit retry button.
             .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(PlaybackRecovery.MAX_AUTO_RETRIES) {
                 override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                    val httpCode = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
+                        .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                        .firstOrNull()?.responseCode
+                    if(quality!="original" && TranscodeSource.retryPendingSegment(httpCode,loadErrorInfo.errorCount,
+                            loadErrorInfo.loadEventInfo.uri.path?.endsWith(".ts")==true)) {
+                        window.decorView.post { if(error.isBlank()) status="服务器正在准备转码分片，请稍候" }
+                        return 1000L
+                    }
                     // With an unused server route available, switching route beats repeating a request
                     // that already timed out; the same-URL retry stays for sources without a fallback.
                     val allowed=!hasServerFallback() && PlaybackRecovery.shouldRetry(autoRetryAttempts,
@@ -221,7 +262,7 @@ class PlayerActivity: ComponentActivity() {
                     return PlaybackRecovery.RETRY_DELAY_MS
                 }
             })
-        val p=ExoPlayer.Builder(this,DefaultRenderersFactory(this).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
+        val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
             .setLoadControl(DefaultLoadControl.Builder()
@@ -248,8 +289,11 @@ class PlayerActivity: ComponentActivity() {
         val media=androidx.media3.common.MediaItem.Builder().setUri(currentPlaybackUrl())
             .setMediaId(request.localKey.ifBlank {"session"})
             .setMediaMetadata(MediaMetadata.Builder().setTitle(request.title).build())
-        request.mimeHint?.let {media.setMimeType(it)}
-        media.setSubtitleConfigurations(request.subtitles.map {sub ->
+        if(quality!="original") {
+            media.setMimeType(MimeTypes.APPLICATION_M3U8)
+            if(transcodeSession?.vod!=true) media.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(4000).build())
+        } else request.mimeHint?.let {media.setMimeType(it)}
+        media.setSubtitleConfigurations((if(quality=="original") request.subtitles else emptyList()).map {sub ->
             androidx.media3.common.MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
                 .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).setId(sub.id)
                 .setSelectionFlags(if(sub.isDefault) C.SELECTION_FLAG_DEFAULT else 0).build()
@@ -284,14 +328,14 @@ class PlayerActivity: ComponentActivity() {
                     return true
                 }
                 val audioOptions=tracks.groups.filter {it.type==C.TRACK_TYPE_AUDIO}.flatMap {g->(0 until g.length).map {g to it}}
-                if(!audioManuallySelected && !audioPreferenceApplied && request.audioOrdinal>=0 && audioOptions.isNotEmpty()) {
+                if(quality=="original" && !audioManuallySelected && !audioPreferenceApplied && request.audioOrdinal>=0 && audioOptions.isNotEmpty()) {
                     audioPreferenceApplied=true
                     val exact=audioOptions.getOrNull(request.audioOrdinal)
                     if(exact!=null && exact.first.isTrackSupported(exact.second)) {
                         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,false)
                             .setOverrideForType(TrackSelectionOverride(exact.first.mediaTrackGroup,exact.second)).build()
                     } else selectionNotice="无法播放所选音轨，请选择其他音轨"
-                } else if(!audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
+                } else if(quality=="original" && !audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
                     audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
                 }
                 if(!subtitleManuallySelected && !subtitlePreferenceApplied && (request.explicitSubtitle || request.subtitlePreference !in setOf("default","none"))) {
@@ -313,14 +357,25 @@ class PlayerActivity: ComponentActivity() {
             }
             override fun onIsPlayingChanged(isPlaying:Boolean) {
                 playing=isPlaying
-                if(rendered) reporter?.progress(p.currentPosition, !isPlaying)
+                if(rendered) reporter?.progress(absolutePosition(), !isPlaying)
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady:Boolean,reason:Int) {
+                if(quality=="original" || qualitySwitching) return
+                if(!playWhenReady && transcodePausedPosition==null) {
+                    pauseTranscode()
+                } else if(playWhenReady && transcodePausedPosition!=null) {
+                    val resumeAt=transcodePausedPosition!!
+                    if(transcodeSession?.vod==true) transcodePausedPosition=null
+                    else changeQuality(quality,resumeAt,true)
+                }
             }
             override fun onPlaybackStateChanged(playbackState:Int) {
                 status=when(playbackState) {Player.STATE_BUFFERING->"正在缓冲…";Player.STATE_ENDED->"播放结束";else->""}
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
+                if(playbackState==Player.STATE_READY && quality!="original" && !p.playWhenReady) pauseTranscode()
             }
             override fun onPlayerError(e:PlaybackException) {
-                if(!useFallbackRoute && !fallbackRouteUsed && hasServerFallback() &&
+                if(quality=="original" && !useFallbackRoute && !fallbackRouteUsed && hasServerFallback() &&
                     PlaybackRecovery.shouldUseServerFallback(e.errorCode,PlaybackFailure.causeNames(e))) {
                     // The television could not reach the STRM target itself (timeout, refused or a
                     // server-side error such as 409). Emby is on the same network as the source, so let
@@ -330,7 +385,7 @@ class PlayerActivity: ComponentActivity() {
                     lastPosition=player?.currentPosition?.coerceAtLeast(0) ?: lastPosition
                     resumePlayWhenReady=player?.playWhenReady ?: resumePlayWhenReady
                     progressJob?.cancel();progressJob=null
-                    reporter?.close(lastPosition,rendered);reporter=null
+                    reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false
                     val previous=player
                     player=null
                     window.decorView.post {
@@ -339,7 +394,7 @@ class PlayerActivity: ComponentActivity() {
                     }
                     return
                 }
-                if(!rendered && !mp4EditListFallbackUsed && PlaybackFailure.isMp4IndexFailure(e,request.mimeHint)) {
+                if(quality=="original" && !rendered && !mp4EditListFallbackUsed && PlaybackFailure.isMp4IndexFailure(e,request.mimeHint)) {
                     mp4EditListFallbackUsed=true
                     status="正在使用 MP4 兼容模式重试…"
                     error=""
@@ -357,11 +412,29 @@ class PlayerActivity: ComponentActivity() {
                 }
                 error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint,
                     mediaUrl=currentPlaybackUrl(),baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
+                if(quality!="original") {
+                    val httpCode=generateSequence(e as Throwable?) {it.cause}
+                        .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                        .firstOrNull()?.responseCode
+                    if(httpCode!=null) error="转码播放请求失败（HTTP $httpCode）\n$error"
+                }
                 app.store.savePlaybackDiagnostic(error)
                 controls=true
             }
         })
         p.addAnalyticsListener(object:AnalyticsListener {
+            private var measuredBytes=0L
+            private var measuredMs=0L
+            override fun onBandwidthEstimate(eventTime:AnalyticsListener.EventTime,totalLoadTimeMs:Int,totalBytesLoaded:Long,bitrateEstimate:Long) {
+                if(totalLoadTimeMs<=0 || totalBytesLoaded<=0) return
+                measuredBytes+=totalBytesLoaded;measuredMs+=totalLoadTimeMs
+                if(measuredBytes<2*1024*1024 || measuredMs<2000) return
+                val sourceRate=if(quality=="original") p.videoFormat?.bitrate?.toLong()?.takeIf {it>0}
+                    ?: mediaContext?.item?.versions?.firstOrNull {it.id==request.mediaSourceId}?.bitrate?.coerceAtLeast(0) ?: 0 else
+                    quality.substringAfter('@',"").toLongOrNull()?.times(1000000) ?: when(quality) {"4k"->15000000L;"1440p"->10000000L;"1080p"->8000000L;"720p"->4000000L;else->0L}
+                val actualRate=measuredBytes*8000/measuredMs
+                clientNetworkNotice=if(sourceRate>0 && actualRate<sourceRate) "播放器接收速度可能不足，建议在清晰度中选择低码率档位。" else ""
+            }
             override fun onRenderedFirstFrame(eventTime:AnalyticsListener.EventTime,output:Any,renderTimeMs:Long) {
                 if(!rendered) {
                     rendered=true
@@ -374,23 +447,26 @@ class PlayerActivity: ComponentActivity() {
                     totalStartupMs=timing.totalMs ?: -1
                     sourceStartupMs=timing.sourceMs ?: -1
                     headerMs=firstHeader.get()
-                    reporter?.start(p.currentPosition, !p.isPlaying)
+                    reporter?.start(absolutePosition(), !p.isPlaying)
+                    reporterHasStarted=reporter!=null
                 }
             }
         })
         startReporter()
         loadPlayerMetadata()
-        p.setMediaItem(media.build(),lastPosition);p.prepare();p.playWhenReady=resumePlayWhenReady
+        p.setMediaItem(media.build(),if(quality=="original" || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
             while(isActive) {
                 delay(500)
                 // Segment prompts also need position while the OSD is hidden.
-                position=p.currentPosition;duration=p.duration.coerceAtLeast(0)
+                position=absolutePosition();duration=if(quality=="original") p.duration.coerceAtLeast(0) else transcodeDuration
                 tick++
                 if(tick%20==0 && rendered) {
-                    reporter?.progress(p.currentPosition, !p.isPlaying)
-                    app.store.savePosition(request.localKey,p.currentPosition)
+                    reporter?.progress(position, !p.isPlaying)
+                    app.store.savePosition(request.localKey,position)
+                    transcodeSession?.let {session->runCatching {transcodeSource?.control(session)}}
+                    transcodeSession?.let {session->runCatching {bufferNotice=transcodeSource?.bufferNotice(session,position).orEmpty()}}
                 }
             }
         }
@@ -433,14 +509,19 @@ class PlayerActivity: ComponentActivity() {
             finally {switchingEpisode=false}
         }
     }
-    private fun replacePlayback(next:PlaybackRequest) {
+    private fun replacePlayback(next:PlaybackRequest,preserveRoute:Boolean=false) {
         val old=player
-        lastPosition=old?.currentPosition ?: lastPosition
+        lastPosition=absolutePosition()
         resumePlayWhenReady=old?.playWhenReady ?: resumePlayWhenReady
-        reporter?.close(lastPosition,rendered);reporter=null
+        reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false
         progressJob?.cancel();progressJob=null
         old?.release();player=null
-        request=next;useFallbackRoute=false;fallbackRouteUsed=false
+        if(!preserveRoute) {
+            qualityJob?.cancel();qualityJob=null;releaseTranscode()
+            quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
+        }
+        request=next
+        if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
         createPlayer()
     }
     private fun applyDownloadedSubtitle(track:MediaTrack) {
@@ -466,14 +547,15 @@ class PlayerActivity: ComponentActivity() {
 
     /** The route in use: the STRM's own URL first, Emby's server-side entry after a failed direct try. */
     private fun currentPlaybackUrl():String =
-        if(useFallbackRoute) request.fallbackUrl?.takeIf {it.isNotBlank()} ?: request.stableUrl else request.stableUrl
+        transcodeSession?.url ?: if(useFallbackRoute) request.fallbackUrl?.takeIf {it.isNotBlank()} ?: request.stableUrl else request.stableUrl
 
     /** True while this playback still has an unused Emby server route to try. */
     private fun hasServerFallback():Boolean =
         !useFallbackRoute && !request.fallbackUrl.isNullOrBlank() && request.fallbackUrl != request.stableUrl
 
     private fun startReporter() {
-        if (request.embyItemId.isBlank()) return
+        if (request.embyItemId.isBlank() || reporter!=null) return
+        reporterHasStarted=false
         reporter = PlaybackReporter(request,
             source = {
                 app.store.sources().firstOrNull { it.id == request.sourceId }?.let { app.emby(it) }
@@ -481,7 +563,78 @@ class PlayerActivity: ComponentActivity() {
             onFailure = { withContext(Dispatchers.Main) { reportFailures++ } }
         )
     }
-    private fun seek(delta:Long) {player?.let {it.seekTo(MediaLogic.seek(it.currentPosition,delta,it.duration))};position=player?.currentPosition ?: position}
+    private fun absolutePosition():Long = transcodePausedPosition ?: player?.let {
+        if(quality=="original") it.currentPosition.coerceAtLeast(0) else {
+            val windowOffset=if(it.currentTimeline.isEmpty) 0 else it.currentTimeline.getWindow(it.currentMediaItemIndex,Timeline.Window()).positionInFirstPeriodMs
+            (transcodeOffset+windowOffset+it.currentPosition.coerceAtLeast(0)).coerceAtMost(transcodeDuration)
+        }
+    } ?: lastPosition
+    private fun seekToAbsolute(target:Long) {
+        if(qualitySwitching) return
+        if(quality=="original" || transcodeSession?.vod==true) {
+            player?.seekTo(target);position=target
+            if(transcodePausedPosition!=null) transcodePausedPosition=target
+        }
+        else changeQuality(quality,target.coerceIn(0,(transcodeDuration-1).coerceAtLeast(0)),player?.playWhenReady ?: false)
+    }
+    private fun seek(delta:Long) {seekToAbsolute(MediaLogic.seek(absolutePosition(),delta,duration))}
+    private fun releaseTranscode() {
+        val session=transcodeSession ?: return
+        val source=transcodeSource
+        transcodeSession=null
+        // The bounded cleanup survives Activity.onStop; worker TTL is the crash fallback.
+        CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
+            try {withTimeout(5000) {source?.control(session,true)}} catch(_:Exception) {} finally {cancel()}
+        }
+    }
+    private fun pauseTranscode() {
+        if(transcodePausedPosition!=null) return
+        transcodePausedPosition=absolutePosition()
+        val session=transcodeSession ?: return
+        lifecycleScope.launch {
+            try {transcodeSource?.pause(session)} catch(e:CancellationException) {throw e} catch(_:Exception) {
+                qualityNotice="转码暂停未确认，继续播放时会重新建立会话"
+            }
+        }
+    }
+    private fun openQualityPanel() {
+        panel="quality";returnControl="quality";qualityNotice="正在检查转码服务…"
+        lifecycleScope.launch {
+            qualityProfiles=try {transcodeSource?.capabilities().orEmpty()} catch(e:CancellationException) {throw e} catch(_:Exception) {emptyList()}
+            qualityNotice=if(qualityProfiles.isEmpty()) "此入口未提供可用的转码服务，仍可选择原画" else "高于原画的选项不会放大画面"
+        }
+    }
+    private fun changeQuality(next:String,target:Long=absolutePosition(),play:Boolean=player?.playWhenReady ?: resumePlayWhenReady) {
+        if(qualitySwitching) return
+        qualityJob=lifecycleScope.launch {
+            qualitySwitching=true;controls=true;panel="";status="正在切换清晰度…";error=""
+            val source=transcodeSource
+            val previous=transcodeSession
+            transcodeSession=null
+            lastPosition=target;resumePlayWhenReady=play
+            bufferNotice=""
+            clientNetworkNotice=""
+            // Quality changes are one viewing session, not an Emby stop/start pair.
+            reporter?.progress(target,!play);progressJob?.cancel()
+            player?.release();player=null;rendered=false
+            try {
+                if(previous!=null) source?.control(previous,true)
+                transcodePausedPosition=null
+                if(next=="original") {
+                    quality="original";transcodeOffset=0;transcodeDuration=0;createPlayer()
+                } else {
+                    val session=source?.create(next,target) ?: throw IllegalStateException()
+                    transcodeSession=session;transcodeOffset=if(session.vod) 0 else session.startMs;transcodeDuration=session.durationMs
+                    quality=next;useFallbackRoute=false
+                    createPlayer()
+                }
+            } catch(e:CancellationException) {throw e}
+            catch(_:Exception) {
+                quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
+                error="清晰度切换失败，可选择原画或稍后重试";controls=true
+            } finally {qualitySwitching=false}
+        }
+    }
     override fun onKeyDown(keyCode:Int, event:KeyEvent):Boolean {
         if(event.action==KeyEvent.ACTION_DOWN) {
             when(event.keyCode) {
@@ -504,6 +657,7 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun PlayerContent() {
         val context=mediaContext
         val progressFocus=remember {FocusRequester()}
+        val audioOutputFocus=remember {FocusRequester()}
         val subtitleInk=SunnyColors.Text.toArgb()
         val subtitleAccent=SunnyColors.Accent.toArgb()
         val resolvedSubtitleFont by produceState<android.graphics.Typeface?>(null,settings.subtitleFontChoice,settings.customFontFile) {
@@ -542,7 +696,7 @@ class PlayerActivity: ComponentActivity() {
                     player?.let {p->
                         if(region==1) {
                             if(p.isPlaying) {p.pause();gestureNotice="已暂停"} else {p.play();gestureNotice="继续播放"}
-                        } else if(p.isCurrentMediaItemSeekable && p.duration>0) {
+                        } else if(duration>0 && (quality!="original" || p.isCurrentMediaItemSeekable)) {
                             seek(if(region==0) -30_000 else 30_000)
                             gestureNotice=if(region==0) "后退 30 秒" else "前进 30 秒"
                         } else gestureNotice="当前媒体暂不支持快进"
@@ -550,7 +704,7 @@ class PlayerActivity: ComponentActivity() {
                 },
                 onStart={
                     gestureActive=true;gestureSeekTarget=null
-                    gestureStartPosition=player?.currentPosition ?: 0
+                    gestureStartPosition=absolutePosition()
                     gestureStartBrightness=window.attributes.screenBrightness.takeIf {it>=0}
                         ?: (Settings.System.getInt(contentResolver,Settings.System.SCREEN_BRIGHTNESS,128)/255f)
                     gestureStartVolume=audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -569,15 +723,15 @@ class PlayerActivity: ComponentActivity() {
                             gestureNotice=if(audioManager.isVolumeFixed) "此设备音量固定" else "音量 ${level*100/max}%"
                         }
                         else -> player?.let {p->
-                            if(p.isCurrentMediaItemSeekable && p.duration>0) {
-                                gestureSeekTarget=PlayerGesturePolicy.seekTarget(gestureStartPosition,dx,p.duration)
-                                gestureNotice="跳转至 ${clock(gestureSeekTarget!!)} / ${clock(p.duration)}"
+                            if(duration>0 && (quality!="original" || p.isCurrentMediaItemSeekable)) {
+                                gestureSeekTarget=PlayerGesturePolicy.seekTarget(gestureStartPosition,dx,duration)
+                                gestureNotice="跳转至 ${clock(gestureSeekTarget!!)} / ${clock(duration)}"
                             } else gestureNotice="当前媒体暂不支持快进"
                         }
                     }
                 },
                 onEnd={commit->
-                    if(commit) gestureSeekTarget?.let {target->player?.seekTo(target);position=target}
+                    if(commit) gestureSeekTarget?.let {target->seekToAbsolute(target)}
                     gestureSeekTarget=null;gestureActive=false
                 })
 
@@ -594,13 +748,18 @@ class PlayerActivity: ComponentActivity() {
                     verticalArrangement=Arrangement.spacedBy(14.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                     Text(error,color=Color.White,fontSize=15.sp,lineHeight=23.sp)
                     if(!retryUsed) PlayerControl("重试此播放入口一次","repeat",initial=true) {
-                        retryUsed=true;lastPosition=player?.currentPosition ?: lastPosition
+                        retryUsed=true;lastPosition=absolutePosition()
+                        if(quality!="original") {
+                            changeQuality(quality,lastPosition,player?.playWhenReady ?: resumePlayWhenReady)
+                            return@PlayerControl
+                        }
                         // A manual retry also tries the other route once: direct failed, so ask Emby.
                         if(hasServerFallback()) useFallbackRoute=true
                         player?.release();player=null;progressJob?.cancel()
-                        reporter?.close(lastPosition,rendered);reporter=null;createPlayer()
+                        reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false;createPlayer()
                     }
                     PlayerControl("退出播放","exit",initial=retryUsed) {finish()}
+                    if(transcodeSource!=null) PlayerControl("选择清晰度","quality",badge=TranscodeSource.selectedQualityBadge(quality)) {openQualityPanel()}
                 }
             }
 
@@ -609,7 +768,7 @@ class PlayerActivity: ComponentActivity() {
 
             if(activeSkip!=null && rendered && error.isBlank() && panel.isBlank()) {
                 SkipSegmentPrompt(activeSkip,onSkip={
-                    player?.seekTo(activeSkip.endMs.coerceAtMost(duration.takeIf {it>0} ?: activeSkip.endMs))
+                    seekToAbsolute(activeSkip.endMs.coerceAtMost(duration.takeIf {it>0} ?: activeSkip.endMs))
                     dismissedSegments=dismissedSegments+activeSkip.id
                 },onDismiss={dismissedSegments=dismissedSegments+activeSkip.id},
                     modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
@@ -621,9 +780,11 @@ class PlayerActivity: ComponentActivity() {
                         .padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
             }
 
-            if(controls && panel.isBlank() && error.isBlank() && !tvPlayback) {
+            if(controls && panel.isBlank() && error.isBlank()) {
                 Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
+                    PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=progressFocus},
+                        initial=returnControl=="audio-output",showFocusLabel=true) {returnControl="audio-output";panel="audio-output"}
+                    if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
                         orientationLocked=!orientationLocked
                         if(orientationLocked) {manualOrientation=fixedOrientation();requestedOrientation=manualOrientation}
                         else {val size=player?.videoSize;requestedOrientation=playerOrientation(false,size?.width ?: 0,size?.height ?: 0,size?.pixelWidthHeightRatio ?: 1f)}
@@ -636,17 +797,20 @@ class PlayerActivity: ComponentActivity() {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .focusProperties {up=progressFocus}
                     .background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.97f))))
                     .padding(start=24.dp,end=24.dp,top=48.dp,bottom=14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     if(selectionNotice.isNotBlank()) Text(selectionNotice,color=Color.White.copy(.7f),fontSize=12.sp)
-                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus),
-                        onSeekBy={seek(it)},onSeekTo={target->player?.seekTo(target);position=target})
+                    if(bufferNotice.isNotBlank()) Text(bufferNotice,color=Color.White.copy(.85f),fontSize=12.sp)
+                    if(clientNetworkNotice.isNotBlank()) Text(clientNetworkNotice,color=Color.White.copy(.85f),fontSize=12.sp)
+
+                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus).focusProperties {up=audioOutputFocus},
+                        onSeekBy={seek(it)},onSeekTo={target->seekToAbsolute(target)})
+
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                         Text(clock(position),color=Color.White.copy(.72f),fontSize=12.sp)
                         Text(clock(duration),color=Color.White.copy(.72f),fontSize=12.sp)
                     }
-                    Row(if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
+                    Row((if(tvPlayback) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())).focusProperties {up=progressFocus},verticalAlignment=Alignment.CenterVertically) {
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             context?.previous?.let {previous->PlayerControl("上一集","previous") {switchEpisode(previous)}}
                             PlayerControl("后退 ${settings.seekStepSeconds} 秒","rewind") {seek(-settings.seekStepSeconds*1000L)}
@@ -659,8 +823,9 @@ class PlayerActivity: ComponentActivity() {
                         Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             PlayerControl("倍速 ${speedLabel(playbackSpeed)}","speed",initial=returnControl=="speed",badge=speedLabel(playbackSpeed)) {returnControl="speed";panel="speed"}
+                            if(transcodeSource!=null) PlayerControl("清晰度："+TranscodeSource.qualityLabel(quality),"quality",badge=TranscodeSource.selectedQualityBadge(quality),initial=returnControl=="quality") {openQualityPanel()}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
-                            if(request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty()) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
+                            if(quality=="original" && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
@@ -698,12 +863,44 @@ class PlayerActivity: ComponentActivity() {
             "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId}?.let {config->
                 SubtitleSearchDialog(app.emby(config),app.store,item,request.mediaSourceId,{panel=""}) {applyDownloadedSubtitle(it)}
             }}
+            "audio-output" -> AudioOutputPanel()
             "audio","subtitles" -> TrackPanel()
             "chapters" -> ChapterPanel()
             "cast" -> CastPanel()
             "sleep" -> SleepPanel()
             "speed" -> SpeedPanel()
+            "quality" -> QualityPanel()
             "info" -> InfoPanel()
+        }
+    }
+    @Composable private fun AudioOutputPanel() {
+        PlayerSheet("音频输出",{panel=""}) {
+            listOf(0 to "原始声道（默认）",2 to "双声道 · 电视扬声器",6 to "5.1 声道").forEach {(maximum,label)->
+                PlayerOption(label,selected=audioOutputMaximum==maximum) {
+                    if(audioOutputMaximum!=maximum) {
+                        // Preserve chosen tracks, subtitles, speed and playback position across a sink rebuild.
+                        val parameters=player?.trackSelectionParameters
+                        audioOutputMaximum=maximum
+                        replacePlayback(request,preserveRoute=true)
+                        parameters?.let {player?.trackSelectionParameters=it}
+                    }
+                    panel=""
+                }
+            }
+            Text("只合并超出所选数量的声道；不会把双声道扩成 5.1。",color=Color.White.copy(.7f),fontSize=13.sp)
+        }
+    }
+
+    @Composable private fun QualityPanel() {
+        PlayerSheet("清晰度",{panel=""}) {
+            Text(if(qualitySwitching) "正在切换…" else qualityNotice,color=Color.White.copy(.7f),fontSize=14.sp)
+            TranscodeSource.menuQualityOptions.filter { (id,_) -> id=="original" || id in qualityProfiles }.forEach {(id,label)->
+                PlayerOption(label,selected=quality==id) {
+                    if(!qualitySwitching && (id=="original" || id in qualityProfiles)) changeQuality(id)
+                    else qualityNotice="此清晰度暂不可用"
+                }
+            }
+
         }
     }
     @Composable private fun SpeedPanel() {
@@ -721,7 +918,7 @@ class PlayerActivity: ComponentActivity() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
-            if(type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
+            if(quality=="original" && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
@@ -760,7 +957,7 @@ class PlayerActivity: ComponentActivity() {
                 items(chapters.size) {index->
                     val chapter=chapters[index]
                     PlayerOption("${clock(chapter.startMs)}  ·  ${chapter.name}") {
-                        player?.seekTo(chapter.startMs);position=chapter.startMs;panel=""
+                        seekToAbsolute(chapter.startMs);panel=""
                     }
                 }
             }

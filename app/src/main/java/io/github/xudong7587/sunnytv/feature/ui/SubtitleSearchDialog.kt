@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
+import io.github.xudong7587.sunnytv.core.network.safeError
 import io.github.xudong7587.sunnytv.core.storage.ConfigStore
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
 import kotlinx.coroutines.*
@@ -32,12 +33,12 @@ import kotlinx.coroutines.*
         try {results=withContext(Dispatchers.IO) {api.searchSubtitles(item.id,sourceId,language)}
             if(results.isEmpty()) notice="未找到字幕，请确认 Emby 已安装并配置字幕插件，或更换语言。"
         } catch(e:CancellationException) {throw e}
-        catch(_:Exception) {notice="字幕搜索失败，请检查字幕插件及账号权限。"}
+        catch(e:Exception) {notice="字幕搜索失败：${safeError(e)}"}
         finally {busy=false}
     }
     when {
         language.isBlank()->SubtitleChoices("搜索字幕语言",listOf("chi" to "中文","eng" to "英语","fre" to "法语","jpn" to "日语","kor" to "韩语"),onDismiss) {language=it}
-        busy->SubtitleChoices("正在搜索或下载字幕，请稍候…",emptyList(),onDismiss) {}
+        busy->SubtitleChoices("正在请求 Emby 搜索或下载字幕，请稍候…",emptyList(),onDismiss) {}
         notice.isNotBlank()->SubtitleChoices(notice,listOf("retry" to "重新搜索"),onDismiss) {notice="";language=""}
         else->SubtitleChoices("Emby 字幕 · 下载后使用（剧集记住提供者与语言）",
             listOf("language" to "更换语言")+results.mapIndexed {i,s->i.toString() to
@@ -47,8 +48,7 @@ import kotlinx.coroutines.*
                     busy=true
                     try {
                         val track=withContext(Dispatchers.IO) {
-                            val index=api.downloadSubtitle(item.id,sourceId,result)
-                            api.downloadedSubtitle(item.id,sourceId,index)
+                            api.downloadAndSelectSubtitle(item.id,sourceId,result)
                         }
                         if(track==null) notice="字幕已下载，但 Emby 尚未返回新轨道，请返回详情页刷新后选择。"
                         else {
@@ -56,7 +56,7 @@ import kotlinx.coroutines.*
                             onDownloaded(track)
                         }
                     } catch(e:CancellationException) {throw e}
-                    catch(_:Exception) {notice="字幕下载失败，请检查插件及字幕保存权限。"}
+                    catch(e:Exception) {notice="字幕下载失败：${safeError(e)}"}
                     finally {busy=false}
                 }
             }
