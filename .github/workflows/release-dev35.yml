@@ -1,0 +1,110 @@
+name: Publish verified SunnyTV dev35.7
+on:
+  push:
+    branches: [codex/transcode-main-alignment]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sunnytv-dev35.7-release
+  cancel-in-progress: true
+jobs:
+  release:
+    if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/codex/transcode-main-alignment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Build pinned local audio decoders
+        run: |
+          set -euo pipefail
+          sdkmanager 'ndk;26.1.10909125' 'cmake;3.22.1'
+          bash scripts/build-audio-decoders.sh 2>&1 | tee audio-build.log
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          mkdir -p app/src/androidTest/assets
+          ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=48000' -ac 6 -c:a eac3 -b:a 768k -frames:a 1 -f eac3 app/src/androidTest/assets/tone.eac3
+          ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=48000' -ac 6 -c:a dca -strict -2 -b:a 1411200 -frames:a 1 -f dts app/src/androidTest/assets/tone.dts
+      - name: Select existing repository signing key
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$KEY_B64" || { echo 'Existing signing Secret missing; no replacement key permitted.' >&2; exit 1; }
+          mkdir -p "$HOME/.android" build-logs
+          printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          printf 'keystoreCertificateSha256=%s\n' "$certificate" > build-logs/keystore-certificate.txt
+          echo "SUNNYTV_SIGNING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+      - name: Build and verify release
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          chmod +x gradlew
+          python3 scripts/test-bootstrap.py
+          python3 scripts/check-project.py
+          python3 scripts/test-release-package.py
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug lintRelease assembleRelease assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
+          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code 46 --version-name 0.1.0-dev35.7
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate app/build/outputs/apk/release/app-release.apk --out build-logs/signing-validation.json
+      - name: Enable KVM for decoder verification
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify native audio decoding on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: tv_1080p
+          disable-animations: true
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
+      - name: Publish a new immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/codex/transcode-main-alignment" --jq .object.sha)
+          test "$current_sha" = "$GITHUB_SHA" || { echo 'Superseded build; refusing publication.'; exit 1; }
+          if gh release view v0.1.0-dev35.7 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release exists; refusing to replace it.' >&2; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin refs/tags/v0.1.0-dev35.7 >/dev/null 2>&1; then
+            echo 'Tag exists; refusing to replace it.' >&2; exit 1
+          fi
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v0.1.0-dev35.7.apk
+          cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
+          printf 'version=0.1.0-dev35.7\nversionCode=46\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\ndebuggable=false\nbundledUserFonts=none\ncarlink=false\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
+          git -C decoder-ffmpeg/src/main/jni/ffmpeg archive HEAD | gzip > dist/FFmpeg-n6.0.1-source.tar.gz
+          tar --exclude='decoder-ffmpeg/src/main/jni/ffmpeg' --exclude='*.so' --exclude='*.ninja_deps' --exclude='*.ninja_log' -czf dist/SunnyTV-dev35.7-native-relink.tar.gz decoder-ffmpeg/.cxx decoder-ffmpeg/src/main/jni decoder-ffmpeg/src/main/java decoder-ffmpeg/build.gradle.kts decoder-ffmpeg/LICENSE-APACHE-2.0 scripts/build-audio-decoders.sh
+          tar -czf dist/FFmpeg-dev35.7-static-libraries.tar.gz decoder-ffmpeg/src/main/jni/ffmpeg/android-libs
+          (cd dist && sha256sum *.apk *.json *.txt *.tar.gz > SHA256SUMS.txt)
+          gh release create v0.1.0-dev35.7 dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'SunnyTV v0.1.0-dev35.7 · 转码画质选择、播放优化与应用升级' --notes-file docs/RELEASE-dev35.7.md --prerelease --latest=false
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SunnyTV-dev35.7-validation
+          path: |
+            build-logs/
+            audio-build.log
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
+      - name: Remove ephemeral runner key copy
+        if: always()
+        run: rm -f "$HOME/.android/debug.keystore"
+

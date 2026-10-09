@@ -15,8 +15,12 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 38
-        versionName = "0.1.0-dev34.4"
+        versionCode = 46
+        versionName = "0.1.0-dev35.7"
+        val transcodeTestOrigin = providers.gradleProperty("mediaindexTranscodeTestOrigin").getOrElse("")
+        check(transcodeTestOrigin.matches(Regex("[A-Za-z0-9:/._-]*"))) { "Invalid transcode test origin" }
+        buildConfigField("String", "MEDIAINDEX_TRANSCODE_TEST_ORIGIN", "\"$transcodeTestOrigin\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

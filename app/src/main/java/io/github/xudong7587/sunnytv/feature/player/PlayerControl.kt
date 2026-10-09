@@ -84,7 +84,9 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
 @Composable private fun PlayerGlyph(icon:String,color:Color,badge:String?,emphasis:Boolean) {
     val glyphSize=if(emphasis) 30.dp else 25.dp
     Box(Modifier.size(glyphSize),contentAlignment=Alignment.Center) {
-        if(icon=="speed") {
+        if(icon=="quality") {
+            Text(badge ?: "原片",color=color,fontSize=if((badge?.length ?: 2)>3) 9.sp else 13.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
+        } else if(icon=="speed") {
             // Speed is intentionally just the value: no pill, gauge or decorative color block.
             Text(badge ?: "1.0x",color=color,fontSize=9.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
         } else Canvas(Modifier.fillMaxSize()) {
@@ -187,7 +189,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
         }
         if(icon=="rewind" || icon=="forward") {
             Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else if(icon !in setOf("lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","exit","rewind","forward")) {
+        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","exit","rewind","forward")) {
             LineIcon(icon,color,Modifier.size(18.dp))
         }
     }

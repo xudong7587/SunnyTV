@@ -213,7 +213,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             MediaLogic.mime(source.optString("Container")), scope, subtitles,
             item.id, sid, info.text("PlaySessionId").orEmpty(), if(direct) "DirectPlay" else "DirectStream",item.key,
             mediaLogo=item.logo,
-            fallbackUrl=serverStream.takeIf {direct && it != resolved},
+            fallbackUrl=serverStream.takeIf {direct && it != resolved},sourceMediaUrl=remote,
             audioStreamIndex=audioIndex,sourceTracks=streams.objects().map {parseTrack(it)},
             audioOrdinal=streams.objects().filter {it.optString("Type")=="Audio"}.indexOfFirst {it.optInt("Index")==audioIndex})
     }

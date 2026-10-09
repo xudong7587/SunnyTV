@@ -258,8 +258,10 @@ import kotlinx.coroutines.withContext
                         .then(if(lowerTarget=="people") upToActions else Modifier)) {
                         Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("演员表")}
                         StableLazyRow(modifier=Modifier.onPreviewKeyEvent {event->
-                            if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown && similar.isNotEmpty()) {
-                                moveContent(similarIndex,similarEntryFocus);true
+                            if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
+                                // Reveal the section even while recommendations are still loading.
+                                // Without a focusable recommendation, let the user scroll to the footer.
+                                moveContent(similarIndex,if(similar.isNotEmpty()) similarEntryFocus else null,alignTop=true);true
                             } else false
                         },horizontalArrangement=Arrangement.spacedBy(16.dp),reserveFocusSpace=false,
                             contentPadding=PaddingValues(start=detailRowGutter,end=detailRowGutter,

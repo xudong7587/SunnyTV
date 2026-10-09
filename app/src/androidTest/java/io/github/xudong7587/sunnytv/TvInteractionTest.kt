@@ -173,6 +173,24 @@ class TvInteractionTest {
         rule.waitForIdle()
         rule.onNodeWithTag("episode-layout:horizontal").assertIsFocused()
     }
+    @Test fun actorsMoveDownIntoOffscreenRecommendations() {
+        val movie=MediaEntry("actor-down","fixture","电影","Movie",people=listOf(MediaPerson("actor","演员","主演",null)))
+        val next=MediaEntry("recommendation","fixture","推荐电影","Movie")
+        rule.activityRule.scenario.onActivity {activity->
+            val model=AppModel(activity.application,false)
+            model.similar[movie.key]=listOf(next)
+            activity.setContentForTest {
+                CompositionLocalProvider(LocalAppModel provides model,LocalCompact provides false) {SunnyTheme {
+                    Box(Modifier.width(720.dp).height(360.dp)) {MediaDetailContent(movie) {_,_->}}
+                }}
+            }
+        }
+        rule.onNodeWithTag("detail:viewport").performScrollToIndex(3)
+        focus("person:fixture:actor")
+        rule.onNodeWithTag("person:fixture:actor").performKeyInput {pressKey(Key.DirectionDown)}
+        rule.waitForIdle()
+        rule.onNodeWithTag("shelf:相似推荐:fixture:recommendation").assertIsFocused().assertIsDisplayed()
+    }
     @Test fun offscreenAccentRowsMoveDownThroughPartialRowInThemeCategory() {
         rule.activityRule.scenario.onActivity {activity->
             val model=AppModel(activity.application,false)

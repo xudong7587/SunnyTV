@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 /** Read-only DAV update channel. Uses the same TLS, bounded redirects, scoped auth and UA as sources. */
 internal class UpdateTransport(address:String,user:String,password:String) {
     private val base=HttpPolicy.serverBase(address).toHttpUrl()
-    private val client=SafeHttp().scopedClient(HeaderScope(base.toString(),mapOf("Authorization" to Credentials.basic(user,password,Charsets.UTF_8))))
+    private val client=SafeHttp().scopedClient(if(user.isBlank() && password.isBlank()) null else HeaderScope(base.toString(),mapOf("Authorization" to Credentials.basic(user,password,Charsets.UTF_8))))
         .newBuilder().callTimeout(10,TimeUnit.MINUTES).build()
     suspend fun fetch(name:String,limit:Long,write:(ByteArray,Int)->Unit)=withContext(Dispatchers.IO) {
         require(name.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]*"))) {"升级文件名无效"}

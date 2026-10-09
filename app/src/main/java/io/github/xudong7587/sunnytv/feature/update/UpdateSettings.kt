@@ -69,6 +69,9 @@ import java.io.File
             } else UpdateButton("取消下载","update:cancel",Modifier.weight(1f)) {job?.cancel()}
         }
         if(saveFeedback.isNotBlank()) Text(saveFeedback,color=SunnyColors.Accent,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
+        UpdateButton("GitHub 官方发行 · 下载升级","update:github",Modifier.fillMaxWidth()) {
+            context.startActivity(android.content.Intent(context,GithubUpdateActivity::class.java))
+        }
         FocusTile("update:auto",Modifier.fillMaxWidth().semantics {
             role=Role.Switch;toggleableState=if(automatic) ToggleableState.On else ToggleableState.Off
             stateDescription=if(automatic) "开启" else "关闭"
