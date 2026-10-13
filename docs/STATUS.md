@@ -1,3 +1,9 @@
+# 2026-10-13 dev36：115 云端清晰度优先直连
+
+入口 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/115-cloud-playback`，基于 main `4546c74` / dev35.7。用户已授权配套 MediaIndex 0.8.4、SunnyTV dev36 Git 发行与 WebDAV 更新。已完成显式档位查询、默认 CDN 直连/手动 NAS 代理、独立云端 HLS 会话、切换失败保留播放及凭据隔离；实现、验证和已知限制见 [115 云端清晰度](115_CLOUD_PLAYBACK.md)。发行完成情况以 GitHub 及 WebDAV 回执为准。
+
+当前验证：纯 Kotlin 172/172，Gradle 单元测试 112/112，Android debug 编译成功，debug/release lint 各 0 错误/35 警告，API 30 模拟器定向 2/2；MediaIndex 1514 passed、2 skipped、58 subtests passed。Windows bootstrap 测试有 1 个反斜杠 ZIP 差异失败和 1 个 symlink 权限错误，未禁用；Ubuntu 发行 CI 继续执行该检查。登录探测过期，用户选择暂不登录；真实云端播放、TV 实机、NAS 服务部署未验证/执行。以下是历史记录。
+
 # 2026-10-08 对齐 main 后继续转码开发（未发布）
 
 开发入口为 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/transcode-main-alignment`，基线 `origin/main` @ `5f7ca4c`（dev34.3，versionCode 37）。原 SunnyTV 工作区的未提交开发覆盖层未修改。
