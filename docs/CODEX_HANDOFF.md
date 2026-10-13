@@ -1,3 +1,9 @@
+# 2026-10-13 当前开发入口
+
+继续 `D:/Documents/ChatGPT/SunnyTV-transcode-main` 的 `codex/115-cloud-playback`；配套网关在 `D:/Documents/MediaIndex前端/.worktrees/115-cloud-playback`，不要覆盖旧工作区。当前基线为 SunnyTV main `4546c74` 与 MediaIndex main `3409aa6`。详见 [实现、测试和待验收](115_CLOUD_PLAYBACK.md)。
+
+用户先要求完成代码和模拟测试、暂不登录，随后授权优先直连并发布两个项目 Git 版和 SunnyTV WebDAV 更新。当前版本为 dev36 / MediaIndex 0.8.4，最终发行状态查对应 GitHub Release。真实 115 验收仍需要有效登录态；不要擅自登录或部署 MediaIndex NAS 服务。已知限制包括真实响应尚未核实、会话进程内保存、签名流失效需手动重新选档；默认只有清单/密钥过 NAS，视频 CDN 直连，代理需要手动选择。旧发行/实机遗留问题仍保留，以下是历史记录。
+
 # 2026-09-30 dev32接续入口
 
 已基于公开dev29增量加入方向锁定与WebDAV实验升级，取消dev28车联和手动旋转。源码、功能、验证结果见 [RELEASE-dev32](RELEASE-dev32.md)，变更列表仅放 [CHANGELOG](../CHANGELOG.md)。本地核心172/172、JUnit85/85、Android定向5/5，debug/release lint各0错误/31警告；旧完整TV失败仍保留，实体在线升级待反馈。

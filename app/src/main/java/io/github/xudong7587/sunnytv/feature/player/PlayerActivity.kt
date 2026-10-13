@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import io.github.xudong7587.sunnytv.source.transcode.TranscodeSource
+import io.github.xudong7587.sunnytv.source.transcode.CloudVideoSource
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerActivity: ComponentActivity() {
@@ -100,6 +101,16 @@ class PlayerActivity: ComponentActivity() {
             }
             return cachedTranscodeSource
         }
+    private var cloudSession: CloudVideoSource.Session? = null
+    private var cloudVariants by mutableStateOf<List<CloudVideoSource.Variant>>(emptyList())
+    private var cloudNotice by mutableStateOf("")
+    private var discoveryJob: Job? = null
+    private var cloudDiscoveryJob: Job? = null
+    private var cloudLoading by mutableStateOf(false)
+    private var cloudDelivery by mutableStateOf("direct")
+    private val isCloudQuality get() = quality.startsWith("115:")
+    private fun qualityBadge() = if(isCloudQuality) cloudSession?.variant?.badge ?: "115" else TranscodeSource.selectedQualityBadge(quality)
+    private fun qualityLabel() = if(isCloudQuality) cloudSession?.variant?.label ?: "115 云端" else TranscodeSource.qualityLabel(quality)
     private var quality by mutableStateOf("original")
     private var qualityProfiles by mutableStateOf<List<String>>(emptyList())
     private var qualityNotice by mutableStateOf("")
@@ -216,6 +227,7 @@ class PlayerActivity: ComponentActivity() {
         metadataJob?.cancel();metadataJob=null
         sleepJob?.cancel();sleepJob=null
         qualityJob?.cancel();qualityJob=null
+        discoveryJob?.cancel();cloudDiscoveryJob?.cancel();cloudLoading=false
         releaseTranscode()
         super.onStop()
     }
@@ -228,7 +240,9 @@ class PlayerActivity: ComponentActivity() {
         val started=SystemClock.elapsedRealtime()
         val firstHeader=AtomicLong(-1)
         // Video gets the longer first-byte budget; header scoping, TLS and redirect limits are identical.
-        val client=app.http.scopedClient(if(quality=="original") request.scope else null,playback=true).newBuilder()
+        val transport=if(isCloudQuality) io.github.xudong7587.sunnytv.core.network.CloudPlaybackTransport.client(app.http,cloudSession!!.url,request.scope,request.subtitles.map {it.url})
+            else app.http.scopedClient(if(quality=="original") request.scope else null,playback=true)
+        val client=transport.newBuilder()
             .addNetworkInterceptor(Interceptor {chain ->
                 val response=chain.proceed(chain.request())
                 firstHeader.compareAndSet(-1,SystemClock.elapsedRealtime()-started)
@@ -246,7 +260,7 @@ class PlayerActivity: ComponentActivity() {
                     val httpCode = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
                         .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                         .firstOrNull()?.responseCode
-                    if(quality!="original" && TranscodeSource.retryPendingSegment(httpCode,loadErrorInfo.errorCount,
+                    if(quality!="original" && !isCloudQuality && TranscodeSource.retryPendingSegment(httpCode,loadErrorInfo.errorCount,
                             loadErrorInfo.loadEventInfo.uri.path?.endsWith(".ts")==true)) {
                         window.decorView.post { if(error.isBlank()) status="服务器正在准备转码分片，请稍候" }
                         return 1000L
@@ -291,9 +305,9 @@ class PlayerActivity: ComponentActivity() {
             .setMediaMetadata(MediaMetadata.Builder().setTitle(request.title).build())
         if(quality!="original") {
             media.setMimeType(MimeTypes.APPLICATION_M3U8)
-            if(transcodeSession?.vod!=true) media.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(4000).build())
+            if(!isCloudQuality && transcodeSession?.vod!=true) media.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(4000).build())
         } else request.mimeHint?.let {media.setMimeType(it)}
-        media.setSubtitleConfigurations((if(quality=="original") request.subtitles else emptyList()).map {sub ->
+        media.setSubtitleConfigurations((if(quality=="original" || isCloudQuality) request.subtitles else emptyList()).map {sub ->
             androidx.media3.common.MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
                 .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).setId(sub.id)
                 .setSelectionFlags(if(sub.isDefault) C.SELECTION_FLAG_DEFAULT else 0).build()
@@ -360,7 +374,7 @@ class PlayerActivity: ComponentActivity() {
                 if(rendered) reporter?.progress(absolutePosition(), !isPlaying)
             }
             override fun onPlayWhenReadyChanged(playWhenReady:Boolean,reason:Int) {
-                if(quality=="original" || qualitySwitching) return
+                if(quality=="original" || isCloudQuality || qualitySwitching) return
                 if(!playWhenReady && transcodePausedPosition==null) {
                     pauseTranscode()
                 } else if(playWhenReady && transcodePausedPosition!=null) {
@@ -372,7 +386,7 @@ class PlayerActivity: ComponentActivity() {
             override fun onPlaybackStateChanged(playbackState:Int) {
                 status=when(playbackState) {Player.STATE_BUFFERING->"正在缓冲…";Player.STATE_ENDED->"播放结束";else->""}
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
-                if(playbackState==Player.STATE_READY && quality!="original" && !p.playWhenReady) pauseTranscode()
+                if(playbackState==Player.STATE_READY && quality!="original" && !isCloudQuality && !p.playWhenReady) pauseTranscode()
             }
             override fun onPlayerError(e:PlaybackException) {
                 if(quality=="original" && !useFallbackRoute && !fallbackRouteUsed && hasServerFallback() &&
@@ -410,13 +424,13 @@ class PlayerActivity: ComponentActivity() {
                     }
                     return
                 }
-                error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",request.mimeHint,
+                error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",if(quality=="original") request.mimeHint else MimeTypes.APPLICATION_M3U8,
                     mediaUrl=currentPlaybackUrl(),baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
                 if(quality!="original") {
                     val httpCode=generateSequence(e as Throwable?) {it.cause}
                         .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                         .firstOrNull()?.responseCode
-                    if(httpCode!=null) error="转码播放请求失败（HTTP $httpCode）\n$error"
+                    if(httpCode!=null) error=(if(isCloudQuality) "115 云端播放请求失败，可重新选择清晰度或切换连接方式" else "转码播放请求失败")+"（HTTP $httpCode）\n$error"
                 }
                 app.store.savePlaybackDiagnostic(error)
                 controls=true
@@ -429,7 +443,7 @@ class PlayerActivity: ComponentActivity() {
                 if(totalLoadTimeMs<=0 || totalBytesLoaded<=0) return
                 measuredBytes+=totalBytesLoaded;measuredMs+=totalLoadTimeMs
                 if(measuredBytes<2*1024*1024 || measuredMs<2000) return
-                val sourceRate=if(quality=="original") p.videoFormat?.bitrate?.toLong()?.takeIf {it>0}
+                val sourceRate=if(isCloudQuality) cloudSession?.variant?.bandwidth ?: 0 else if(quality=="original") p.videoFormat?.bitrate?.toLong()?.takeIf {it>0}
                     ?: mediaContext?.item?.versions?.firstOrNull {it.id==request.mediaSourceId}?.bitrate?.coerceAtLeast(0) ?: 0 else
                     quality.substringAfter('@',"").toLongOrNull()?.times(1000000) ?: when(quality) {"4k"->15000000L;"1440p"->10000000L;"1080p"->8000000L;"720p"->4000000L;else->0L}
                 val actualRate=measuredBytes*8000/measuredMs
@@ -454,13 +468,13 @@ class PlayerActivity: ComponentActivity() {
         })
         startReporter()
         loadPlayerMetadata()
-        p.setMediaItem(media.build(),if(quality=="original" || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
+        p.setMediaItem(media.build(),if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
             while(isActive) {
                 delay(500)
                 // Segment prompts also need position while the OSD is hidden.
-                position=absolutePosition();duration=if(quality=="original") p.duration.coerceAtLeast(0) else transcodeDuration
+                position=absolutePosition();duration=if(quality=="original" || isCloudQuality) p.duration.coerceAtLeast(0) else transcodeDuration
                 tick++
                 if(tick%20==0 && rendered) {
                     reporter?.progress(position, !p.isPlaying)
@@ -519,6 +533,7 @@ class PlayerActivity: ComponentActivity() {
         if(!preserveRoute) {
             qualityJob?.cancel();qualityJob=null;releaseTranscode()
             quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
+            discoveryJob?.cancel();cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false
         }
         request=next
         if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
@@ -534,7 +549,7 @@ class PlayerActivity: ComponentActivity() {
                         audioIndex=request.audioStreamIndex)
                 }
                 val next=if(request.audioCompatibility) request.copy(subtitles=refreshed.subtitles) else refreshed
-                replacePlayback(next.copy(explicitSubtitle=true,subtitleTrackId="emby-sub:${track.index}",subtitleTitle=track.title))
+                replacePlayback(next.copy(explicitSubtitle=true,subtitleTrackId="emby-sub:${track.index}",subtitleTitle=track.title),preserveRoute=isCloudQuality)
                 panel=""
             } catch(e:CancellationException) {throw e}
             catch(_:Exception) {selectionNotice="字幕已下载，重新播放后可选择使用";panel=""}
@@ -547,7 +562,7 @@ class PlayerActivity: ComponentActivity() {
 
     /** The route in use: the STRM's own URL first, Emby's server-side entry after a failed direct try. */
     private fun currentPlaybackUrl():String =
-        transcodeSession?.url ?: if(useFallbackRoute) request.fallbackUrl?.takeIf {it.isNotBlank()} ?: request.stableUrl else request.stableUrl
+        cloudSession?.url ?: transcodeSession?.url ?: if(useFallbackRoute) request.fallbackUrl?.takeIf {it.isNotBlank()} ?: request.stableUrl else request.stableUrl
 
     /** True while this playback still has an unused Emby server route to try. */
     private fun hasServerFallback():Boolean =
@@ -564,14 +579,14 @@ class PlayerActivity: ComponentActivity() {
         )
     }
     private fun absolutePosition():Long = transcodePausedPosition ?: player?.let {
-        if(quality=="original") it.currentPosition.coerceAtLeast(0) else {
+        if(quality=="original" || isCloudQuality) it.currentPosition.coerceAtLeast(0) else {
             val windowOffset=if(it.currentTimeline.isEmpty) 0 else it.currentTimeline.getWindow(it.currentMediaItemIndex,Timeline.Window()).positionInFirstPeriodMs
             (transcodeOffset+windowOffset+it.currentPosition.coerceAtLeast(0)).coerceAtMost(transcodeDuration)
         }
     } ?: lastPosition
     private fun seekToAbsolute(target:Long) {
         if(qualitySwitching) return
-        if(quality=="original" || transcodeSession?.vod==true) {
+        if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) {
             player?.seekTo(target);position=target
             if(transcodePausedPosition!=null) transcodePausedPosition=target
         }
@@ -579,6 +594,12 @@ class PlayerActivity: ComponentActivity() {
     }
     private fun seek(delta:Long) {seekToAbsolute(MediaLogic.seek(absolutePosition(),delta,duration))}
     private fun releaseTranscode() {
+        val cloud=cloudSession
+        val cloudSource=transcodeSource?.cloudVideo()
+        cloudSession=null
+        if(cloud!=null) CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
+            try {withTimeout(5000) {cloudSource?.stop(cloud)}} catch(_:Exception) {} finally {cancel()}
+        }
         val session=transcodeSession ?: return
         val source=transcodeSource
         transcodeSession=null
@@ -588,6 +609,7 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     private fun pauseTranscode() {
+        if(isCloudQuality) return
         if(transcodePausedPosition!=null) return
         transcodePausedPosition=absolutePosition()
         val session=transcodeSession ?: return
@@ -598,41 +620,84 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     private fun openQualityPanel() {
-        panel="quality";returnControl="quality";qualityNotice="正在检查转码服务…"
-        lifecycleScope.launch {
-            qualityProfiles=try {transcodeSource?.capabilities().orEmpty()} catch(e:CancellationException) {throw e} catch(_:Exception) {emptyList()}
-            qualityNotice=if(qualityProfiles.isEmpty()) "此入口未提供可用的转码服务，仍可选择原画" else "高于原画的选项不会放大画面"
+        panel="quality";returnControl="quality";qualityNotice="正在检查 NAS 转码服务…"
+        discoveryJob?.cancel()
+        val expected=request
+        val source=transcodeSource
+        discoveryJob=lifecycleScope.launch {
+            val profiles=try {source?.capabilities().orEmpty()} catch(e:CancellationException) {throw e} catch(_:Exception) {emptyList()}
+            if(request!==expected) return@launch
+            qualityProfiles=profiles
+            qualityNotice=if(profiles.isEmpty()) "NAS 转码暂不可用，可查询 115 云端清晰度" else "NAS 转码按所选分辨率和码率生成"
+        }
+    }
+    private fun discoverCloudQuality() {
+        if(cloudLoading || qualitySwitching) return
+        val expected=request
+        val source=transcodeSource?.cloudVideo() ?: return
+        cloudDiscoveryJob?.cancel();cloudLoading=true;cloudNotice="正在查询 115 云端清晰度…"
+        cloudDiscoveryJob=lifecycleScope.launch {
+            try {
+                val variants=source.discover()
+                if(request===expected) {cloudVariants=variants;cloudNotice="云端已有清晰度，无需 NAS 重新编码"}
+            } catch(e:CancellationException) {throw e}
+            catch(e:Exception) {
+                if(request===expected) {cloudVariants=emptyList();cloudNotice=if(e is io.github.xudong7587.sunnytv.core.network.SourceException) e.message.orEmpty() else "115 云端响应暂不兼容"}
+            } finally {if(request===expected) cloudLoading=false}
         }
     }
     private fun changeQuality(next:String,target:Long=absolutePosition(),play:Boolean=player?.playWhenReady ?: resumePlayWhenReady) {
         if(qualitySwitching) return
         qualityJob=lifecycleScope.launch {
-            qualitySwitching=true;controls=true;panel="";status="正在切换清晰度…";error=""
+            qualitySwitching=true;controls=true;status="正在切换清晰度…"
             val source=transcodeSource
-            val previous=transcodeSession
-            transcodeSession=null
-            lastPosition=target;resumePlayWhenReady=play
-            bufferNotice=""
-            clientNetworkNotice=""
-            // Quality changes are one viewing session, not an Emby stop/start pair.
-            reporter?.progress(target,!play);progressJob?.cancel()
-            player?.release();player=null;rendered=false
+            val cloudSource=source?.cloudVideo()
+            var newCloud:CloudVideoSource.Session?=null
+            var newTranscode:TranscodeSource.Session?=null
+            var committed=false
+            var retiredNas=false
             try {
-                if(previous!=null) source?.control(previous,true)
-                transcodePausedPosition=null
-                if(next=="original") {
-                    quality="original";transcodeOffset=0;transcodeDuration=0;createPlayer()
-                } else {
-                    val session=source?.create(next,target) ?: throw IllegalStateException()
-                    transcodeSession=session;transcodeOffset=if(session.vod) 0 else session.startMs;transcodeDuration=session.durationMs
-                    quality=next;useFallbackRoute=false
-                    createPlayer()
+                // The existing NAS worker defaults to one slot. A NAS-to-NAS
+                // change must release that slot before requesting its replacement.
+                if(next!="original" && !next.startsWith("115:") && transcodeSession!=null) {
+                    source?.control(transcodeSession!!,true)
+                    transcodeSession=null;retiredNas=true
                 }
+                // Resolve before releasing the active player, so API failures keep playback intact.
+                if(next.startsWith("115:")) newCloud=cloudSource?.create(next.removePrefix("115:"),cloudDelivery) ?: throw IllegalStateException()
+                else if(next!="original") newTranscode=source?.create(next,target) ?: throw IllegalStateException()
+                // Cloud resolution can take seconds while the old player continues.
+                // Commit its current position/state instead of rewinding to menu-click time.
+                val commitPosition=if(next.startsWith("115:") && player!=null) absolutePosition() else target
+                val commitPlay=if(next.startsWith("115:") && player!=null) player!!.playWhenReady else play
+                reporter?.progress(commitPosition,!commitPlay);progressJob?.cancel()
+                player?.release();player=null;rendered=false
+                releaseTranscode()
+                cloudSession=newCloud;transcodeSession=newTranscode;committed=true
+                lastPosition=commitPosition;resumePlayWhenReady=commitPlay;transcodePausedPosition=null
+                transcodeOffset=if(newTranscode?.vod==false) newTranscode.startMs else 0
+                transcodeDuration=newTranscode?.durationMs ?: 0
+                quality=next;bufferNotice="";clientNetworkNotice="";error="";panel=""
+                if(next!="original") useFallbackRoute=false
+                createPlayer()
             } catch(e:CancellationException) {throw e}
-            catch(_:Exception) {
-                quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
-                error="清晰度切换失败，可选择原画或稍后重试";controls=true
-            } finally {qualitySwitching=false}
+            catch(e:Exception) {
+                qualityNotice=if(e is io.github.xudong7587.sunnytv.core.network.SourceException) e.message.orEmpty() else "清晰度切换失败，请重试或选择原片"
+                if(retiredNas && !committed) {
+                    progressJob?.cancel();player?.release();player=null
+                    quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
+                    lastPosition=target;resumePlayWhenReady=play
+                    createPlayer()
+                    qualityNotice="NAS 清晰度切换失败，已恢复原片"
+                }
+                panel="quality";controls=true
+                if(player==null) error=qualityNotice
+            } finally {
+                if(!committed) withContext(NonCancellable) {
+                    try {withTimeout(5000) {newCloud?.let {cloudSource?.stop(it)};newTranscode?.let {source?.control(it,true)}}} catch(_:Exception) {}
+                }
+                qualitySwitching=false
+            }
         }
     }
     override fun onKeyDown(keyCode:Int, event:KeyEvent):Boolean {
@@ -759,7 +824,7 @@ class PlayerActivity: ComponentActivity() {
                         reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false;createPlayer()
                     }
                     PlayerControl("退出播放","exit",initial=retryUsed) {finish()}
-                    if(transcodeSource!=null) PlayerControl("选择清晰度","quality",badge=TranscodeSource.selectedQualityBadge(quality)) {openQualityPanel()}
+                    if(transcodeSource!=null) PlayerControl("选择清晰度","quality",badge=qualityBadge()) {openQualityPanel()}
                 }
             }
 
@@ -823,9 +888,9 @@ class PlayerActivity: ComponentActivity() {
                         Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             PlayerControl("倍速 ${speedLabel(playbackSpeed)}","speed",initial=returnControl=="speed",badge=speedLabel(playbackSpeed)) {returnControl="speed";panel="speed"}
-                            if(transcodeSource!=null) PlayerControl("清晰度："+TranscodeSource.qualityLabel(quality),"quality",badge=TranscodeSource.selectedQualityBadge(quality),initial=returnControl=="quality") {openQualityPanel()}
+                            if(transcodeSource!=null) PlayerControl("清晰度："+qualityLabel(),"quality",badge=qualityBadge(),initial=returnControl=="quality") {openQualityPanel()}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
-                            if(quality=="original" && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
+                            if((quality=="original" || isCloudQuality) && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
@@ -894,9 +959,16 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun QualityPanel() {
         PlayerSheet("清晰度",{panel=""}) {
             Text(if(qualitySwitching) "正在切换…" else qualityNotice,color=Color.White.copy(.7f),fontSize=14.sp)
-            TranscodeSource.menuQualityOptions.filter { (id,_) -> id=="original" || id in qualityProfiles }.forEach {(id,label)->
+            PlayerOption(if(cloudDelivery=="direct") "115 连接：优先直连" else "115 连接：NAS 代理") {
+                if(!qualitySwitching) cloudDelivery=if(cloudDelivery=="direct") "proxy" else "direct"
+            }
+            Text(if(cloudDelivery=="direct") "选择档位后，视频直接从 115 下载；失败时可手动改用 NAS 代理" else "选择档位后，视频经 NAS 转发，占用 NAS 带宽",color=Color.White.copy(.7f),fontSize=14.sp)
+            cloudSession?.let {Text("当前播放："+if(it.delivery=="direct") "115 直连" else "NAS 代理",color=Color.White.copy(.7f),fontSize=14.sp)}
+            PlayerOption(if(cloudLoading) "正在查询 115…" else "查询 / 刷新 115 云端清晰度") {discoverCloudQuality()}
+            if(cloudNotice.isNotBlank()) Text(cloudNotice,color=Color.White.copy(.7f),fontSize=14.sp)
+            (listOf("original" to "原片") + cloudVariants.map {it.qualityId to it.label} + TranscodeSource.menuQualityOptions.filter {(id,_) -> id!="original" && id in qualityProfiles}.map {(id,label) -> id to "NAS 转码 · $label"}).forEach {(id,label)->
                 PlayerOption(label,selected=quality==id) {
-                    if(!qualitySwitching && (id=="original" || id in qualityProfiles)) changeQuality(id)
+                    if(!qualitySwitching && (id=="original" || id in qualityProfiles || cloudVariants.any {it.qualityId==id})) changeQuality(id)
                     else qualityNotice="此清晰度暂不可用"
                 }
             }
@@ -918,7 +990,7 @@ class PlayerActivity: ComponentActivity() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
-            if(quality=="original" && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
+            if((quality=="original" || isCloudQuality) && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}

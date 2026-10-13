@@ -16,6 +16,7 @@ import kotlin.coroutines.resumeWithException
 
 /** Only the pre-302 MediaIndex entry is recognized; never infer an API from a CDN URL. */
 class TranscodeSource private constructor(private val http: SafeHttp, private val origin: HttpUrl, private val assetToken: String) {
+    fun cloudVideo(): CloudVideoSource = CloudVideoSource(http, origin, assetToken)
     data class Session(val id: String, val token: String, val url: String, val startMs: Long, val durationMs: Long, val vod: Boolean = false, val sourceBitrate: Long = 0)
     companion object {
         val qualities = listOf("original" to "原画", "4k" to "4K / 2160P", "1440p" to "2K / 1440P", "1080p" to "1K / 1080P", "720p" to "0.75K / 720P")
