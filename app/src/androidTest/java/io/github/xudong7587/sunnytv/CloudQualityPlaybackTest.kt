@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 class CloudQualityPlaybackTest {
     @get:Rule val rule=createEmptyComposeRule()
 
-    @Test fun manualQueryBeforeFirstFrameAndFailedSwitchPreservesPlayerThenVodSwitchKeepsPositionAndPause() {
+    @Test fun discoveredQualityFailedSwitchPreservesPlayerThenVodSwitchKeepsPositionAndPause() {
         val server=ServerSocket(0,8,InetAddress.getByName("127.0.0.1"))
         val release=CountDownLatch(1)
         val paths=CopyOnWriteArrayList<String>()
@@ -85,13 +85,19 @@ class CloudQualityPlaybackTest {
                 rule.onNodeWithText("原画").assertExists()
                 rule.onAllNodesWithText("NAS 转码",substring=true).assertCountEquals(0)
                 assertFalse(paths.any {it.contains("cloud-video")})
-                rule.onNodeWithText("查询 / 刷新 115 云端清晰度").performClick()
+                // This fixture deliberately has no first frame; inject discovery to test switching independently.
+                rule.onNodeWithText("查询 / 刷新 115 云端清晰度").assertDoesNotExist()
+                scenario.onActivity {a->PlayerActivity::class.java.getDeclaredMethod("discoverCloudQuality").apply {isAccessible=true}.invoke(a)}
                 rule.waitUntil(5000) {rule.onAllNodesWithText("115 云端 · 4K · 15.0 Mbps").fetchSemanticsNodes().isNotEmpty()}
                 rule.onAllNodesWithText("720P",substring=true).assertCountEquals(0)
                 var before:ExoPlayer?=null
                 scenario.onActivity {before=player(it);before!!.pause()}
                 rule.onNodeWithText("115 云端 · 4K · 15.0 Mbps").performClick()
-                rule.waitUntil(5000) {rule.onAllNodesWithText("115 暂无可用云端流，请检查登录态、权限或转码状态").fetchSemanticsNodes().isNotEmpty()}
+                rule.waitUntil(5000) {
+                    var failed=false
+                    scenario.onActivity {a->failed=PlayerActivity::class.java.getDeclaredMethod("getQualityNotice").apply {isAccessible=true}.invoke(a)=="115 暂无可用云端流，请检查登录态、权限或转码状态"}
+                    failed
+                }
                 scenario.onActivity {assertSame(before,player(it));assertFalse(player(it)!!.playWhenReady)}
                 failSelection.set(false)
                 rule.onNodeWithText("115 云端 · 4K · 15.0 Mbps").performClick()
@@ -106,7 +112,9 @@ class CloudQualityPlaybackTest {
                 }
                 assertEquals(listOf("direct","direct"),selections.toList())
                 rule.onNodeWithTag("player:quality").performClick()
-                rule.onNodeWithText("115 连接：优先直连").performClick()
+                rule.onNodeWithText("115 连接：优先直连").assertDoesNotExist()
+                // Proxy transport remains supported internally, without exposing a panel control.
+                scenario.onActivity {a->PlayerActivity::class.java.getDeclaredMethod("setCloudDelivery",String::class.java).apply {isAccessible=true}.invoke(a,"proxy")}
                 rule.onNodeWithText("115 云端 · 4K · 15.0 Mbps").performClick()
                 rule.waitUntil(5000) {selections.size==3}
                 assertEquals("proxy",selections.last())

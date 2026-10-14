@@ -1,60 +1,78 @@
 package io.github.xudong7587.sunnytv.feature.update
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.webkit.WebResourceRequest
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import io.github.xudong7587.sunnytv.BuildConfig
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** User-requested official release browser; no JS bridge or app credentials. */
+/** Native updater: does not depend on a browser/WebView to discover or download a release. */
 class GithubUpdateActivity:ComponentActivity() {
-    private var web:WebView?=null
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        val layout=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
-        val status=TextView(this).apply {text="请选择官方发行的 APK，下载后校验签名并由系统确认安装。";setPadding(20,12,20,12)}
+        val layout=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;setPadding(24,20,24,20)}
+        fun label(value:String)=TextView(this).apply {text=value;textSize=18f;setPadding(0,12,0,12);layout.addView(this)}
+        fun button(value:String,action:()->Unit)=Button(this).apply {text=value;setOnClickListener {action()};layout.addView(this)}
+        button("返回 SunnyTV") {finish()}
+        label("GitHub 官方更新")
+        label("当前版本：${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）")
+        val status=label("正在检查最新发行…")
+        var release:GithubUpdates.Release?=null
         var ready:File?=null
-        val install=Button(this).apply {text="安装已下载更新";isEnabled=false;setOnClickListener {ready?.let {file->
-            try {ExperimentalUpdater(this@GithubUpdateActivity).install(file);status.text="若刚授予安装权限，请返回后再次点击安装。"}
-            catch(_:Exception) {status.text="无法打开系统安装器"}
-        }}}
-        layout.addView(Button(this).apply {text="返回 SunnyTV";setOnClickListener {finish()}})
-        layout.addView(status);layout.addView(install)
+        var job:Job?=null
         var downloading=false
-        val download:(String)->Unit={url->
-            if(!downloading) lifecycleScope.launch {
-                downloading=true;install.isEnabled=false;status.text="正在下载并校验官方升级包…"
-                try {ready=GithubUpdates.download(this@GithubUpdateActivity,url);install.isEnabled=true;status.text="下载与签名校验通过，请点击安装。"}
+        lateinit var check:Button
+        lateinit var download:Button
+        lateinit var install:Button
+        val checkLatest:()->Unit={
+            job?.cancel();release=null;ready=null;download.isEnabled=false;install.isEnabled=false
+            check.isEnabled=false;status.text="正在检查最新发行…"
+            job=lifecycleScope.launch {
+                try {
+                    val found=GithubUpdates.latest();release=found
+                    download.isEnabled=found.versionCode>BuildConfig.VERSION_CODE
+                    status.text="官方最新版本：${found.versionName}（${found.versionCode}）\n"+
+                        if(download.isEnabled) "发现新版本，可下载升级。" else if(found.versionCode==BuildConfig.VERSION_CODE.toLong()) "当前已是最新版本。" else "当前安装版本高于官方发行版本。"
+                } catch(_:TimeoutCancellationException) {status.text="检查超时。请重试，或返回设置使用 WebDAV 更新。"}
                 catch(e:CancellationException) {throw e}
-                catch(_:Exception) {status.text="下载失败：请检查网络、发行校验值及版本是否匹配。"}
-                finally {downloading=false}
+                catch(_:Exception) {status.text="无法检查最新版本。请检查 GitHub 网络连接后重试，也可返回设置使用 WebDAV 更新。"}
+                finally {check.isEnabled=true}
             }
         }
-        val browser=WebView(this).apply {
-            settings.javaScriptEnabled=true
-            settings.allowFileAccess=false;settings.allowContentAccess=false
-            settings.domStorageEnabled=false;settings.setSupportMultipleWindows(false)
-            settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            webViewClient=object:WebViewClient() {
-                override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean {
-                    val uri=request.url
-                    if(uri.scheme=="https" && uri.host=="github.com" && uri.path.orEmpty().startsWith("/xudong7587/SunnyTV/releases/download/") && uri.path.orEmpty().endsWith(".apk")) {
-                        download(uri.toString());return true
-                    }
-                    return !GithubUpdates.allowedPage(uri.toString())
+        check=button("重新检查最新版本") {checkLatest()}
+        download=button("下载最新版本") {
+            val selected=release
+            if(selected!=null && !downloading) {
+                ready=null;downloading=true;download.isEnabled=false;check.isEnabled=false;install.isEnabled=false
+                status.text="正在下载 ${selected.versionName} 并校验升级包…"
+                job=lifecycleScope.launch {
+                    try {ready=GithubUpdates.download(this@GithubUpdateActivity,selected.apk);install.isEnabled=true;status.text="${selected.versionName} 下载与签名校验通过，请点击安装。"}
+                    catch(e:CancellationException) {status.text="下载已取消";throw e}
+                    catch(_:Exception) {status.text="下载失败。请检查 GitHub 网络连接后重试，或返回设置使用 WebDAV 更新。"}
+                    finally {downloading=false;check.isEnabled=true;download.isEnabled=true}
                 }
             }
-            setDownloadListener {url,_,_,_,_->download(url)}
-            loadUrl(GithubUpdates.PAGE)
+        }.apply {isEnabled=false}
+        button("取消下载") {if(downloading) job?.cancel()}
+        install=button("安装已下载更新") {ready?.let {file->
+            try {ExperimentalUpdater(this).install(file);status.text="若刚授予安装权限，请返回后再次点击安装。"}
+            catch(_:Exception) {status.text="无法打开系统安装器"}
+        }}.apply {isEnabled=false}
+        button("浏览官方发行页面") {
+            try {startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release?.page ?: GithubUpdates.PAGE)))}
+            catch(_:Exception) {status.text="设备没有可用浏览器。可直接在本页检查和下载更新。"}
         }
-        web=browser;layout.addView(browser,LinearLayout.LayoutParams(-1,0,1f));setContentView(layout)
+        setContentView(ScrollView(this).apply {addView(layout)})
+        checkLatest()
     }
-    override fun onDestroy() {web?.stopLoading();web?.destroy();web=null;super.onDestroy()}
 }

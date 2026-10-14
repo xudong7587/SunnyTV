@@ -625,7 +625,7 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     private fun openQualityPanel() {
-        panel="quality";returnControl="quality";qualityNotice=if(transcodeSource==null) "当前播放源不支持 115 云端清晰度，原画仍可正常播放。可使用作者的 MediaIndex 项目生成 STRM，详情见设置 → 关于。" else "原画播放原始文件，其他清晰度由 115 提供"
+        panel="quality";returnControl="quality";qualityNotice=""
         // NAS transcoding remains implemented but is hidden from the quality UI.
     }
     private fun discoverCloudQuality() {
@@ -709,6 +709,7 @@ class PlayerActivity: ComponentActivity() {
                 }
                 panel="quality";controls=true
                 if(player==null) error=qualityNotice
+                else android.widget.Toast.makeText(this@PlayerActivity,qualityNotice,android.widget.Toast.LENGTH_LONG).show()
             } finally {
                 if(!committed) withContext(NonCancellable) {
                     try {withTimeout(5000) {newCloud?.let {cloudSource?.stop(it)};newTranscode?.let {source?.control(it,true)}}} catch(_:Exception) {}
@@ -975,16 +976,6 @@ class PlayerActivity: ComponentActivity() {
 
     @Composable private fun QualityPanel() {
         PlayerSheet("清晰度",{panel=""}) {
-            Text(if(qualitySwitching) "正在切换…" else qualityNotice,color=Color.White.copy(.7f),fontSize=14.sp)
-            if(transcodeSource!=null) {
-            PlayerOption(if(cloudDelivery=="direct") "115 连接：优先直连" else "115 连接：NAS 代理") {
-                if(!qualitySwitching) cloudDelivery=if(cloudDelivery=="direct") "proxy" else "direct"
-            }
-            Text(if(cloudDelivery=="direct") "选择档位后，视频直接从 115 下载；失败时可手动改用 NAS 代理" else "选择档位后，视频经 NAS 转发，占用 NAS 带宽",color=Color.White.copy(.7f),fontSize=14.sp)
-            cloudSession?.let {Text("当前播放："+if(it.delivery=="direct") "115 直连" else "NAS 代理",color=Color.White.copy(.7f),fontSize=14.sp)}
-            PlayerOption(if(cloudLoading) "正在查询 115…" else "查询 / 刷新 115 云端清晰度") {discoverCloudQuality()}
-            if(cloudNotice.isNotBlank()) Text(cloudNotice,color=Color.White.copy(.7f),fontSize=14.sp)
-            }
             (listOf("original" to "原画") + cloudVariants.filter {it.badge in setOf("4K","1080P")}.map {it.qualityId to it.label}).forEach {(id,label)->
                 PlayerOption(label,selected=quality==id) {
                     if(id==quality && (id=="original" || cloudSession?.delivery==cloudDelivery)) panel=""

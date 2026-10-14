@@ -129,14 +129,16 @@ class CloudSubtitleContinuityTest {
         }
     }
 
-    @Test fun thirdPartyQualityExplanationKeepsOriginalPlayerAndDoesNotQueryCloud() {
+    @Test fun thirdPartyQualityListKeepsOriginalPlayerAndDoesNotQueryCloud() {
         Fixture().use {f->
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,PlaybackRequest("",f.root+"/third-party.mp4","第三方 STRM"))).use {scenario->
                 var old:ExoPlayer?=null
                 scenario.onActivity {old=player(it)}
                 rule.onNodeWithTag("player:quality").performClick()
-                rule.onNodeWithText("当前播放源不支持 115 云端清晰度",substring=true).assertExists()
+                rule.onNodeWithText("当前播放源不支持 115 云端清晰度",substring=true).assertDoesNotExist()
+                rule.onNodeWithText("查询 / 刷新 115 云端清晰度").assertDoesNotExist()
+                rule.onNodeWithText("115 连接：优先直连").assertDoesNotExist()
                 rule.onNodeWithText("原画").performClick()
                 scenario.onActivity {assertSame(old,player(it))}
                 assertFalse(f.paths.any {it.contains("cloud-video")})

@@ -1,3 +1,15 @@
+# 2026-10-14 dev36.3 发布修订
+
+用户已授权推送 GitHub、更新 WebDAV，并修复应用 GitHub 入口。当前分支 `codex/github-update-native`，基于 `44b96b4` / 已发布 dev36.2，版本 50。
+
+清晰度面板仅保留档位。GitHub 入口使用原生页面和官方 Releases API，包含开发测试版，读取 BUILD_INFO 比较当前与最新版本，保留升级包内容及签名校验；网络错误不宣称最新。实连 GitHub 模拟器检查首次网络失败、重试通过。本地核心 172/172、JUnit 116/116、Android 定向 10/10 通过；debug/release 编译和 lint 通过（各 0 错误/40 警告）。GitHub 实连用例不纳入依赖网络可达性的发行 CI，纯筛选/校验测试仍执行。最终签名发行和 WebDAV 回执在完成后追加。详见 [dev36.3](RELEASE-dev36.3.md)。
+
+# 2026-10-14 清晰度面板精简（本地修订，尚未发布）
+
+按用户截图，清晰度面板内容仅保留原画及可用的 115 4K / 1080P 档位，保留标题/关闭按钮；去掉说明、连接方式切换和手动查询按钮。首帧后台自动查询保留，切换失败通过临时提示反馈。后台代理协议不变，UI 不再提供代理开关。
+
+本地 debug/AndroidTest 编译及 lint 通过，Android API 30 定向 5/5 通过（清晰度切换失败恢复、字幕连续性、第三方原画、焦点）。未发布新版本、未更新 WebDAV、未安装实体手机；下方 dev36.2 仍为当前公开版本。
+
 # 2026-10-14 dev36.2 已发布并同步 WebDAV
 
 发行源码 `04806dd42b360cda87873751af6a156cd38af10e`（PR #12），版本 `0.1.0-dev36.2` / 49。[GitHub Release](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev36.2) 与 [发行工作流](https://github.com/xudong7587/SunnyTV/actions/runs/38506001866) 均成功。
