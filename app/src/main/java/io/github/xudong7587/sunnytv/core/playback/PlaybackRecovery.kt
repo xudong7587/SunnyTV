@@ -13,7 +13,7 @@ object PlaybackRecovery {
     /** The initial attempt plus exactly one automatic retry; a second failure stays fatal. */
     const val MAX_AUTO_RETRIES = 1
     const val RETRY_DELAY_MS = 1_500L
-    const val RETRY_NOTICE = "网络读取超时，正在自动重试一次…"
+    const val RETRY_NOTICE = "网络读取暂时中断，正在自动重试一次…"
     const val FALLBACK_NOTICE = "直连媒体源打不开，正在改用 Emby 服务端读取…"
 
     // PlaybackException codes: 2001 network connection failed, 2002 network connection timeout.

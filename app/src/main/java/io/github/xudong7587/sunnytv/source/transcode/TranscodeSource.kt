@@ -29,7 +29,7 @@ class TranscodeSource private constructor(private val http: SafeHttp, private va
             "1440p" -> "2K"
             "1080p" -> "1080P"
             "720p" -> "720P"
-            else -> "原片"
+            else -> "原画"
         }
         fun retryPendingSegment(httpCode: Int?, errorCount: Int, isSegment: Boolean): Boolean =
             httpCode == 504 && errorCount in 1..2 && isSegment

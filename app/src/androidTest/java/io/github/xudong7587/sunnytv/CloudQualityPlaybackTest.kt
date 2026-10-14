@@ -28,6 +28,7 @@ class CloudQualityPlaybackTest {
         val variant="a".repeat(32);val sid="b".repeat(32);val secret="t".repeat(43)
         val metadata="""{"id":"$variant","width":3840,"height":2160,"bandwidth":15000000}"""
         val failSelection=java.util.concurrent.atomic.AtomicBoolean(true)
+        val playlistRequests=java.util.concurrent.atomic.AtomicInteger()
         val acceptor=Thread {
             while(!server.isClosed) {
                 val socket=runCatching {server.accept()}.getOrNull() ?: break
@@ -37,6 +38,9 @@ class CloudQualityPlaybackTest {
                             val reader=it.getInputStream().bufferedReader()
                             val first=reader.readLine() ?: return@runCatching
                             val path=first.split(" ")[1];paths.add(path)
+                            // A reused CDN/gateway connection can close before headers. Cloud HLS
+                            // must retain its one retry even when the original item has an Emby fallback.
+                            if(path.contains("/index.m3u8") && playlistRequests.incrementAndGet()==1) return@runCatching
                             var length=0
                             while(true) {
                                 val line=reader.readLine() ?: break
@@ -71,7 +75,8 @@ class CloudQualityPlaybackTest {
         fun player(activity:PlayerActivity):ExoPlayer? = PlayerActivity::class.java.getDeclaredMethod("getPlayer").apply {isAccessible=true}.invoke(activity) as? ExoPlayer
         try {
             val context=InstrumentationRegistry.getInstrumentation().targetContext
-            val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/api/play/fixture","云端协议测试",startMs=42000)
+            val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/api/play/fixture","云端协议测试",startMs=42000,
+                fallbackUrl="http://127.0.0.1:${server.localPort}/emby-fixture")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario ->
                 rule.onNodeWithTag("player:quality").performClick()
                 rule.waitUntil(5000) {paths.any {it=="/api/transcode/capabilities"}}
@@ -85,7 +90,8 @@ class CloudQualityPlaybackTest {
                 scenario.onActivity {assertSame(before,player(it));assertFalse(player(it)!!.playWhenReady)}
                 failSelection.set(false)
                 rule.onNodeWithText("115 云端 · 4K · 15.0 Mbps").performClick()
-                rule.waitUntil(5000) {paths.any {it.contains("/index.m3u8")}}
+                rule.waitUntil(8000) {playlistRequests.get()>=2}
+                assertFalse(paths.any {it=="/emby-fixture"})
                 scenario.onActivity {
                     val after=player(it)!!
                     assertNotSame(before,after)

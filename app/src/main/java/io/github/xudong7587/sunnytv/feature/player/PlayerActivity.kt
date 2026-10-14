@@ -267,7 +267,7 @@ class PlayerActivity: ComponentActivity() {
                     }
                     // With an unused server route available, switching route beats repeating a request
                     // that already timed out; the same-URL retry stays for sources without a fallback.
-                    val allowed=!hasServerFallback() && PlaybackRecovery.shouldRetry(autoRetryAttempts,
+                    val allowed=(quality!="original" || !hasServerFallback()) && PlaybackRecovery.shouldRetry(autoRetryAttempts,
                         PlaybackFailure.errorCodeOf(loadErrorInfo.exception),rendered,
                         PlaybackFailure.causeNames(loadErrorInfo.exception))
                     if(!allowed) return C.TIME_UNSET
@@ -427,6 +427,8 @@ class PlayerActivity: ComponentActivity() {
                 error=PlaybackFailure.describe(e,if(rendered) "播放读取" else "首帧前读取",if(quality=="original") request.mimeHint else MimeTypes.APPLICATION_M3U8,
                     mediaUrl=currentPlaybackUrl(),baseUrl=request.scope?.baseUrl,retryAttempts=autoRetryAttempts)
                 if(quality!="original") {
+                    if(isCloudQuality && cloudSession?.delivery=="direct" && e.errorCode in setOf(2001,2002))
+                        error="115 直连连接失败，可在清晰度中选择「NAS 代理」后重新选择档位。\n$error"
                     val httpCode=generateSequence(e as Throwable?) {it.cause}
                         .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                         .firstOrNull()?.responseCode

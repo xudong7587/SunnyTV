@@ -8,6 +8,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -23,9 +25,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.tv.material3.Text
+import androidx.tv.material3.LocalTextStyle
 import io.github.xudong7587.sunnytv.feature.ui.LineIcon
 import io.github.xudong7587.sunnytv.feature.ui.LocalMotion
 import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
@@ -83,9 +88,16 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
 
 @Composable private fun PlayerGlyph(icon:String,color:Color,badge:String?,emphasis:Boolean) {
     val glyphSize=if(emphasis) 30.dp else 25.dp
-    Box(Modifier.size(glyphSize),contentAlignment=Alignment.Center) {
+    // Text badges need more width than a 25dp icon: two 13sp CJK glyphs already
+    // exceed it at normal font scale, clipping the second character.
+    val glyphModifier=if(icon=="quality") Modifier.width(40.dp).height(32.dp) else Modifier.size(glyphSize)
+    Box(glyphModifier,contentAlignment=Alignment.Center) {
         if(icon=="quality") {
-            Text(badge ?: "原片",color=color,fontSize=if((badge?.length ?: 2)>3) 9.sp else 13.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
+            BasicText(badge ?: "原画",modifier=Modifier.fillMaxWidth(),
+                style=LocalTextStyle.current.copy(color=color,fontWeight=FontWeight.ExtraBold,textAlign=TextAlign.Center,
+                    lineHeight=TextUnit.Unspecified,letterSpacing=0.sp),
+                autoSize=TextAutoSize.StepBased(minFontSize=6.sp,maxFontSize=13.sp,stepSize=.5.sp),
+                maxLines=1,softWrap=false)
         } else if(icon=="speed") {
             // Speed is intentionally just the value: no pill, gauge or decorative color block.
             Text(badge ?: "1.0x",color=color,fontSize=9.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)

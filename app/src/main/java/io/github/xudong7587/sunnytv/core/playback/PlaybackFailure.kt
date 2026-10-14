@@ -7,6 +7,7 @@ import java.io.EOFException
 import java.io.FileNotFoundException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import java.net.SocketException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import java.util.concurrent.ExecutionException
@@ -50,6 +51,7 @@ object PlaybackFailure {
             chain.any {it is UnknownHostException} -> "电视无法解析媒体服务器地址。"
             chain.any {it is SocketTimeoutException} -> "读取媒体超时：媒体服务在限定时间内没有返回数据，也没有断开连接。"
             chain.any {it is ConnectException} -> "电视无法连接媒体服务。"
+            chain.any {it is SocketException} -> "媒体网络连接已断开或被重置，请检查当前网络与媒体源的连通性。"
             chain.any {it is EOFException} -> "媒体数据提前结束，请检查本地文件是否完整，以及 Emby 是否中断了读取。"
             chain.any {it is FileNotFoundException} -> "媒体文件不可读取或已不存在。"
             isMp4IndexFailure(error,mime) -> "MP4 索引或时间编辑表读取失败；SunnyTV 已支持一次兼容模式重试。"
@@ -66,7 +68,8 @@ object PlaybackFailure {
         val format=mime?.takeIf {it.matches(Regex("[a-zA-Z0-9.+/-]{1,80}"))} ?: "自动识别"
         val retry=if(retryAttempts>0) " · 已自动重试 $retryAttempts 次" else ""
         // Which host actually stalled, and which half of the exchange: host only, never path or query.
-        val route=PlaybackRecovery.routeLabel(mediaUrl,baseUrl)
+        val failedUrl=chain.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()?.dataSpec?.uri?.toString()
+        val route=PlaybackRecovery.routeLabel(failedUrl ?: mediaUrl,baseUrl)
         val stageHint=PlaybackRecovery.stageHint(
             chain.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()?.type,
             chain.any {it is ExecutionException})
