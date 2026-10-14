@@ -1,3 +1,9 @@
+# 2026-10-14 dev36 后续修复（尚未发布）
+
+用户已授权将本轮修复发布为 dev36.1（versionCode 48）、更新 WebDAV 并覆盖安装 USB 手机，同时发布 MediaIndex 0.8.5 并升级 NAS latest。发行/部署完成以实际工作流和设备回执为准。
+
+在 `SunnyTV-transcode-main` / `codex/115-cloud-query-fix` 增量修复原画徽标裁字、云端首帧重试和诊断主机。MediaIndex 修复真实 `pc` 字段及官方主清单入口认证；用户授权 NAS 临时补丁和手机排障。移动数据下已验证 dev36 的 4K/1080p CDN 直连，原 Wi-Fi 会重置 CDN HTTPS 连接。手机目前仍为 dev36，新客户端修复未安装/发布。细节和测试见 [115 云端清晰度](115_CLOUD_PLAYBACK.md)。
+
 # 2026-10-13 dev36：115 云端清晰度优先直连
 
 入口 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/115-cloud-playback`，基于 main `4546c74` / dev35.7。用户已授权配套 MediaIndex 0.8.4、SunnyTV dev36 Git 发行与 WebDAV 更新。已完成显式档位查询、默认 CDN 直连/手动 NAS 代理、独立云端 HLS 会话、切换失败保留播放及凭据隔离；实现、验证和已知限制见 [115 云端清晰度](115_CLOUD_PLAYBACK.md)。发行完成情况以 GitHub 及 WebDAV 回执为准。

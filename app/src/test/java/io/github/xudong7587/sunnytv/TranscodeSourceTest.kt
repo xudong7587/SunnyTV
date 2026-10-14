@@ -100,13 +100,13 @@ class TranscodeSourceTest {
         assertEquals("原画",TranscodeSource.qualityLabel("original"))
     }
     @Test fun qualityButtonReflectsSelectionInsteadOfDecodedVideoSize() {
-        assertEquals("原片", TranscodeSource.selectedQualityBadge("original"))
+        assertEquals("原画", TranscodeSource.selectedQualityBadge("original"))
         assertEquals("4K", TranscodeSource.selectedQualityBadge("4k@20"))
         assertEquals("4K", TranscodeSource.selectedQualityBadge("4k@10"))
         assertEquals("2K", TranscodeSource.selectedQualityBadge("1440p@6"))
         assertEquals("1080P", TranscodeSource.selectedQualityBadge("1080p@4"))
         assertEquals("720P", TranscodeSource.selectedQualityBadge("720p@2"))
-        assertEquals("原片", TranscodeSource.selectedQualityBadge("unknown"))
+        assertEquals("原画", TranscodeSource.selectedQualityBadge("unknown"))
     }
     @Test fun embyServerPreferenceRetainsRemoteEntryForQualitySelection() = runBlocking {
         MockWebServer().use {server->

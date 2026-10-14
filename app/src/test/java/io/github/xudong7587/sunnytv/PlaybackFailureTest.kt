@@ -42,6 +42,13 @@ class PlaybackFailureTest {
         assertFalse(text.contains("解码器"));assertFalse(text.contains("credential"))
     }
 
+    @Test fun connectionResetIsClassifiedWithoutExposingItsMessage() {
+        val error=PlaybackException("hidden",IOException(ExecutionException(java.net.SocketException("private URL"))),2001)
+        val text=PlaybackFailure.describe(error,"首帧前读取","application/x-mpegURL")
+        assertTrue(text.contains("断开或被重置"))
+        assertFalse(text.contains("private"))
+    }
+
     /** Mirrors the real dev26 report: Media3's OkHttp data source wraps an asynchronous call failure. */
     private fun wrappedTimeout()=PlaybackException("hidden",
         IOException(ExecutionException(SocketTimeoutException())),2001)
