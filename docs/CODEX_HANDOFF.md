@@ -1,3 +1,13 @@
+# 2026-10-14 dev36.4 已发布并同步 WebDAV
+
+最终版本 `0.1.0-dev36.4` / 51，发行源码 `8f949ab184e7cae37a498acf1eeef146d70ce1d2`（PR #14；清晰度/原生更新 UI 为 PR #13）。[GitHub Release](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev36.4) 与 [签名发行工作流](https://github.com/xudong7587/SunnyTV/actions/runs/38509938911) 均成功，发行 CI 的 16 项 Android 测试通过。
+
+APK 下载后重新验证官方清单哈希、包身份/非 debuggable 及既有签名。已用 `scripts/publish-webdav-update.py` 同步 `Z:/V1 Tools/SunnyTV-updata`，`latest.json` 选中版本 51；dev36.3 / 50 及全部旧包保留。SHA256：`0cfd22b1ed05d260d5057ba9a1a33b309cb4199a4a13a5498449a43fc4bc6da0`。
+
+发布后再次验证：官方 Atom 订阅最新入口为 dev36.4，模拟器原生 GitHub 检查通过。dev36.3 发布后的 API 403/额度 0 问题已通过移除 REST API 依赖修复；新版读取官方订阅/BUILD_INFO/SHA256SUMS，并保留 APK 签名检查。旧客户端需先通过 WebDAV 或官方 APK 安装此版，才有新入口。未安装实体手机、未修改 MediaIndex/NAS 服务或媒体；TV 实机、真实字幕和 CD2 验收仍待完成。
+
+以下为实施记录。
+
 # 2026-10-14 dev36.4：GitHub 更新 API 限额修复
 
 dev36.3 已发布并同步 WebDAV，但发布后复查发现未登录 GitHub REST API 已返回 HTTP 403，额度为 0；不是应用“已最新”。按用户原有更新修复授权继续追加 dev36.4 / 51，保留原版本。
