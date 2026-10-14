@@ -1,3 +1,11 @@
+# 2026-10-14 dev36.2 已发布并同步 WebDAV
+
+发行源码 `04806dd42b360cda87873751af6a156cd38af10e`（PR #12），版本 `0.1.0-dev36.2` / 49。[GitHub Release](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev36.2) 与 [发行工作流](https://github.com/xudong7587/SunnyTV/actions/runs/38506001866) 均成功。
+
+发行 CI 的 16 项 Android 测试通过，含原生音频解码及本轮播放/字幕/缓存回归；沿用现有签名密钥，APK 非 debuggable。下载后重新校验清单哈希、签名及发行内容，并通过 `scripts/publish-webdav-update.py` 同步 `Z:/V1 Tools/SunnyTV-updata`，`latest.json` 已指向版本 49，旧包保留。
+
+APK SHA256：`baf4397e1d523453c1c1f0fa3c8dad46abcbf8fb9b4eb874e97cc427b8a8eda2`。本轮未向实体手机安装，也未修改 MediaIndex/NAS 服务；真实字幕服务、CD2 与 TV 实机验收仍待完成。新增主题质感已按用户要求撤回。以下为实施时记录。
+
 # 2026-10-14 dev36.2 发布准备
 
 当前入口 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/playback-theme-polish`，基于已发布 dev36.1（`ec49f82`）。用户已取消新增质感/配色，授权完成其余修订、发布新版并同步 WebDAV；本轮没有修改 MediaIndex 或 NAS 服务。dev36.1 已于 2026-10-14 发布并完成此前授权的分发/部署，下方未发布描述为历史状态。
