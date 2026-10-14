@@ -13,16 +13,12 @@ class GithubUpdatePolicyTest {
         assertFalse(GithubUpdates.allowedPage("https://github.com.evil.invalid/xudong7587/SunnyTV/releases"))
         assertFalse(GithubUpdates.allowedPage("https://user:secret@github.com/xudong7587/SunnyTV/releases"))
     }
-    private fun entry(version:String,date:String,prerelease:Boolean=false,draft:Boolean=false)=org.json.JSONObject()
-        .put("tag_name","v$version").put("html_url","${GithubUpdates.PAGE}/tag/v$version")
-        .put("published_at",date).put("prerelease",prerelease).put("draft",draft)
-        .put("assets",org.json.JSONArray(listOf("BUILD_INFO.txt","SIGNING_VALIDATION.json","SunnyTV-v$version.apk").map {org.json.JSONObject().put("name",it)}))
-    @Test fun newestPublishedInstallableReleaseIncludesPrereleasesAndIgnoresDrafts() {
-        val stable=entry("0.1.0","2026-10-10T12:00:00Z")
-        val latest=entry("0.1.0-dev36.2","2026-10-14T02:00:00Z",true)
-        val draft=entry("0.1.0-dev37","2026-10-15T02:00:00Z",true,true)
-        val incomplete=entry("0.1.0-dev38","2026-10-16T02:00:00Z",true).put("assets",org.json.JSONArray())
-        assertEquals("v0.1.0-dev36.2",GithubUpdates.latestEntry(org.json.JSONArray(listOf(draft,stable,incomplete,latest))).getString("tag_name"))
+    private fun entry(version:String,date:String,host:String="github.com")="""<entry><link href="https://$host/xudong7587/SunnyTV/releases/tag/v$version"/><updated>$date</updated></entry>"""
+    @Test fun officialFeedIncludesNewestDevelopmentReleaseAndIgnoresOtherHosts() {
+        val feed="""<feed xmlns="http://www.w3.org/2005/Atom">${entry("0.1.0","2026-10-10T12:00:00Z")}${entry("0.1.0-dev36.4","2026-10-14T03:00:00Z")}${entry("0.1.0-dev99","2026-10-15T03:00:00Z","evil.invalid")}</feed>"""
+        assertEquals("${GithubUpdates.PAGE}/tag/v0.1.0-dev36.4",GithubUpdates.latestFeedPage(feed))
+        assertThrows(IllegalArgumentException::class.java) {GithubUpdates.latestFeedPage("<!DOCTYPE feed [<!ENTITY x SYSTEM 'file:///etc/passwd'>]>"+feed)}
+        assertThrows(IllegalArgumentException::class.java) {GithubUpdates.latestFeedPage("<feed xmlns='http://www.w3.org/2005/Atom'>"+"<x>".repeat(40)+"</x>".repeat(40)+"</feed>")}
     }
     @Test fun manifestVersionMustMatchOfficialTagAndApk() {
         val v="0.1.0-dev36.2"
