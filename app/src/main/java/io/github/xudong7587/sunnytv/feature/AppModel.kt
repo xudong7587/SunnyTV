@@ -104,7 +104,11 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                 val snapshots=withContext(Dispatchers.IO) {
                     activeEmbySources().mapNotNull {config->app.startup.read(config)?.let {config.id to it}}
                 }
-                snapshots.forEach {(id,snapshot)->feeds[id]=snapshot.feed;libraryLatest.putAll(snapshot.shelves)}
+                snapshots.forEach {(id,snapshot)->
+                    feeds[id]=snapshot.feed;libraryLatest.putAll(snapshot.shelves)
+                    heroCandidates=if(snapshot.heroMode==settings.heroMode && snapshot.hero.isNotEmpty()) snapshot.hero
+                        else (if(settings.heroMode=="resume") snapshot.feed.resume else snapshot.feed.latest).take(7)
+                }
                 staleLatest.addAll(libraryLatest.keys)
                 refresh()
                 loadDeletePermission()
@@ -155,7 +159,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         return false
     }
 
-    fun refresh() {
+    fun refresh(forceHero:Boolean=false) {
         staleLatest.addAll(libraryLatest.keys)
         // Only the browsed source is refreshed; other sources stay cached until they are selected.
         activeEmbySources().forEach { config ->
@@ -164,7 +168,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                 cacheHome(config)
                 // Keep old artwork visible while refreshing only already requested shelves.
                 feeds[config.id]?.libraries?.filter {it.key in staleLatest}?.forEach {loadLatest(it)}
-                loadHero()
+                if(forceHero || heroCandidates.isEmpty()) loadHero()
             }
         }
     }
@@ -174,7 +178,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         val feed=feeds[config.id] ?: return
         val snapshot=StartupCache.Snapshot(feed,libraryLatest.filterKeys {
             it.startsWith("${config.id}:") && (libraryLatestModes[it] ?: "DateCreated")=="DateCreated"
-        }.toMap())
+        }.toMap(),heroCandidates.filter {it.sourceId==config.id},settings.heroMode)
         val generation=app.startup.generation
         launchLoad("startup:${config.id}",replace=true) {
             delay(250)
@@ -223,7 +227,10 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             chosen.isNotEmpty() -> chosen
             else -> available
         }
-        if(preferences.heroMode!="random") {heroCandidates=emptyList();heroRevision++;return}
+        if(preferences.heroMode!="random") {
+            heroCandidates=activeEmbySources().flatMap {config->feeds[config.id]?.let {if(preferences.heroMode=="resume") it.resume else it.latest}.orEmpty()}.distinctBy {it.key}.take(7)
+            heroRevision++;activeEmbySources().forEach {cacheHome(it)};return
+        }
         heroJob=launchLoad("hero",replace=true) {
             if(libraries.isEmpty()) {heroCandidates=emptyList();return@launchLoad}
             // Sample at most six libraries and six items each; never enumerate an entire library.
@@ -245,6 +252,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             while(seenHero.size>240) seenHero.remove(seenHero.first())
             if(heroCandidates.isEmpty()) errors["hero"]="所选媒体库暂时没有可用推荐"
             heroRevision++
+            activeEmbySources().forEach {cacheHome(it)}
         }
     }
     /** Re-samples the home carousel and the shelves behind it; used by the top "pull" gesture. */
@@ -253,16 +261,11 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         carouselRefreshing=true
         viewModelScope.launch {
             try {
-                refresh()
+                refresh(forceHero=true)
                 // Wait for the feed rows that rebuild the carousel, then for the carousel itself.
                 loads.toMap().filterKeys {it.startsWith("feed:")}.values.forEach {runCatching {it.join()}}
                 heroJob?.let {runCatching {it.join()}}
-                // A manual refresh must visibly move the banner even when the carousel follows
-                // "最新入库 / 继续观看": rotate the pool so the front item changes too.
-                if(settings.heroMode!="random" && heroCandidates.size>1) {
-                    heroCandidates=heroCandidates.drop(1)+heroCandidates.take(1)
-                    heroRevision++
-                }
+
             } finally {carouselRefreshing=false}
         }
     }

@@ -5,6 +5,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SubtitleSelectionTest {
+    @Test fun mergedSourcesKeepExternalIdentityAcrossSourceIndexChanges() {
+        val merged=listOf(SubtitleSelection.Option("0:7","内嵌","zh"),SubtitleSelection.Option("1:emby-sub:4","外挂","zh"))
+        assertEquals(1,SubtitleSelection.choose(merged,"zh",true,id="emby-sub:4"))
+        assertEquals(1,SubtitleSelection.choose(merged,"zh",true,id="2:emby-sub:4"))
+        assertNull(SubtitleSelection.choose(merged,"zh",true,ordinal=1))
+        assertNull(SubtitleSelection.choose(merged,"zh",true,id="emby-sub:5"))
+    }
     private val options=listOf(
         SubtitleSelection.Option("0","English","en"),
         SubtitleSelection.Option("emby-sub:4","film.zh-Hans.srt","zh-Hans"),

@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 class CloudQualityPlaybackTest {
     @get:Rule val rule=createEmptyComposeRule()
 
-    @Test fun cloudQueryIsExplicitAndFailedSwitchPreservesPlayerThenVodSwitchKeepsPositionAndPause() {
+    @Test fun manualQueryBeforeFirstFrameAndFailedSwitchPreservesPlayerThenVodSwitchKeepsPositionAndPause() {
         val server=ServerSocket(0,8,InetAddress.getByName("127.0.0.1"))
         val release=CountDownLatch(1)
         val paths=CopyOnWriteArrayList<String>()

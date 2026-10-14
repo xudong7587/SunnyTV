@@ -1,3 +1,11 @@
+# 2026-10-14 dev36.2 发布准备
+
+当前入口 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，分支 `codex/playback-theme-polish`，基于已发布 dev36.1（`ec49f82`）。用户已取消新增质感/配色，授权完成其余修订、发布新版并同步 WebDAV；本轮没有修改 MediaIndex 或 NAS 服务。dev36.1 已于 2026-10-14 发布并完成此前授权的分发/部署，下方未发布描述为历史状态。
+
+本轮实现首帧后 115 自动查询、第三方 STRM 清晰度说明、字幕语义选择跨播放器恢复、首页轮播缓存及手机设置分类宽度。共享字幕模型只归一化 Media3 的数字源索引前缀，保持精确匹配及不擅自选择同语言其它字幕。网络策略和 CD2 接口未变。详见 [dev36.2 发布说明](RELEASE-dev36.2.md)。
+
+本地已编译 debug/release，纯 Kotlin 172/172，JUnit 114/114，debug/release lint 各 0 错误/35 警告。Android API 30 定向 11/11 通过；最终签名发行、WebDAV 回执将在完成后追加。未宣称真实字幕服务、CD2 或 TV 实机验收；保留历史完整 TV 测试失败。
+
 # 2026-10-14 dev36 后续修复（尚未发布）
 
 用户已授权将本轮修复发布为 dev36.1（versionCode 48）、更新 WebDAV 并覆盖安装 USB 手机，同时发布 MediaIndex 0.8.5 并升级 NAS latest。发行/部署完成以实际工作流和设备回执为准。

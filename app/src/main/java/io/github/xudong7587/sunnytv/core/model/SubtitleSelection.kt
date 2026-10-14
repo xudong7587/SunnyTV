@@ -2,12 +2,14 @@ package io.github.xudong7587.sunnytv.core.model
 
 /** Exact media choices never fall back to a different same-language file. Preferences can fall back to defaults. */
 object SubtitleSelection {
+    // MergingMediaSource prefixes child format IDs with their numeric source index.
+    fun stableId(id:String):String = id.replace(Regex("^(?:[0-9]+:)+(emby-sub:)"),"$1")
     data class Option(val id:String,val title:String,val language:String,val supported:Boolean=true) {
-        val external get()=id.startsWith("emby-sub:")
+        val external get()=stableId(id).startsWith("emby-sub:")
     }
     fun choose(options:List<Option>,preference:String,explicit:Boolean=false,id:String="",title:String="",ordinal:Int=-1):Int? {
         if(explicit) {
-            val exact=if(id.isNotBlank()) options.indexOfFirst {it.id==id} else {
+            val exact=if(id.isNotBlank()) options.indexOfFirst {stableId(it.id)==stableId(id)} else {
                 val names=options.indices.filter {title.isNotBlank() && options[it].title.equals(title,true)}
                 names.singleOrNull() ?: options.indices.filter {!options[it].external}.getOrNull(ordinal) ?: -1
             }

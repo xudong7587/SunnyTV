@@ -105,6 +105,8 @@ class PlayerActivity: ComponentActivity() {
     private var cloudVariants by mutableStateOf<List<CloudVideoSource.Variant>>(emptyList())
     private var cloudNotice by mutableStateOf("")
     private var cloudDiscoveryJob: Job? = null
+    private var cloudAutoDiscovered=false
+    private var cloudDiscoveryGeneration=0
     private var cloudLoading by mutableStateOf(false)
     private var cloudDelivery by mutableStateOf("direct")
     private val isCloudQuality get() = quality.startsWith("115:")
@@ -225,6 +227,8 @@ class PlayerActivity: ComponentActivity() {
         metadataJob?.cancel();metadataJob=null
         sleepJob?.cancel();sleepJob=null
         qualityJob?.cancel();qualityJob=null
+        if(cloudLoading) cloudAutoDiscovered=false
+        cloudDiscoveryGeneration++
         cloudDiscoveryJob?.cancel();cloudLoading=false
         releaseTranscode()
         super.onStop()
@@ -361,7 +365,7 @@ class PlayerActivity: ComponentActivity() {
                         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT,false)
                             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup,index)).build()
                         selectionNotice=""
-                    } else if(request.explicitSubtitle && options.isNotEmpty()) {
+                    } else if(request.explicitSubtitle) {
                         selectionNotice="所选字幕暂不可用，可在字幕面板选择此媒体的其他实际字幕"
                     }
                     // No match for a library preference leaves the media/player default selection intact.
@@ -452,6 +456,7 @@ class PlayerActivity: ComponentActivity() {
             override fun onRenderedFirstFrame(eventTime:AnalyticsListener.EventTime,output:Any,renderTimeMs:Long) {
                 if(!rendered) {
                     rendered=true
+                    if(!cloudAutoDiscovered) {cloudAutoDiscovered=true;discoverCloudQuality()}
                     val timing = StartupTiming.measure(
                         if (includeSourceTime) request.requestedAtMs else -1,
                         if (includeSourceTime) request.sourceReadyAtMs else -1,
@@ -533,7 +538,7 @@ class PlayerActivity: ComponentActivity() {
         if(!preserveRoute) {
             qualityJob?.cancel();qualityJob=null;releaseTranscode()
             quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
-            cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false
+            cloudDiscoveryGeneration++;cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false;cloudAutoDiscovered=false
         }
         request=next
         if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
@@ -620,23 +625,42 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     private fun openQualityPanel() {
-        panel="quality";returnControl="quality";qualityNotice="原画播放原始文件，其他清晰度由 115 提供"
+        panel="quality";returnControl="quality";qualityNotice=if(transcodeSource==null) "当前播放源不支持 115 云端清晰度，原画仍可正常播放。可使用作者的 MediaIndex 项目生成 STRM，详情见设置 → 关于。" else "原画播放原始文件，其他清晰度由 115 提供"
         // NAS transcoding remains implemented but is hidden from the quality UI.
     }
     private fun discoverCloudQuality() {
-        if(cloudLoading || qualitySwitching) return
-        val expected=request
+        if(cloudLoading) return
         val source=transcodeSource?.cloudVideo() ?: return
+        val generation=++cloudDiscoveryGeneration
         cloudDiscoveryJob?.cancel();cloudLoading=true;cloudNotice="正在查询 115 云端清晰度…"
         cloudDiscoveryJob=lifecycleScope.launch {
             try {
                 val variants=source.discover()
-                if(request===expected) {cloudVariants=variants;cloudNotice="云端已有清晰度，无需 NAS 重新编码"}
+                if(generation==cloudDiscoveryGeneration) {cloudVariants=variants;cloudNotice="云端已有清晰度，无需 NAS 重新编码"}
             } catch(e:CancellationException) {throw e}
             catch(e:Exception) {
-                if(request===expected) {cloudVariants=emptyList();cloudNotice=if(e is io.github.xudong7587.sunnytv.core.network.SourceException) e.message.orEmpty() else "115 云端响应暂不兼容"}
-            } finally {if(request===expected) cloudLoading=false}
+                if(generation==cloudDiscoveryGeneration) {cloudVariants=emptyList();cloudNotice=if(e is io.github.xudong7587.sunnytv.core.network.SourceException) e.message.orEmpty() else "115 云端响应暂不兼容"}
+            } finally {if(generation==cloudDiscoveryGeneration) cloudLoading=false}
         }
+    }
+    /** Track groups belong to one player. Carry semantic selection, never its old override. */
+    private fun rememberSubtitleSelection() {
+        val p=player ?: return
+        if(C.TRACK_TYPE_TEXT in p.trackSelectionParameters.disabledTrackTypes) {
+            request=request.copy(subtitlePreference="none",explicitSubtitle=false,subtitleTrackId="",subtitleTitle="",subtitleOrdinal=-1)
+            return
+        }
+        val tracks=p.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}
+            .flatMap {g->(0 until g.length).map {g to it}}
+        val chosen=tracks.firstOrNull {(g,i)->g.isTrackSelected(i)} ?: return
+        val f=chosen.first.getTrackFormat(chosen.second)
+        val embedded=tracks.filterNot {(g,i)->SubtitleSelection.stableId(g.getTrackFormat(i).id.orEmpty()).startsWith("emby-sub:")}
+        val sourceTrack=if(quality=="original" && !SubtitleSelection.stableId(f.id.orEmpty()).startsWith("emby-sub:"))
+            request.sourceTracks.filter {it.type=="Subtitle" && !it.external}.getOrNull(embedded.indexOf(chosen)) else null
+        val extracted=sourceTrack?.let {track->request.subtitles.firstOrNull {it.id=="emby-sub:${track.index}"}}
+        request=request.copy(explicitSubtitle=true,subtitleTrackId=extracted?.id ?: SubtitleSelection.stableId(f.id.orEmpty()),
+            subtitleTitle=extracted?.title ?: f.label.orEmpty(),
+            subtitlePreference=f.language?.takeIf {it.isNotBlank()} ?: request.subtitlePreference,subtitleOrdinal=-1)
     }
     private fun changeQuality(next:String,target:Long=absolutePosition(),play:Boolean=player?.playWhenReady ?: resumePlayWhenReady) {
         if(qualitySwitching) return
@@ -663,6 +687,7 @@ class PlayerActivity: ComponentActivity() {
                 val commitPosition=if(next.startsWith("115:") && player!=null) absolutePosition() else target
                 val commitPlay=if(next.startsWith("115:") && player!=null) player!!.playWhenReady else play
                 reporter?.progress(commitPosition,!commitPlay);progressJob?.cancel()
+                rememberSubtitleSelection()
                 player?.release();player=null;rendered=false
                 releaseTranscode()
                 cloudSession=newCloud;transcodeSession=newTranscode;committed=true
@@ -816,7 +841,7 @@ class PlayerActivity: ComponentActivity() {
                         reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false;createPlayer()
                     }
                     PlayerControl("退出播放","exit",initial=retryUsed) {finish()}
-                    if(transcodeSource!=null) PlayerControl("选择清晰度","quality",badge=qualityBadge()) {openQualityPanel()}
+                    PlayerControl("选择清晰度","quality",badge=qualityBadge()) {openQualityPanel()}
                 }
             }
 
@@ -880,7 +905,7 @@ class PlayerActivity: ComponentActivity() {
                         Spacer(if(tvPlayback) Modifier.weight(1f) else Modifier.width(12.dp))
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                             PlayerControl("倍速 ${speedLabel(playbackSpeed)}","speed",initial=returnControl=="speed",badge=speedLabel(playbackSpeed)) {returnControl="speed";panel="speed"}
-                            if(transcodeSource!=null) PlayerControl("清晰度："+qualityLabel(),"quality",badge=qualityBadge(),initial=returnControl=="quality") {openQualityPanel()}
+                            PlayerControl("清晰度："+qualityLabel(),"quality",badge=qualityBadge(),initial=returnControl=="quality") {openQualityPanel()}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
                             if((quality=="original" || isCloudQuality) && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
@@ -951,6 +976,7 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun QualityPanel() {
         PlayerSheet("清晰度",{panel=""}) {
             Text(if(qualitySwitching) "正在切换…" else qualityNotice,color=Color.White.copy(.7f),fontSize=14.sp)
+            if(transcodeSource!=null) {
             PlayerOption(if(cloudDelivery=="direct") "115 连接：优先直连" else "115 连接：NAS 代理") {
                 if(!qualitySwitching) cloudDelivery=if(cloudDelivery=="direct") "proxy" else "direct"
             }
@@ -958,9 +984,11 @@ class PlayerActivity: ComponentActivity() {
             cloudSession?.let {Text("当前播放："+if(it.delivery=="direct") "115 直连" else "NAS 代理",color=Color.White.copy(.7f),fontSize=14.sp)}
             PlayerOption(if(cloudLoading) "正在查询 115…" else "查询 / 刷新 115 云端清晰度") {discoverCloudQuality()}
             if(cloudNotice.isNotBlank()) Text(cloudNotice,color=Color.White.copy(.7f),fontSize=14.sp)
+            }
             (listOf("original" to "原画") + cloudVariants.filter {it.badge in setOf("4K","1080P")}.map {it.qualityId to it.label}).forEach {(id,label)->
                 PlayerOption(label,selected=quality==id) {
-                    if(!qualitySwitching && (id=="original" || cloudVariants.any {it.qualityId==id})) changeQuality(id)
+                    if(id==quality && (id=="original" || cloudSession?.delivery==cloudDelivery)) panel=""
+                    else if(!qualitySwitching && (id=="original" || cloudVariants.any {it.qualityId==id})) changeQuality(id)
                     else qualityNotice="此清晰度暂不可用"
                 }
             }

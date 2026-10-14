@@ -19,8 +19,10 @@ class StartupCacheTest {
         try {
             val entry=MediaEntry("movie",source.id,"测试影片","Movie",path="SECRET_MEDIA_URL",
                 externalLinks=listOf(MediaLink("private","SECRET_LINK")),primary=Artwork("movie","Primary","tag"))
-            cache.write(source,StartupCache.Snapshot(HomeFeed(latest=listOf(entry)),emptyMap()),cache.generation)
+            cache.write(source,StartupCache.Snapshot(HomeFeed(latest=listOf(entry)),emptyMap(),listOf(entry),"random"),cache.generation)
             val restored=cache.read(source)!!.feed.latest.single()
+            assertEquals(listOf(restored),cache.read(source)!!.hero)
+            assertEquals("random",cache.read(source)!!.heroMode)
             assertEquals(entry.title,restored.title);assertEquals(entry.primary,restored.primary)
             assertEquals("",restored.path);assertTrue(restored.externalLinks.isEmpty())
             val text=File(context.cacheDir,"startup-v1").listFiles()!!.single().readText()

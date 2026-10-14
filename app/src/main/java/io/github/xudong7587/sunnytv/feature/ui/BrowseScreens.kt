@@ -163,7 +163,7 @@ import coil.request.ImageRequest
     val resume=feeds.flatMap { it.resume }
     val latest=feeds.flatMap { it.latest }
     val nextUp=if(model.settings.showNextUp) feeds.flatMap { it.nextUp }.distinctBy {it.key} else emptyList()
-    val incoming=when(model.settings.heroMode) {"resume"->resume;"random"->model.heroCandidates.ifEmpty {latest};else->latest}.distinctBy {it.key}.take(7)
+    val incoming=model.heroCandidates.ifEmpty {if(model.settings.heroMode=="resume") resume else latest}.distinctBy {it.key}.take(7)
     var candidates by remember {mutableStateOf(incoming)}
     var selected by rememberSaveable {mutableIntStateOf(0)}
     val hero=candidates.getOrNull(selected.coerceIn(0,(candidates.size-1).coerceAtLeast(0)))
@@ -207,7 +207,7 @@ import coil.request.ImageRequest
         // still holds focus; the automatic feed update keeps the old behaviour.
         val manual=model.heroRevision!=appliedHeroRevision
         if(!model.busy && (!heroFocused || manual)) {
-            if(manual) carouselOffset++
+            if(manual && appliedHeroRevision>=0 && model.settings.heroMode!="random") carouselOffset++
             candidates=heroDisplay
             selected=selected.coerceIn(0,(heroDisplay.size-1).coerceAtLeast(0))
             appliedHeroRevision=model.heroRevision

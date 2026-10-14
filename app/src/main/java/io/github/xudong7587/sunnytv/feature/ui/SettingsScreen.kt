@@ -327,6 +327,11 @@ import kotlinx.coroutines.*
                 }
                 "实验升级" -> {item {io.github.xudong7587.sunnytv.feature.update.UpdateSettings()}}
                 "关于" -> {
+                    item {SectionTitle("MediaIndex · 作者的媒体索引项目", "115 云端清晰度支持")}
+                    item {Text("将网盘媒体整理为可供 Emby 使用的 STRM，并通过稳定播放入口连接原始文件。配合支持云端清晰度的 MediaIndex 版本，SunnyTV 可查询 115 已生成的 4K / 1080P 通道，无需 NAS 重新编码。第三方 STRM 仍可播放原画；能否使用 115 清晰度取决于播放入口是否提供对应接口。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
+                    item {val uri=androidx.compose.ui.platform.LocalUriHandler.current
+                        Action("打开 MediaIndex 项目") {runCatching {uri.openUri("https://github.com/xudong7587/media-index")}.onFailure {model.message="请在浏览器访问 github.com/xudong7587/media-index"}}}
+
                     item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
                     item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n针对电视遥控器操作与流畅浏览设计。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                 }
@@ -411,7 +416,7 @@ import kotlinx.coroutines.*
     // 字体 merged into 外观; the data-source page sits below 性能.
     val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","实验升级","关于")
     @Composable fun Category(cat:String) {
-        FocusTile("settings:$cat",Modifier.width(if(LocalCompact.current) 140.dp else 165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
+        FocusTile("settings:$cat",if(LocalCompact.current) Modifier.widthIn(min=64.dp) else Modifier.width(165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
         }
     }
