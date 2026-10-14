@@ -13,7 +13,7 @@ import java.security.MessageDigest
  * JSON whitelist avoids Java object deserialization. Each file and the entire directory are bounded.
  */
 class StartupCache(context: Context) {
-    data class Snapshot(val feed: HomeFeed, val shelves: Map<String, List<MediaEntry>>)
+    data class Snapshot(val feed: HomeFeed, val shelves: Map<String, List<MediaEntry>>, val hero:List<MediaEntry> = emptyList(), val heroMode:String = "")
     private val directory = File(context.cacheDir, "startup-v1")
     @Volatile var generation: Long = 0
         private set
@@ -49,7 +49,7 @@ class StartupCache(context: Context) {
             val id = row.optString("id").take(200)
             if (id.isNotBlank()) shelves["${source.id}:$id"] = decode(row.optJSONArray("items"), source.id, 10)
         }
-        Snapshot(HomeFeed(entries("libraries",40),entries("resume"),entries("latest"),entries("next")), shelves)
+        Snapshot(HomeFeed(entries("libraries",40),entries("resume"),entries("latest"),entries("next")), shelves, entries("hero",7), json.optString("heroMode"))
     }.getOrNull()
 
     @Synchronized fun write(source: SourceConfig, snapshot: Snapshot, expectedGeneration: Long) {
@@ -57,6 +57,7 @@ class StartupCache(context: Context) {
         runCatching {
             directory.mkdirs()
             val j = JSONObject().put("schema",1).put("saved",System.currentTimeMillis())
+                .put("hero",encode(snapshot.hero,7)).put("heroMode",snapshot.heroMode)
                 .put("libraries",encode(snapshot.feed.libraries,40)).put("resume",encode(snapshot.feed.resume,20))
                 .put("latest",encode(snapshot.feed.latest,20)).put("next",encode(snapshot.feed.nextUp,20))
             val rows = JSONArray()
