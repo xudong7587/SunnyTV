@@ -1,3 +1,9 @@
+# 2026-10-14 dev36.4：GitHub 更新 API 限额修复
+
+dev36.3 已发布并同步 WebDAV，但发布后复查发现未登录 GitHub REST API 已返回 HTTP 403，额度为 0；不是应用“已最新”。按用户原有更新修复授权继续追加 dev36.4 / 51，保留原版本。
+
+更新检查使用官方 `releases.atom` 及 BUILD_INFO，包含开发测试版；下载使用官方 SHA256SUMS 校验，不再依赖受限 REST API。保留 TLS、重定向限制、取消及签名/身份检查，增加订阅 DTD/外部实体/深度/大小约束。在同一限额网络下 Android 模拟器实连通过。当前分支 `codex/github-update-feed`，基于 `c20b221`。本地 JUnit 116 项通过，debug/release 编译和 lint 通过（0 错误/40 警告）；更新回归 5 项及 GitHub 实连检查/下载校验 2 项通过。核心接口未改，延续本轮 172 项契约结果。最终发行与 WebDAV 回执在完成后追加。
+
 # 2026-10-14 dev36.3 发布修订
 
 用户已授权推送 GitHub、更新 WebDAV，并修复应用 GitHub 入口。当前分支 `codex/github-update-native`，基于 `44b96b4` / 已发布 dev36.2，版本 50。

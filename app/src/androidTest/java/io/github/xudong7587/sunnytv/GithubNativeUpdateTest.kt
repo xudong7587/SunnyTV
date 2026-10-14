@@ -12,6 +12,17 @@ import org.junit.Test
 /** Local live-GitHub smoke test; intentionally excluded from deterministic release CI. */
 class GithubNativeUpdateTest {
     private fun views(root:View):List<View> = listOf(root)+(if(root is ViewGroup) (0 until root.childCount).flatMap {views(root.getChildAt(it))} else emptyList())
+    @Test fun officialDownloadChecksHashThenRejectsAlreadyInstalledVersionWithoutRestApi() = kotlinx.coroutines.runBlocking {
+        val release=io.github.xudong7587.sunnytv.feature.update.GithubUpdates.latest()
+        org.junit.Assume.assumeTrue(release.versionCode<=BuildConfig.VERSION_CODE)
+        val context=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        try {
+            io.github.xudong7587.sunnytv.feature.update.GithubUpdates.download(context,release.apk)
+            fail("Existing version must not be installed again")
+        } catch(e:IllegalArgumentException) {
+            assertEquals("该版本不高于已安装版本",e.message)
+        }
+    }
     @Test fun nativeScreenOpensAndShowsCurrentAndOfficialLatestVersion() {
         ActivityScenario.launch(GithubUpdateActivity::class.java).use {scenario->
             var complete=false
