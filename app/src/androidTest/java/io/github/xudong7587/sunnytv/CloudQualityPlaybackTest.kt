@@ -27,6 +27,7 @@ class CloudQualityPlaybackTest {
         val selections=CopyOnWriteArrayList<String>()
         val variant="a".repeat(32);val sid="b".repeat(32);val secret="t".repeat(43)
         val metadata="""{"id":"$variant","width":3840,"height":2160,"bandwidth":15000000}"""
+        val hiddenMetadata="""{"id":"${"c".repeat(32)}","width":1280,"height":720,"bandwidth":1000000}"""
         val failSelection=java.util.concurrent.atomic.AtomicBoolean(true)
         val playlistRequests=java.util.concurrent.atomic.AtomicInteger()
         val acceptor=Thread {
@@ -54,7 +55,7 @@ class CloudQualityPlaybackTest {
                             val code=if(path=="/api/cloud-video/sessions" && failSelection.get()) 409 else 200
                             val body=when(path) {
                                 "/api/transcode/capabilities" -> """{"protocol":"mediaindex-transcode-v1","available":false}"""
-                                "/api/cloud-video/discover" -> """{"protocol":"mediaindex-cloud-video-v1","variants":[$metadata]}"""
+                                "/api/cloud-video/discover" -> """{"protocol":"mediaindex-cloud-video-v1","variants":[$metadata,$hiddenMetadata]}"""
                                 "/api/cloud-video/sessions" -> if(failSelection.get()) "{}" else """{"protocol":"mediaindex-cloud-video-v1","sessionId":"$sid","sessionToken":"$secret","playlistUrl":"/api/cloud-video/sessions/$sid/index.m3u8?st=$secret","variant":$metadata,"delivery":"$delivery","seekMode":"hls-vod"}"""
                                 else -> null
                             }
@@ -79,10 +80,14 @@ class CloudQualityPlaybackTest {
                 fallbackUrl="http://127.0.0.1:${server.localPort}/emby-fixture")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario ->
                 rule.onNodeWithTag("player:quality").performClick()
-                rule.waitUntil(5000) {paths.any {it=="/api/transcode/capabilities"}}
+                rule.waitForIdle()
+                assertFalse(paths.any {it.startsWith("/api/transcode/")})
+                rule.onNodeWithText("原画").assertExists()
+                rule.onAllNodesWithText("NAS 转码",substring=true).assertCountEquals(0)
                 assertFalse(paths.any {it.contains("cloud-video")})
                 rule.onNodeWithText("查询 / 刷新 115 云端清晰度").performClick()
                 rule.waitUntil(5000) {rule.onAllNodesWithText("115 云端 · 4K · 15.0 Mbps").fetchSemanticsNodes().isNotEmpty()}
+                rule.onAllNodesWithText("720P",substring=true).assertCountEquals(0)
                 var before:ExoPlayer?=null
                 scenario.onActivity {before=player(it);before!!.pause()}
                 rule.onNodeWithText("115 云端 · 4K · 15.0 Mbps").performClick()

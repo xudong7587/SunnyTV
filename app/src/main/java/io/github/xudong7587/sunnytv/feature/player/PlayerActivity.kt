@@ -104,7 +104,6 @@ class PlayerActivity: ComponentActivity() {
     private var cloudSession: CloudVideoSource.Session? = null
     private var cloudVariants by mutableStateOf<List<CloudVideoSource.Variant>>(emptyList())
     private var cloudNotice by mutableStateOf("")
-    private var discoveryJob: Job? = null
     private var cloudDiscoveryJob: Job? = null
     private var cloudLoading by mutableStateOf(false)
     private var cloudDelivery by mutableStateOf("direct")
@@ -112,7 +111,6 @@ class PlayerActivity: ComponentActivity() {
     private fun qualityBadge() = if(isCloudQuality) cloudSession?.variant?.badge ?: "115" else TranscodeSource.selectedQualityBadge(quality)
     private fun qualityLabel() = if(isCloudQuality) cloudSession?.variant?.label ?: "115 云端" else TranscodeSource.qualityLabel(quality)
     private var quality by mutableStateOf("original")
-    private var qualityProfiles by mutableStateOf<List<String>>(emptyList())
     private var qualityNotice by mutableStateOf("")
     private var bufferNotice by mutableStateOf("")
     private var clientNetworkNotice by mutableStateOf("")
@@ -227,7 +225,7 @@ class PlayerActivity: ComponentActivity() {
         metadataJob?.cancel();metadataJob=null
         sleepJob?.cancel();sleepJob=null
         qualityJob?.cancel();qualityJob=null
-        discoveryJob?.cancel();cloudDiscoveryJob?.cancel();cloudLoading=false
+        cloudDiscoveryJob?.cancel();cloudLoading=false
         releaseTranscode()
         super.onStop()
     }
@@ -535,7 +533,7 @@ class PlayerActivity: ComponentActivity() {
         if(!preserveRoute) {
             qualityJob?.cancel();qualityJob=null;releaseTranscode()
             quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
-            discoveryJob?.cancel();cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false
+            cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false
         }
         request=next
         if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
@@ -622,16 +620,8 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     private fun openQualityPanel() {
-        panel="quality";returnControl="quality";qualityNotice="正在检查 NAS 转码服务…"
-        discoveryJob?.cancel()
-        val expected=request
-        val source=transcodeSource
-        discoveryJob=lifecycleScope.launch {
-            val profiles=try {source?.capabilities().orEmpty()} catch(e:CancellationException) {throw e} catch(_:Exception) {emptyList()}
-            if(request!==expected) return@launch
-            qualityProfiles=profiles
-            qualityNotice=if(profiles.isEmpty()) "NAS 转码暂不可用，可查询 115 云端清晰度" else "NAS 转码按所选分辨率和码率生成"
-        }
+        panel="quality";returnControl="quality";qualityNotice="原画播放原始文件，其他清晰度由 115 提供"
+        // NAS transcoding remains implemented but is hidden from the quality UI.
     }
     private fun discoverCloudQuality() {
         if(cloudLoading || qualitySwitching) return
@@ -968,9 +958,9 @@ class PlayerActivity: ComponentActivity() {
             cloudSession?.let {Text("当前播放："+if(it.delivery=="direct") "115 直连" else "NAS 代理",color=Color.White.copy(.7f),fontSize=14.sp)}
             PlayerOption(if(cloudLoading) "正在查询 115…" else "查询 / 刷新 115 云端清晰度") {discoverCloudQuality()}
             if(cloudNotice.isNotBlank()) Text(cloudNotice,color=Color.White.copy(.7f),fontSize=14.sp)
-            (listOf("original" to "原片") + cloudVariants.map {it.qualityId to it.label} + TranscodeSource.menuQualityOptions.filter {(id,_) -> id!="original" && id in qualityProfiles}.map {(id,label) -> id to "NAS 转码 · $label"}).forEach {(id,label)->
+            (listOf("original" to "原画") + cloudVariants.filter {it.badge in setOf("4K","1080P")}.map {it.qualityId to it.label}).forEach {(id,label)->
                 PlayerOption(label,selected=quality==id) {
-                    if(!qualitySwitching && (id=="original" || id in qualityProfiles || cloudVariants.any {it.qualityId==id})) changeQuality(id)
+                    if(!qualitySwitching && (id=="original" || cloudVariants.any {it.qualityId==id})) changeQuality(id)
                     else qualityNotice="此清晰度暂不可用"
                 }
             }

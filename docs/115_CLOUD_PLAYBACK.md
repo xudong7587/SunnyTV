@@ -4,6 +4,8 @@
 
 基于 dev36 / main `71d3bdc`，分支 `codex/115-cloud-query-fix`。用户授权已登录 NAS 和 USB 手机诊断，且明确由 MediaIndex 负责 115 登录与查询，SunnyTV 不持有 115 Cookie。
 
+用户追加要求：保留 MediaIndex NAS 转码实现，但在 SunnyTV 隐藏入口/档位，也不再自动查询转码能力。菜单只保留原画（原始文件）以及 115 实际返回的 4K、1080p，未返回的档位不伪造。NAS 代理只是网络转发，仍可手动选择。
+
 - MediaIndex 修复真实 `files/get_info` 的 `pc` 字段和精确官方主清单入口认证。Cookie 只附加到核对文件后构造并完全匹配的官方入口，跳转/CDN 不继承。
 - 手机现有 dev36 + NAS 临时修复已实测：查询返回 4K 7.5 Mbps、1080p 3.0 Mbps；NAS 代理两档正常。原 Wi-Fi 对 CDN 的 HTTPS 连接重置，用户切换移动数据后，两档直连均正常播放，视频不经 NAS。
 - 1080p 切换时出现一次响应头前 EOF，手动重试恢复。修复云端播放误受原片 Emby fallback 标志影响、跳过自动重试的问题；仍只允许首帧前一次自动重试，不自动换代理。
