@@ -3,10 +3,14 @@ package io.github.xudong7587.sunnytv.core.model
 import java.io.Serializable
 
 enum class SourceKind { EMBY, CLOUDDRIVE }
+enum class EmbyProfile { STANDARD, UGREEN }
 data class SourceConfig(
     val id: String, val kind: SourceKind, val name: String, val baseUrl: String,
-    val userId: String = "", val username: String = "", val secret: String = ""
-) : Serializable
+    val userId: String = "", val username: String = "", val secret: String = "",
+    val embyProfile: EmbyProfile = EmbyProfile.STANDARD, val serverId: String = ""
+) : Serializable {
+    val isUgreen: Boolean get() = kind==SourceKind.EMBY && embyProfile==EmbyProfile.UGREEN
+}
 
 data class Artwork(val itemId: String, val type: String, val tag: String, val index: Int? = null) : Serializable
 
@@ -68,7 +72,9 @@ data class PlaybackRequest(
     val audioOrdinal:Int = -1, val audioStreamIndex:Int = -1,
     val sourceTracks:List<MediaTrack> = emptyList(), val audioCompatibility:Boolean=false,
     /** Server-provided remote source retained when playback prefers Emby's route. */
-    val sourceMediaUrl:String? = null
+    val sourceMediaUrl:String? = null,
+    /** Known source duration for progress reporting; zero means unknown. */
+    val durationMs:Long = 0
 ) : Serializable
 
 data class RemoteSubtitle(val id:String,val name:String,val provider:String,val language:String,val format:String,val hashMatch:Boolean)

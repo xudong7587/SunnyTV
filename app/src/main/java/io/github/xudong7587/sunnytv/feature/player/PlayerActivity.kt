@@ -220,7 +220,7 @@ class PlayerActivity: ComponentActivity() {
         player?.let {p ->
             lastPosition=absolutePosition(); app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
             resumePlayWhenReady = p.playWhenReady
-            reporter?.close(lastPosition, reporterHasStarted)
+            reporter?.close(lastPosition, reporterHasStarted,duration)
             p.release()
         }
         player=null; rendered=false; progressJob?.cancel(); reporter=null;reporterHasStarted=false
@@ -373,7 +373,7 @@ class PlayerActivity: ComponentActivity() {
             }
             override fun onIsPlayingChanged(isPlaying:Boolean) {
                 playing=isPlaying
-                if(rendered) reporter?.progress(absolutePosition(), !isPlaying)
+                if(rendered) reporter?.progress(absolutePosition(), !isPlaying,duration)
             }
             override fun onPlayWhenReadyChanged(playWhenReady:Boolean,reason:Int) {
                 if(quality=="original" || isCloudQuality || qualitySwitching) return
@@ -401,7 +401,7 @@ class PlayerActivity: ComponentActivity() {
                     lastPosition=player?.currentPosition?.coerceAtLeast(0) ?: lastPosition
                     resumePlayWhenReady=player?.playWhenReady ?: resumePlayWhenReady
                     progressJob?.cancel();progressJob=null
-                    reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false
+                    reporter?.close(lastPosition,reporterHasStarted,duration);reporter=null;reporterHasStarted=false
                     val previous=player
                     player=null
                     window.decorView.post {
@@ -466,7 +466,7 @@ class PlayerActivity: ComponentActivity() {
                     totalStartupMs=timing.totalMs ?: -1
                     sourceStartupMs=timing.sourceMs ?: -1
                     headerMs=firstHeader.get()
-                    reporter?.start(absolutePosition(), !p.isPlaying)
+                    reporter?.start(absolutePosition(), !p.isPlaying,if(quality=="original" || isCloudQuality) p.duration else transcodeDuration)
                     reporterHasStarted=reporter!=null
                 }
             }
@@ -482,7 +482,7 @@ class PlayerActivity: ComponentActivity() {
                 position=absolutePosition();duration=if(quality=="original" || isCloudQuality) p.duration.coerceAtLeast(0) else transcodeDuration
                 tick++
                 if(tick%20==0 && rendered) {
-                    reporter?.progress(position, !p.isPlaying)
+                    reporter?.progress(position, !p.isPlaying,duration)
                     app.store.savePosition(request.localKey,position)
                     transcodeSession?.let {session->runCatching {transcodeSource?.control(session)}}
                     transcodeSession?.let {session->runCatching {bufferNotice=transcodeSource?.bufferNotice(session,position).orEmpty()}}
@@ -532,7 +532,7 @@ class PlayerActivity: ComponentActivity() {
         val old=player
         lastPosition=absolutePosition()
         resumePlayWhenReady=old?.playWhenReady ?: resumePlayWhenReady
-        reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false
+        reporter?.close(lastPosition,reporterHasStarted,duration);reporter=null;reporterHasStarted=false
         progressJob?.cancel();progressJob=null
         old?.release();player=null
         if(!preserveRoute) {
@@ -686,7 +686,7 @@ class PlayerActivity: ComponentActivity() {
                 // Commit its current position/state instead of rewinding to menu-click time.
                 val commitPosition=if(next.startsWith("115:") && player!=null) absolutePosition() else target
                 val commitPlay=if(next.startsWith("115:") && player!=null) player!!.playWhenReady else play
-                reporter?.progress(commitPosition,!commitPlay);progressJob?.cancel()
+                reporter?.progress(commitPosition,!commitPlay,duration);progressJob?.cancel()
                 rememberSubtitleSelection()
                 player?.release();player=null;rendered=false
                 releaseTranscode()
@@ -839,7 +839,7 @@ class PlayerActivity: ComponentActivity() {
                         // A manual retry also tries the other route once: direct failed, so ask Emby.
                         if(hasServerFallback()) useFallbackRoute=true
                         player?.release();player=null;progressJob?.cancel()
-                        reporter?.close(lastPosition,reporterHasStarted);reporter=null;reporterHasStarted=false;createPlayer()
+                        reporter?.close(lastPosition,reporterHasStarted,duration);reporter=null;reporterHasStarted=false;createPlayer()
                     }
                     PlayerControl("退出播放","exit",initial=retryUsed) {finish()}
                     PlayerControl("选择清晰度","quality",badge=qualityBadge()) {openQualityPanel()}
@@ -943,7 +943,7 @@ class PlayerActivity: ComponentActivity() {
     }
     @Composable private fun PlayerPanel() {
         when(panel) {
-            "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId}?.let {config->
+            "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId && !it.isUgreen}?.let {config->
                 SubtitleSearchDialog(app.emby(config),app.store,item,request.mediaSourceId,{panel=""}) {applyDownloadedSubtitle(it)}
             }}
             "audio-output" -> AudioOutputPanel()
@@ -1000,8 +1000,11 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun TrackPanel() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
+        val source by produceState<SourceConfig?>(null,request.sourceId) {
+            value=withContext(Dispatchers.IO) {runCatching {app.store.sources().firstOrNull {it.id==request.sourceId}}.getOrNull()}
+        }
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
-            if((quality=="original" || isCloudQuality) && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
+            if(source?.isUgreen==false && (quality=="original" || isCloudQuality) && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}

@@ -119,6 +119,7 @@ import kotlinx.coroutines.*
     var resetConfirm by remember {mutableStateOf(false)}
     var category by rememberSaveable {mutableStateOf("媒体来源")}
     var adding by remember {mutableStateOf<SourceKind?>(null)}
+    var addingProfile by remember {mutableStateOf(EmbyProfile.STANDARD)}
     var removing by remember {mutableStateOf<SourceConfig?>(null)}
     var chooser by remember {mutableStateOf("")}
     var librariesExpanded by remember {mutableStateOf(false)}
@@ -157,12 +158,19 @@ import kotlinx.coroutines.*
                     }
                     model.sources.filter {it.kind==SourceKind.EMBY}.forEach {source -> item {
                         Row(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(12.dp)).padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {Text(source.name,color=SunnyColors.Text,fontSize=18.sp); Text(if(source.kind==SourceKind.EMBY) "Emby · ${source.username}" else "CloudDrive2 · WebDAV",color=SunnyColors.Secondary,fontSize=12.sp)}
+                            Column(Modifier.weight(1f)) {Text(source.name,color=SunnyColors.Text,fontSize=18.sp); Text(if(source.isUgreen) "绿联影视中心 · ${source.username}" else "Emby · ${source.username}",color=SunnyColors.Secondary,fontSize=12.sp)}
                             Action("移除此来源",id="remove:${source.id}") {removing=source}
                         }
                     } }
-                    item {Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {Action("＋ Emby",primary=true) {adding=SourceKind.EMBY}}}
-                    item {Action("重置损坏的来源配置") {resetConfirm=true}}
+                    item {
+                        @Composable fun AddButtons() {
+                            Action("添加 Emby 服务",primary=true,id="source:add-emby",icon="plus",alwaysShowLabel=true) {addingProfile=EmbyProfile.STANDARD;adding=SourceKind.EMBY}
+                            Action("添加绿联影视服务",id="source:add-ugreen",icon="plus",alwaysShowLabel=true) {addingProfile=EmbyProfile.UGREEN;adding=SourceKind.EMBY}
+                        }
+                        if(compact) Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {AddButtons()}
+                        else Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {AddButtons()}
+                    }
+                    item {Action("清除本地服务配置",id="source:reset",icon="trash",alwaysShowLabel=true) {resetConfirm=true}}
                 }
                 "主题" -> {
                     item {ToggleRow("深色主题","浅色与主题色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
@@ -387,7 +395,7 @@ import kotlinx.coroutines.*
             }
         }
     }
-    adding?.let {kind->AddSourceDialog(kind,onClose={adding=null})}
+    adding?.let {kind->AddSourceDialog(kind,onClose={adding=null},initialProfile=addingProfile)}
     removing?.let {source ->
         Dialog(onDismissRequest={removing=null}) {
             Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(16.dp)).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
@@ -437,9 +445,27 @@ import kotlinx.coroutines.*
     }
 }
 
-@Composable fun AddSourceDialog(kind:SourceKind,onClose:()->Unit,onConnected:()->Unit=onClose,firstConnection:Boolean=false) {
+@Composable fun FirstSourceDialog(onConnected:()->Unit) {
+    var profile by remember {mutableStateOf<EmbyProfile?>(null)}
+    if(profile==null) Dialog(onDismissRequest={}) {
+        Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp),
+            verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            Text("添加媒体服务",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
+            Text("选择要连接的媒体服务。",color=SunnyColors.Secondary,fontSize=14.sp)
+            Action("添加 Emby 服务",id="first-source:emby",icon="plus",alwaysShowLabel=true,autoFocus=true) {profile=EmbyProfile.STANDARD}
+            Action("添加绿联影视服务",id="first-source:ugreen",icon="plus",alwaysShowLabel=true) {profile=EmbyProfile.UGREEN}
+        }
+    } else AddSourceDialog(SourceKind.EMBY,onClose={profile=null},onConnected=onConnected,
+        firstConnection=true,initialProfile=profile!!)
+}
+
+@Composable fun AddSourceDialog(kind:SourceKind,onClose:()->Unit,onConnected:()->Unit=onClose,firstConnection:Boolean=false,
+                               initialProfile:EmbyProfile=EmbyProfile.STANDARD) {
     val model=LocalAppModel.current
-    var name by remember {mutableStateOf(if(kind==SourceKind.EMBY) "家庭 Emby" else "CloudDrive2")}
+    val profile=initialProfile
+    var name by remember {mutableStateOf(if(kind!=SourceKind.EMBY) "CloudDrive2" else if(initialProfile==EmbyProfile.UGREEN) "绿联影视中心" else "家庭 Emby")}
+    val green=kind==SourceKind.EMBY && profile==EmbyProfile.UGREEN
+    val guideFocus=remember {FocusRequester()}
     val nameFocus=remember {FocusRequester()}; val baseFocus=remember {FocusRequester()}
     val userFocus=remember {FocusRequester()}; val passwordFocus=remember {FocusRequester()}
     val saveFocus=remember {FocusRequester()}
@@ -449,21 +475,33 @@ import kotlinx.coroutines.*
     Dialog(onDismissRequest={if(!model.busy && !firstConnection) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
             .verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(13.dp)) {
-            Text(if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
-            Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
-            Field("来源名称",name,{name=it},autoFocus=true,requester=nameFocus,next=baseFocus,tag="source:name")
-            Field("服务地址（完整 http:// 或 https:// 地址）",base,{base=it},requester=baseFocus,next=userFocus,previous=nameFocus,tag="source:address")
-            Field("用户名",user,{user=it},requester=userFocus,next=passwordFocus,previous=baseFocus,tag="source:username")
-            Field("密码",password,{password=it},password=true,requester=passwordFocus,next=saveFocus,previous=userFocus,
+            LaunchedEffect(green) {if(green) {withFrameNanos {};guideFocus.requestFocus()}}
+            Text(if(green) "添加绿联影视服务" else if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby 服务" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
+            if(green) {
+                Text("连接前，先在绿联 NAS 上开启服务",color=SunnyColors.Accent,fontSize=16.sp,fontWeight=FontWeight.SemiBold,
+                    modifier=Modifier.testTag("ugreen:setup-title"))
+                Text("1. 打开绿联云的「影视中心」。\n2. 进入「设置 → 服务管理 → 媒体服务器」，打开媒体库服务。\n3. 设置媒体库专用账号和密码，再填入下方。这里使用的是第三方连接账号，与 NAS 管理员登录分开。",
+                    color=SunnyColors.Text,fontSize=13.sp,lineHeight=21.sp,modifier=Modifier.testTag("ugreen:setup-steps")
+                        .focusRequester(guideFocus).focusProperties {down=nameFocus}.focusable())
+                Text("如果没有「媒体服务器」，先更新 NAS 固件和影视中心，并确认当前版本已开放此功能。",
+                    color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
+                Text("服务地址：使用页面显示的地址和端口（常见为 9443）；远程反代请填 HTTPS 域名及外部端口。SunnyTV 会自动补齐 /emby/，不要填写 NAS 桌面网页地址。",
+                    color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp,modifier=Modifier.testTag("ugreen:address-help"))
+            } else Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
+            Field("来源名称",name,{name=it},autoFocus=!green,requester=nameFocus,next=baseFocus,
+                previous=if(green) guideFocus else null,tag="source:name")
+            Field(if(green) "媒体服务器地址（https://域名:端口）" else "服务地址（完整 http:// 或 https:// 地址）",base,{base=it},requester=baseFocus,next=userFocus,previous=nameFocus,tag="source:address")
+            Field(if(green) "媒体库专用账号" else "用户名",user,{user=it},requester=userFocus,next=passwordFocus,previous=baseFocus,tag="source:username")
+            Field(if(green) "媒体库密码" else "密码",password,{password=it},password=true,requester=passwordFocus,next=saveFocus,previous=userFocus,
                 confirmText="填写完成",tag="source:password")
-            Text("HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp)
+            Text(if(green) "需要有效且匹配地址的 HTTPS 证书；自签名证书请在 NAS 或反向代理中妥善配置。登录失败时，先检查媒体库服务开关、专用账号和 HTTPS 转发。" else "HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 FocusTile("source:save",Modifier.focusRequester(saveFocus).focusProperties {up=passwordFocus},
-                    onClick={if(!model.busy) model.addSource(kind,name,base,user,password,onConnected)}) {
+                    onClick={if(!model.busy) model.addSource(kind,name,base,user,password,onConnected,profile)}) {
                     Text(if(model.busy) "连接中…" else "验证并保存",color=SunnyColors.Accent,fontSize=15.sp,
                         modifier=Modifier.padding(horizontal=20.dp,vertical=14.dp))
                 }
-                if(!firstConnection) Action("取消") {if(!model.busy) onClose()}
+                Action(if(firstConnection) "返回" else "取消",id="source:cancel") {if(!model.busy) onClose()}
             }
         }
     }

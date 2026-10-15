@@ -3,6 +3,7 @@
 <p align="center">让自己的媒体库，回到大屏。</p>
 
 <p align="center">
+  <a href="https://sunnytv.dunn.fun:666/">官方网站</a> ·
   <a href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新版</a> ·
   <a href="CHANGELOG.md">版本记录</a> ·
   <a href="docs/STATUS.md">开发状态</a> ·
@@ -10,12 +11,14 @@
   <a href="docs/BUILD.md">构建说明</a>
 </p>
 
-SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端，以 Emby 为主要媒体来源，
+SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端，支持 Emby 与绿联影视中心，
 同时保留 MediaIndex STRM / 重定向播放与 CloudDrive2 WebDAV 兼容能力。应用不内置任何影视内容，
 需要连接你自己的媒体服务；海报、背景、透明片名 Logo 与单集封面都直接复用 Emby 已有素材，不重新刮削。
 
 **电视与手机/平板同一套界面**：电视保留遥控器焦点导航与「banner ↔ 媒体区」整屏切换；
 手机与平板改为可触摸的单列滚动，并收紧了 banner 与媒体区之间的留白。
+
+官网：**[sunnytv.dunn.fun:666](https://sunnytv.dunn.fun:666/)**。Android 安装包始终从 [GitHub 最新正式版](https://github.com/xudong7587/SunnyTV/releases/latest) 获取，后续版本采用纯数字编号。
 
 ## 亮点
 
@@ -36,6 +39,7 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 
 ## 主要功能
 
+- **绿联影视中心**：独立连接入口与开通指引，通过 Emby 兼容接口浏览电影、剧集与合集，读取播放源和续播信息；支持有界读取完整当前目录后在 SunnyTV 内排序。部分服务端管理和字幕操作受接口能力限制。
 - **首页**：一大一小两段式 banner 轮播（随机推荐 / 最新入库 / 继续观看），按「上」或下拉可换一批；
   下方是「我的媒体库」与每个媒体库的最新入库行。
 - **媒体库**：banner 推荐 + 工具行 + 海报墙。每个媒体库独立保存展示方式（海报 / 背景 / 横幅）、
@@ -52,6 +56,18 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 - **性能**：启动快照缓存、图片按「来源 + 条目 + 类型 + tag + 尺寸」缓存、低负载模式、界面分辨率偏好。
 - **实验升级**：在设置中保存 WebDAV 升级目录和账号，手动检查更新，或开启自动更新。安装由 Android 系统确认。
 
+## 原生界面截图
+
+![SunnyTV 原生首页](website/assets/home.webp)
+
+![SunnyTV 原生媒体库](website/assets/grid.webp)
+
+![SunnyTV 原生浅色主题](website/assets/light.webp)
+
+以上由 Android 模拟器中的真实 Compose 页面直接截图，片名、简介和海报均为原创演示内容；未使用用户媒体库或真实影视素材。[截图方法](website/README.md)。
+
+<details><summary>早期界面结构示意</summary>
+
 ## 界面示意
 
 ![SunnyTV 首页界面示意](docs/images/home.svg)
@@ -65,6 +81,19 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 以上均为界面示意图：片名、简介、年份、评分、进度与海报图形全部是原创虚构数据，未使用任何真实影视素材，
 也不是用户媒体库截图；图形由 [本地脚本](scripts/generate-readme-art.py) 生成（纯手写 SVG，无外部图片、字体或网络请求）。
 
+</details>
+
+## 连接绿联影视中心
+
+1. 在支持媒体服务器功能的影视中心版本中，打开「设置 → 服务管理 → 媒体服务器」。
+2. 开启媒体服务器，创建独立的媒体库专用账号和密码。
+3. SunnyTV「设置 → 媒体来源 → 添加绿联影视服务」填写实际 HTTPS 服务地址与专用账号。无需填写 NAS 管理员密码；地址可填根入口或 `/emby/`，客户端会规范化路径。
+4. 外网使用已配置的可访问 HTTPS 域名与外部端口，证书需受设备信任。不要填写 UGOS 桌面登录页。
+
+使用 Emby 兼容媒体服务器与申请 NAS UPK 安装测试的 `ugdev.sig` 设备签名是两条不同的流程。当前适配不代表已获得绿联专项 API 合作认证。
+
+绿联本地排序只读当前目录，不修改 NAS。MediaIndex 115 云端清晰度需保留有效的原始 `/api/play/` 入口；仅有最终 CDN 直链时不能恢复其授权或云端档位。
+
 ## 快速开始
 
 需要 JDK 17 或 21 与 Android SDK 35（`platforms;android-35`、`build-tools;35.0.0`）。
@@ -73,14 +102,14 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
 
-Windows 用 `gradlew.bat`。发布包在 [Releases](https://github.com/xudong7587/SunnyTV/releases) 下载，
+Windows 用 `gradlew.bat`。发布包在 [最新正式版](https://github.com/xudong7587/SunnyTV/releases/latest) 下载，
 或安装刚构建出来的调试包：
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-首次使用进入「设置 → 媒体来源」填写 Emby 地址与账号；云盘填 CloudDrive2 的 **WebDAV** 地址
+首次使用进入「设置 → 媒体来源」选择 Emby 或绿联影视服务并填写地址与专用账号；云盘填 CloudDrive2 的 **WebDAV** 地址
 （不是管理后台地址）。凭据按来源保存，只在本机。
 
 ## 配置实验升级

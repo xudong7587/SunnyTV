@@ -1,3 +1,29 @@
+# 2026-10-15 SunnyTV 0.2.1 已同步 WebDAV
+
+版本0.2.1 / 53，在当前整合入口 `D:/Documents/ChatGPT/SunnyTV-transcode-main` 继续开发，保留原0.2.0及旧目录覆盖层。媒体来源添加按钮常显完整名称，清除配置使用垃圾桶；连接表单移除内部类型切换和外链，首次连接在独立入口选择服务，说明可用遥控器上下阅读。
+
+绿联新增名称升降序、评分、年份、时长、播放日期、大小、比特率和随机排序；名称升序沿用服务端分页，其它先读取完整目录再本地处理。总数/重复/不完整分页、10000项、8Mi字符、90秒和取消保护，缺少字段置后、全缺时提示，不写回NAS。工具说明保留在原工具行lazy item内，不改变海报网格索引。
+
+MediaIndex云端功能复用条件已用HTTP测试核对：保留原始`/api/play/{assetToken}`时可通过sourceMediaUrl识别并查询档位，绿联token不发送到MediaIndex。真实绿联先前样本只有最终115 CDN直链，原始授权入口已丢失，当前样本的云端档位仍需入口映射/接口支持，不能宣称已完成真实联调。未读取NAS的STRM文件、提取凭据或修改MediaIndex。
+
+核心172/172、Gradle单测139/139、发行检查脚本3/3、API30定向31/31通过；debug/release构建及lint通过（各0错误/40警告）。UI检查涵盖常显标签、首次类型选择、无内部切换/外链、说明/字段遥控、排序菜单及工具行到首海报导航，保留首页、云端/字幕/缓存/更新回归。真实绿联排序及TV播放仍待用户验收，完整历史TV失败清单保留。
+
+沿用既有签名与安装ID，非debuggable发行包通过身份/内容/四ABI解码库及许可证检查；已用分发脚本更新WebDAV并全文回读校验哈希及大小，旧包保留。包`SunnyTV-v0.2.1-efae19468f82.apk`，26340403字节，SHA256 `efae19468f825df4698cf25f62056e8da6f1790499e3c017168b5cc7c2c4f249`。未发布GitHub、未向实体手机安装。详见[0.2.1说明](RELEASE-0.2.1.md)。以下为历史记录。
+
+# 2026-10-15 SunnyTV 0.2.0 已同步 WebDAV
+
+本次在已发布 dev36.4 / 51（基线 `480ccfa`）上整合原 SunnyTV 目录的绿联适配，发行整合入口为 `D:/Documents/ChatGPT/SunnyTV-transcode-main`，本地分支 `codex/ugreen-webdav-0.2.0`。版本 `0.2.0` / 52，从本版起使用纯数字版本号。原目录开发覆盖层保留，不能用旧 dev33 源码替代本版。
+
+新增绿联连接引导及接口能力分支；首页仅“顶部按钮→向下”优先落在第一个继续播放，没有/隐藏续播时仍进入方块海报。海报左右轮换和媒体区返回路径不变。保留现有音频、115清晰度、字幕和原生GitHub更新功能；绿联不提供字幕搜索下载，UI及适配器均限制。
+
+核心172/172、Gradle单测132/132、发行检查脚本3/3通过；debug/release编译、APK及测试APK构建、lint通过（各0错误/40警告）。API30模拟器定向30/30通过：首页入口4项、绿联5项、既有表单2项、原生解码器可用/声道混合3项，以及播放、清晰度、字幕连续性、缓存和WebDAV更新相关16项。本轮未重跑EAC3/DTS合成包解码两项；保留完整TV历史失败及真实设备待验范围，不宣称全套TV/真实绿联进度验收。
+
+非debuggable发行包已核对既有签名 `5e8dcd5e1eee828e064682ba6f8dc7d54dfcf59d3182dd6b427a23d1214d6b00`、安装ID、四种ABI的FFmpeg及许可证、无私有字体/密钥/联调材料。使用 `scripts/publish-webdav-update.py` 发布，`Z:/V1 Tools/SunnyTV-updata/latest.json` 已指向0.2.0/52；远端APK全文回读的哈希/大小与本地一致，所有旧包保留。
+
+升级包：`SunnyTV-v0.2.0-a6ea40209949.apk`，26340403字节，SHA256：`a6ea40209949a0b5cba9e5137302b0c653e5fad29083df7d447b55d8672bfd21`。用户通过“设置→实验升级→检查更新”手动安装；未向实体手机安装，未新建GitHub发行或tag，未修改MediaIndex/NAS服务。详见[0.2.0发布记录](RELEASE-0.2.0.md)。
+
+以下为历史记录。
+
 # 2026-10-14 dev36.4 已发布并同步 WebDAV
 
 最终版本 `0.1.0-dev36.4` / 51，发行源码 `8f949ab184e7cae37a498acf1eeef146d70ce1d2`（PR #14；清晰度/原生更新 UI 为 PR #13）。[GitHub Release](https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev36.4) 与 [签名发行工作流](https://github.com/xudong7587/SunnyTV/actions/runs/38509938911) 均成功，发行 CI 的 16 项 Android 测试通过。

@@ -30,6 +30,41 @@ object MediaLogic {
      */
     fun isLocalSort(sort:String):Boolean = sort in setOf("Bitrate","Size")
 
+    val ugreenSorts=listOf("SortName" to "名称", "CommunityRating" to "评分", "ProductionYear" to "出品年份",
+        "Runtime" to "播放时长", "DatePlayed" to "播放日期", "Bitrate" to "比特率", "Size" to "大小", "Random" to "随机")
+
+    fun hasUgreenSortData(items:List<MediaEntry>,sort:String):Boolean = items.isEmpty() || when(sort) {
+        "CommunityRating"->items.any {it.rating.isFinite() && it.rating>0}
+        "ProductionYear"->items.any {it.year>0}
+        "Runtime"->items.any {it.durationMs>0}
+        "DatePlayed"->items.any {it.lastPlayedAtMs>0}
+        "Size"->items.any {it.versions.any {v->v.size>0}}
+        "Bitrate"->items.any {it.versions.any {v->v.bitrate>0}}
+        else->true
+    }
+
+    /** Complete directory snapshot only. Missing values stay last in either direction. */
+    fun ugreenLocalSort(items:List<MediaEntry>,sort:String,ascending:Boolean):List<MediaEntry> {
+        require(ugreenSorts.any {it.first==sort})
+        fun <T:Comparable<T>> ordered(value:(MediaEntry)->T?):List<MediaEntry> = items.sortedWith {left,right->
+            val a=value(left);val b=value(right)
+            when {a==null && b==null->0;a==null->1;b==null->-1;ascending->a.compareTo(b);else->b.compareTo(a)}
+        }
+        return when(sort) {
+            "Random"->items.shuffled()
+            "CommunityRating"->ordered {it.rating.takeIf {n->n.isFinite() && n>0}}
+            "ProductionYear"->ordered {it.year.takeIf {n->n>0}}
+            "Runtime"->ordered {it.durationMs.takeIf {n->n>0}}
+            "DatePlayed"->ordered {it.lastPlayedAtMs.takeIf {n->n>0}}
+            "Size"->ordered {it.versions.maxOfOrNull {v->v.size}?.takeIf {n->n>0}}
+            "Bitrate"->ordered {it.versions.maxOfOrNull {v->v.bitrate}?.takeIf {n->n>0}}
+            else->{
+                val collator=java.text.Collator.getInstance(java.util.Locale.CHINA).apply {strength=java.text.Collator.SECONDARY}
+                items.sortedWith {a,b->if(ascending) collator.compare(a.title,b.title) else collator.compare(b.title,a.title)}
+            }
+        }
+    }
+
     /** Sorts one loaded page by its largest media version. Items without media data keep a stable 0. */
     fun localSort(items:List<MediaEntry>,sort:String,ascending:Boolean):List<MediaEntry> {
         val value:(MediaEntry)->Long = if(sort=="Size") {entry->entry.versions.maxOfOrNull {it.size} ?: 0L}

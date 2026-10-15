@@ -18,8 +18,11 @@ class NavigationBridge {
     /** The navigation tile that stands for the page on screen, so "Up" lands on the current tab. */
     var navEntryId:String?=null
     var revealTop:(suspend ()->Unit)?=null
-    fun enterContent() {
-        val target=contentEntryId?.let {content[it]} ?: content["home-play"] ?: content["home-carousel:featured"]
+    fun enterContent(fromNavigation:Boolean=false) {
+        // Only Down from the top bar prefers the first home resume shortcut. Returning from the
+        // media area keeps the existing carousel entry and its horizontal navigation unchanged.
+        val resume=if(fromNavigation) content.entries.firstOrNull {it.key.startsWith("quick-resume:")}?.value else null
+        val target=contentEntryId?.let {content[it]} ?: resume ?: content["home-play"] ?: content["home-carousel:featured"]
             ?: content.values.firstOrNull()
         target?.let {runCatching {it.requestFocus()}}
     }

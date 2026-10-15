@@ -152,7 +152,8 @@ import io.github.xudong7587.sunnytv.feature.Route
             Text(library.title,color=SunnyColors.Text,fontSize=19.sp,
                 fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f))
             if(!folder) {
-                val sorts=listOf("DateCreated" to "最新入库","PremiereDate" to "最新上映","Random" to "随机")
+                val sorts=if(model.isUgreen(library.sourceId)) listOf("DateCreated" to "最新入库") else
+                    listOf("DateCreated" to "最新入库","PremiereDate" to "最新上映","Random" to "随机")
                 val index=sorts.indexOfFirst {it.first==(model.libraryLatestModes[library.key] ?: "DateCreated")}.coerceAtLeast(0)
                 Action(sorts[index].second,id="shelf-sort:${library.key}",icon="sort-directions",alwaysShowLabel=true,
                     modifier=Modifier.focusRequester(headingFocus).onFocusChanged {

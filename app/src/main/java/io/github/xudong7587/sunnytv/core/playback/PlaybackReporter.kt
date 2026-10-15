@@ -4,6 +4,7 @@ import io.github.xudong7587.sunnytv.core.model.PlaybackRequest
 import io.github.xudong7587.sunnytv.source.emby.EmbySource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import java.util.concurrent.atomic.AtomicLong
 
 /** A short-lived serial reporter that may finish sending a stop after Activity.onStop(). */
 class PlaybackReporter(
@@ -14,6 +15,7 @@ class PlaybackReporter(
     private val events = SessionEvents()
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val knownDuration = AtomicLong(request.durationMs)
 
     init {
         scope.launch {
@@ -32,7 +34,7 @@ class PlaybackReporter(
         while (true) {
             val event = events.poll() ?: return
             try {
-                withTimeout(4_000) { api.report(request, event.event, event.positionMs, event.paused) }
+                withTimeout(4_000) { api.report(request.copy(durationMs=knownDuration.get()), event.event, event.positionMs, event.paused) }
             } catch (e: TimeoutCancellationException) {
                 onFailure()
             } catch (e: CancellationException) {
@@ -43,9 +45,13 @@ class PlaybackReporter(
         }
     }
 
-    fun start(positionMs: Long, paused: Boolean) { events.begin(positionMs, paused); wake.trySend(Unit) }
-    fun progress(positionMs: Long, paused: Boolean) { events.progress(positionMs, paused); wake.trySend(Unit) }
-    fun close(positionMs: Long, started: Boolean) {
+    private fun rememberDuration(durationMs:Long) {
+        if(durationMs in 1..Long.MAX_VALUE/10_000) knownDuration.set(durationMs)
+    }
+    fun start(positionMs: Long, paused: Boolean, durationMs:Long=0) { rememberDuration(durationMs); events.begin(positionMs, paused); wake.trySend(Unit) }
+    fun progress(positionMs: Long, paused: Boolean, durationMs:Long=0) { rememberDuration(durationMs); events.progress(positionMs, paused); wake.trySend(Unit) }
+    fun close(positionMs: Long, started: Boolean, durationMs:Long=0) {
+        rememberDuration(durationMs)
         if (started) events.stop(positionMs)
         wake.trySend(Unit)
         wake.close()

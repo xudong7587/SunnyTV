@@ -51,14 +51,16 @@ class ConfigStore(context: Context) {
             val j = a.getJSONObject(i)
             SourceConfig(j.getString("id"), SourceKind.valueOf(j.getString("kind")), j.getString("name"),
                 j.getString("base"), j.optString("user"), j.optString("username"),
-                decrypt(j.getString("secret")))
+                decrypt(j.getString("secret")),
+                EmbyProfile.entries.firstOrNull {it.name==j.optString("embyProfile")} ?: EmbyProfile.STANDARD,
+                j.optString("serverId"))
         }
     }
     fun saveSources(sources: List<SourceConfig>) {
         val a = JSONArray()
         sources.forEach { s -> a.put(JSONObject().put("id",s.id).put("kind",s.kind.name)
             .put("name",s.name).put("base",s.baseUrl).put("user",s.userId).put("username",s.username)
-            .put("secret",encrypt(s.secret))) }
+            .put("secret",encrypt(s.secret)).put("embyProfile",s.embyProfile.name).put("serverId",s.serverId)) }
         prefs.edit().putString("sources",a.toString()).apply()
     }
     /**

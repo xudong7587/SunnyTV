@@ -12,6 +12,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** All Emby URL building and DTO interpretation stays out of UI. User-token access only. */
 class EmbySource(val config: SourceConfig, private val http: SafeHttp, private val deviceId: String) {
@@ -33,6 +35,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     suspend fun views(): List<MediaEntry> = parsePage(get("Users/${config.userId}/Views")).items
     /** True when this account is allowed to delete media from the server. Read once per source. */
     suspend fun canDeleteContent(): Boolean {
+        if(config.isUgreen) return false
         val policy=JSONObject(get("Users/${config.userId}")).optJSONObject("Policy") ?: return false
         return policy.optBoolean("EnableContentDeletion",false) ||
             (policy.optJSONArray("EnableContentDeletionFromFolders")?.length() ?: 0)>0
@@ -54,17 +57,38 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
                 next=episodes.getOrNull(index+1)
             }
         }
-        return PlayerMediaContext(current,previous,next,SegmentLogic.segments(current.chapters,current.durationMs))
+        val segments=if(config.isUgreen) mediaSegments(current) else SegmentLogic.segments(current.chapters,current.durationMs)
+        return PlayerMediaContext(current,previous,next,segments)
     }
-    suspend fun resume(parent: String = ""): List<MediaEntry> = parsePage(get("Users/${config.userId}/Items/Resume",
-        mapOf("Limit" to "16", "MediaTypes" to "Video", "Fields" to fields, "ImageTypeLimit" to "1") + optionalParent(parent))).items
+    private suspend fun mediaSegments(item:MediaEntry):List<SkipSegment> = try {
+        JSONObject(get("MediaSegments/${item.id}",mapOf("includeSegmentTypes" to "Intro,Outro")))
+            .optJSONArray("Items").objects().mapIndexedNotNull {index,j->
+                val type=j.optString("Type").lowercase(java.util.Locale.ROOT)
+                val start=j.optLong("StartTicks",-1)/10_000
+                val end=j.optLong("EndTicks",-1)/10_000
+                if(type !in setOf("intro","outro") || j.optLong("StartTicks",-1)<0 || end<=start ||
+                    (item.durationMs>0 && end>item.durationMs)) null
+                else SkipSegment("ugreen:$index:$start",type,start,end)
+            }.sortedBy {it.startMs}
+    } catch(e:CancellationException) {throw e} catch(_:Exception) {emptyList()}
+    suspend fun resume(parent: String = ""): List<MediaEntry> {
+        // UGREEN's Resume is global; accepting ParentId does not promise library filtering.
+        if(config.isUgreen && parent.isNotBlank()) return emptyList()
+        return parsePage(get("Users/${config.userId}/Items/Resume",
+            mapOf("Limit" to "16", "MediaTypes" to "Video", "Fields" to fields, "ImageTypeLimit" to "1") + optionalParent(parent))).items
+    }
     suspend fun latest(parent: String = "", limit:Int=18): List<MediaEntry> {
+        require(!config.isUgreen || parent.isNotBlank()) {"绿联最新列表需要选择媒体库"}
         val data = get("Users/${config.userId}/Items/Latest", mapOf("Limit" to limit.coerceIn(1,18).toString(), "Fields" to fields,
-            "ImageTypeLimit" to "1", "GroupItems" to "true") + optionalParent(parent))
+            "ImageTypeLimit" to "1", "GroupItems" to "true", "MediaTypes" to "Video") + optionalParent(parent))
         return if(data.trimStart().startsWith("[")) parseArray(JSONArray(data)) else parsePage(data).items
     }
-    suspend fun nextUp(): List<MediaEntry> = parsePage(get("Shows/NextUp", mapOf(
+    suspend fun nextUp(): List<MediaEntry> = if(config.isUgreen) emptyList() else parsePage(get("Shows/NextUp", mapOf(
         "UserId" to config.userId, "Limit" to "16", "Fields" to fields, "ImageTypeLimit" to "1"))).items
+    suspend fun recommendations(parent:String,mixed:Boolean):List<MediaEntry> = if(config.isUgreen)
+        parsePage(get("Users/${config.userId}/Items",mapOf("ParentId" to parent,"IncludeItemTypes" to "Movie,Series",
+            "Limit" to "7","SortBy" to "SortName","Fields" to fields))).items.shuffled()
+        else library(parent,sort="Random",limit=7,mixed=mixed).items
     suspend fun home(): HomeFeed = supervisorScope {
         val warnings = java.util.Collections.synchronizedList(mutableListOf<String>())
         suspend fun row(name: String, f: suspend () -> List<MediaEntry>): List<MediaEntry> = try { f() }
@@ -72,13 +96,56 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         catch(_: Exception) { warnings.add("$name 暂时不可用"); emptyList() }
         val v = async { views() } // Authentication/library failures are not hidden as an empty library.
         val r = async { row("继续观看") { resume() } }
-        val l = async { row("最新入库") { latest() } }
+        val l = async { if(!config.isUgreen) row("最新入库") { latest() } else {
+            val slots=Semaphore(3)
+            // One bounded shelf per authorized library; preserve library order, never imply a
+            // global creation-date ordering that this subset does not provide.
+            v.await().take(24).map {library->async {
+                slots.withPermit {row("${library.title}最新入库") {latest(library.id,6)}}
+            }}.awaitAll().flatten().distinctBy {it.key}.take(48)
+        } }
         val n = async { row("接着看") { nextUp() } }
         HomeFeed(v.await(), r.await(), l.await(), n.await(), warnings.toList())
     }
     suspend fun library(parent: String, start: Int = 0, sort: String = "DateCreated", query: String = "", favorites: Boolean = false,
         ascending:Boolean=sort=="SortName", foldersOnly:Boolean=false, limit:Int=48, mixed:Boolean=false): MediaPage {
         require(Presentation.sorts.any {it.first==sort}) {"Unsupported sort"}
+        if(config.isUgreen) {
+            require(query.isBlank()) {"绿联暂不支持服务端全库搜索"}
+            val local=sort!="DateCreated" && (!ascending || sort!="SortName")
+            val q=mutableMapOf("StartIndex" to start.coerceAtLeast(0).toString(),"Limit" to limit.coerceIn(1,48).toString(),
+                "SortBy" to "SortName","Fields" to if(local) "$fields,MediaSources" else fields,"ImageTypeLimit" to "1")
+            q.putAll(optionalParent(parent))
+            if(foldersOnly) q["IncludeItemTypes"]="Folder"
+            else if(parent.isBlank() || favorites) q["IncludeItemTypes"]="Movie,Series"
+            if(favorites) q["Filters"]="IsFavorite"
+            if(!local) return parsePage(get("Users/${config.userId}/Items",q))
+            require(MediaLogic.ugreenSorts.any {it.first==sort}) {"此排序需要服务端提供更多元数据"}
+            return withTimeoutOrNull(LOCAL_SORT_TIMEOUT_MS) {
+                val all=linkedMapOf<String,MediaEntry>()
+                var expected:Int?=null
+                var chars=0L
+                do {
+                    ensureActive()
+                    val body=get("Users/${config.userId}/Items",q+mapOf("StartIndex" to all.size.toString(),"Limit" to "48"))
+                    chars+=body.length
+                    if(chars>LOCAL_SORT_MAX_CHARS) throw SourceException("本地排序数据超过安全容量，请进入较小的媒体库或合集")
+                    val total=JSONObject(body).optLong("TotalRecordCount",-1)
+                    if(total !in 0..LOCAL_SORT_MAX_ITEMS.toLong()) throw SourceException("本地排序需要完整目录，最多10000项；请进入较小的媒体库或合集")
+                    if(expected!=null && expected!=total.toInt()) throw SourceException("目录在排序期间变化，请重试")
+                    expected=total.toInt()
+                    val page=parsePage(body)
+                    if(page.items.size>48 || (page.items.isEmpty() && all.size<expected)) throw SourceException("服务端未返回完整排序目录，请重试")
+                    page.items.forEach {if(all.put(it.key,it)!=null) throw SourceException("排序分页包含重复条目，请重试")}
+                    if(all.size>expected) throw SourceException("排序目录数量不一致，请重试")
+                } while(all.size<expected!!)
+                withContext(Dispatchers.Default) {
+                    val entries=all.values.toList()
+                    if(!MediaLogic.hasUgreenSortData(entries,sort)) throw SourceException("绿联未提供此目录的${MediaLogic.ugreenSorts.first {it.first==sort}.second}数据，无法进行本地排序")
+                    MediaPage(MediaLogic.ugreenLocalSort(entries,sort,ascending),all.size)
+                }
+            } ?: throw SourceException("本地排序超过90秒，请进入较小的媒体库或合集")
+        }
         val local = MediaLogic.isLocalSort(sort)
         var responseChars = 0L
         suspend fun load(offset: Int, pageLimit: Int, sortBy: String): MediaPage {
@@ -125,8 +192,12 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     }
 
     suspend fun children(item: MediaEntry): List<MediaEntry> = when(item.type) {
-        "Series" -> parsePage(get("Shows/${item.id}/Seasons", mapOf("UserId" to config.userId, "Fields" to fields))).items
-        "Season" -> parsePage(get("Shows/${item.seriesId}/Episodes", mapOf("UserId" to config.userId, "SeasonId" to item.id, "Fields" to fields))).items
+        "Series" -> parsePage(get("Shows/${item.id}/Seasons", mapOf("UserId" to config.userId, "Fields" to fields))).items.map {season->
+            if(config.isUgreen) season.copy(seriesId=season.seriesId.ifBlank {item.id},primary=season.primary ?: item.primary,
+                backdrop=season.backdrop ?: item.backdrop,logo=season.logo ?: item.logo) else season
+        }
+        "Season" -> parsePage(get("Shows/${item.seriesId}/Episodes", mapOf("UserId" to config.userId, "SeasonId" to item.id,
+            "Fields" to if(config.isUgreen) "$fields,MediaStreams,MediaSources" else fields))).items
         else -> emptyList()
     }
     suspend fun playableEpisode(item:MediaEntry,fromStart:Boolean):MediaEntry {
@@ -137,12 +208,14 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             ?: error("此剧集没有可播放的单集")
     }
     suspend fun setFavorite(item: MediaEntry, value: Boolean):MediaEntry {
+        require(canFavorite(config,item)) {"绿联仅支持电影和剧集收藏"}
         val request = Request.Builder().url(url("Users/${config.userId}/FavoriteItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
         return userDataResult(item,client.bytes(request.build()).toString(Charsets.UTF_8),favorite=value)
     }
     /** Asks the server to rebuild metadata and images. Recursive is used for a whole library. */
     suspend fun refreshMetadata(id:String,recursive:Boolean=false) {
+        require(!config.isUgreen) {"绿联未提供客户端刷新媒体元数据接口"}
         val query=mutableMapOf("MetadataRefreshMode" to "FullRefresh","ImageRefreshMode" to "Default",
             "ReplaceAllImages" to "false","ReplaceAllMetadata" to "false")
         if(recursive) query["Recursive"]="true"
@@ -151,10 +224,11 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
     }
     /** Removes an item from the Emby library. The server enforces the account's delete permission. */
     suspend fun deleteItem(id:String) {
+        require(!config.isUgreen) {"绿联未提供客户端删除媒体接口"}
         client.bytes(Request.Builder().url(url("Items/$id")).delete().build())
     }
     suspend fun setPlayed(item:MediaEntry,value:Boolean):MediaEntry {
-        require(item.isPlayable) {"请在单集或影片页面标记已看"}
+        require(canMarkPlayed(config,item)) {"此来源不支持该条目的手动已看操作"}
         val request=Request.Builder().url(url("Users/${config.userId}/PlayedItems/${item.id}"))
         if(value) request.post(ByteArray(0).toRequestBody(null)) else request.delete()
         return userDataResult(item,client.bytes(request.build()).toString(Charsets.UTF_8),played=value)
@@ -165,7 +239,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             played=data?.optBoolean("Played",played) ?: played,
             positionMs=if(data?.has("PlaybackPositionTicks")==true) data.optLong("PlaybackPositionTicks")/10_000 else item.positionMs)
     }
-    suspend fun similar(id:String):List<MediaEntry> = parsePage(get("Items/$id/Similar",
+    suspend fun similar(id:String):List<MediaEntry> = if(config.isUgreen) emptyList() else parsePage(get("Items/$id/Similar",
         mapOf("UserId" to config.userId,"Limit" to "12","Fields" to fields))).items
     fun imageUrl(art: Artwork, width: Int): String {
         val index = art.index?.let { "/$it" }.orEmpty()
@@ -194,13 +268,23 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         val directPath = source.text("Path")
         val streamPath = source.text("DirectStreamUrl")
         val remote = directPath?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        // UGREEN returns an HTTP stream Path relative to /emby/, often ending in stream.mp4
+        // even when the original container is MKV. Keep its query and the actual Container hint.
+        // A file/STRM path is never a URL merely because it begins with '/'.
+        val relativeHttpStream = directPath?.takeIf {
+            source.optString("Protocol").equals("Http",ignoreCase=true) && remote == null &&
+                !it.startsWith("//") && !it.contains('\\') && !it.substringBefore('?').contains(':')
+        }?.let { absolute(it) }?.takeIf { HttpPolicy.isScoped(it,config.baseUrl) }
         // Respect server-provided HTTP source; never hand /volume/... or /strm/... to Android.
         val needsProviderHeaders = (source.optJSONObject("RequiredHttpHeaders")?.length() ?: 0) > 0
         // Provider Cookie/Referer requirements remain at the server, not on the TV.
         // The server entry stays available even when direct play wins, so a TV-side failure (target
         // host unreachable, HTTP 409, no response headers) can fall back to Emby reading the STRM itself.
-        val serverStream = streamPath?.let {absolute(it)}
-            ?: url("Videos/${item.id}/stream", mapOf("Static" to "true", "MediaSourceId" to sid,
+        val suppliedStream=streamPath?.let {absolute(it)}
+        val serverStream = (if(config.isUgreen) suppliedStream?.takeIf {HttpPolicy.isScoped(it,config.baseUrl)} else suppliedStream)
+            ?: relativeHttpStream
+            ?: if(config.isUgreen) url("videos/${item.id}/stream.mp4") else
+            url("Videos/${item.id}/stream", mapOf("Static" to "true", "MediaSourceId" to sid,
                 "PlaySessionId" to info.text("PlaySessionId").orEmpty()))
         val direct = remote != null && source.optBoolean("SupportsDirectPlay",false) && !needsProviderHeaders &&
             !preferServerStream
@@ -215,6 +299,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             mediaLogo=item.logo,
             fallbackUrl=serverStream.takeIf {direct && it != resolved},sourceMediaUrl=remote,
             audioStreamIndex=audioIndex,sourceTracks=streams.objects().map {parseTrack(it)},
+            durationMs=(source.optLong("RunTimeTicks")/10_000).takeIf {it>0} ?: item.durationMs.coerceAtLeast(0),
             audioOrdinal=streams.objects().filter {it.optString("Type")=="Audio"}.indexOfFirst {it.optInt("Index")==audioIndex})
     }
     internal fun externalSubtitles(itemId:String,sourceId:String,streams:JSONArray,extractText:Boolean=false):List<ExternalSubtitle> = streams.objects()
@@ -226,13 +311,14 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             } ?: return@mapNotNull null
             val extension=when(format.lowercase()) {"subrip"->"srt";"webvtt"->"vtt";else->format.lowercase()}
             val delivery=stream.text("DeliveryUrl")?.let {absolute(it)}
-                ?: if(sourceId.isNotBlank() && stream.has("Index") && stream.optBoolean("SupportsExternalStream",true))
+                ?: if(!config.isUgreen && sourceId.isNotBlank() && stream.has("Index") && stream.optBoolean("SupportsExternalStream",true))
                     url("Videos/$itemId/$sourceId/Subtitles/${stream.optInt("Index")}/Stream.$extension") else null
             delivery?.let {ExternalSubtitle(it,mime,stream.optString("Language"),parseTrack(stream).title,
                 "emby-sub:${stream.optInt("Index")}",stream.optBoolean("IsDefault"))}
         }
 
     suspend fun searchSubtitles(itemId:String,sourceId:String,language:String):List<RemoteSubtitle> {
+        require(!config.isUgreen) {"绿联未提供字幕搜索和下载接口"}
         require(language in setOf("chi","eng","fre","jpn","kor"))
         val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
             .addPathSegments("RemoteSearch/Subtitles").addPathSegment(language)
@@ -242,6 +328,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             j.optString("ProviderName"),language,j.optString("Format"),j.optBoolean("IsHashMatch"))}}
     }
     suspend fun downloadSubtitle(itemId:String,sourceId:String,subtitle:RemoteSubtitle):Int {
+        require(!config.isUgreen) {"绿联未提供字幕搜索和下载接口"}
         val endpoint=base.newBuilder().addPathSegment("Items").addPathSegment(itemId)
             .addPathSegments("RemoteSearch/Subtitles").addPathSegment(subtitle.id)
             .addQueryParameter("MediaSourceId",sourceId).build()
@@ -250,6 +337,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         return runCatching {JSONObject(raw.trim().removePrefix("\uFEFF")).optInt("NewIndex",-1)}.getOrDefault(-1)
     }
     suspend fun ensureSeriesSubtitle(item:MediaEntry,choice:SeriesSubtitleChoice,versionId:String=""):MediaTrack? {
+        if(config.isUgreen) return null
         val current=item(item.id)
         val version=current.versions.firstOrNull {it.id==versionId} ?: current.versions.firstOrNull()
         val tracks=version?.tracks ?: current.tracks
@@ -259,6 +347,7 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         return downloadAndSelectSubtitle(item.id,version?.id.orEmpty(),result)
     }
     suspend fun downloadAndSelectSubtitle(itemId:String,sourceId:String,subtitle:RemoteSubtitle):MediaTrack? {
+        require(!config.isUgreen) {"绿联未提供字幕搜索和下载接口"}
         val before=item(itemId)
         val version=before.versions.firstOrNull {it.id==sourceId} ?: before.versions.firstOrNull()
         val resolvedSource=version?.id ?: sourceId
@@ -291,22 +380,26 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             file?.takeIf {it.isNotBlank()} ?: t.text("DisplayTitle") ?: t.text("Title") ?: "${t.optString("Type")} ${t.optInt("Index")}",
             t.optString("Codec"),t.optBoolean("IsExternal"),t.optBoolean("IsDefault"))
     }
-    suspend fun person(name:String):MediaEntry {
+    suspend fun person(name:String,id:String=""):MediaEntry {
+        if(config.isUgreen) return item(id).copy(type="Person")
         val endpoint=base.newBuilder().addPathSegment("Persons").addPathSegment(name).addQueryParameter("UserId",config.userId).build()
         val body=client.bytes(Request.Builder().url(endpoint).build()).toString(Charsets.UTF_8)
         return withContext(Dispatchers.Default) {parseItem(JSONObject(body)).copy(type="Person")}
     }
     suspend fun personWorks(personId:String,start:Int=0):MediaPage = parsePage(get("Users/${config.userId}/Items",
-        mapOf("PersonIds" to personId,"Recursive" to "true","IncludeItemTypes" to "Movie,Series,Video",
-            "SortBy" to "PremiereDate,SortName","SortOrder" to "Descending","StartIndex" to start.coerceAtLeast(0).toString(),
+        mapOf("PersonIds" to personId,"Recursive" to "true","IncludeItemTypes" to if(config.isUgreen) "Movie,Series" else "Movie,Series,Video",
+            "SortBy" to if(config.isUgreen) "SortName" else "PremiereDate,SortName",
+            "SortOrder" to if(config.isUgreen) "Ascending" else "Descending","StartIndex" to start.coerceAtLeast(0).toString(),
             "Limit" to "48","Fields" to fields,"ImageTypeLimit" to "1")))
     suspend fun report(request: PlaybackRequest, event: String, position: Long, paused: Boolean) {
         require(event in setOf("Playing", "Playing/Progress", "Playing/Stopped"))
-        post("Sessions/$event", JSONObject().put("ItemId",request.embyItemId)
+        val body = JSONObject().put("ItemId",request.embyItemId)
             .put("MediaSourceId",request.mediaSourceId).put("PlaySessionId",request.playSessionId)
             .put("PositionTicks",position.coerceAtLeast(0)*10_000).put("IsPaused",paused)
             .put("CanSeek",true).put("PlayMethod",request.playMethod)
-            .put("EventName",if(paused) "Pause" else "TimeUpdate"))
+            .put("EventName",if(paused) "Pause" else "TimeUpdate")
+        if(request.durationMs in 1..Long.MAX_VALUE/10_000) body.put("RunTimeTicks",request.durationMs*10_000)
+        post("Sessions/$event",body)
     }
     private fun absolute(path: String): String =
         if(path.startsWith("http://") || path.startsWith("https://")) path
@@ -356,6 +449,19 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             })
     }
     companion object {
+        fun canFavorite(config:SourceConfig,item:MediaEntry):Boolean = config.kind==SourceKind.EMBY && (!config.isUgreen ||
+            (item.type in setOf("Movie","Series") && item.id.matches(Regex("[0-9]+"))))
+        // Keep existing per-item policy: never expose a bulk series/season watched write.
+        fun canMarkPlayed(config:SourceConfig,item:MediaEntry):Boolean = config.kind==SourceKind.EMBY && item.isPlayable &&
+            (!config.isUgreen || (item.type=="Movie" && item.id.matches(Regex("[0-9]+"))))
+        fun connectionBase(raw:String,profile:EmbyProfile):String {
+            val root=HttpPolicy.serverBase(raw)
+            if(profile!=EmbyProfile.UGREEN) return root
+            val parsed=root.toHttpUrl()
+            require(parsed.isHttps) {"绿联影视中心需要 HTTPS，请先配置有效证书或 HTTPS 反向代理"}
+            require(parsed.encodedPath in setOf("/","/emby/")) {"请填写媒体服务器地址，不要使用 NAS 桌面或影视中心网页地址"}
+            return if(parsed.encodedPath=="/") parsed.newBuilder().addPathSegment("emby").addPathSegment("").build().toString() else root
+        }
         internal const val LOCAL_SORT_MAX_ITEMS = 10_000
         internal const val LOCAL_SORT_MAX_CHARS = 8L * 1024 * 1024
         internal const val LOCAL_SORT_TIMEOUT_MS = 90_000L
@@ -377,14 +483,15 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
             put("X-Emby-Authorization","MediaBrowser Client=\"SunnyTV\", Device=\"Android TV\", DeviceId=\"$device\", Version=\"0.1.0\"")
             if(token.isNotBlank()) put("X-Emby-Token",token)
         }
-        suspend fun login(base: String, name: String, username: String, password: String, http: SafeHttp, deviceId: String): SourceConfig {
-            val root = HttpPolicy.serverBase(base)
+        suspend fun login(base: String, name: String, username: String, password: String, http: SafeHttp, deviceId: String,
+                          profile:EmbyProfile=EmbyProfile.STANDARD): SourceConfig {
+            val root = connectionBase(base,profile)
             val client = http.scopedClient(HeaderScope(root,headers("",deviceId)))
             val request = Request.Builder().url(root.toHttpUrl().newBuilder().addPathSegments("Users/AuthenticateByName").build())
                 .post(JSONObject().put("Username",username).put("Pw",password).toString().toRequestBody(JSON)).build()
             val j = JSONObject(client.bytes(request).toString(Charsets.UTF_8))
             return SourceConfig(UUID.randomUUID().toString(),SourceKind.EMBY,name.ifBlank { "Emby" },root,
-                j.getJSONObject("User").getString("Id"),username,j.getString("AccessToken"))
+                j.getJSONObject("User").getString("Id"),username,j.getString("AccessToken"),profile,j.text("ServerId").orEmpty())
         }
     }
 }

@@ -125,7 +125,8 @@ import kotlinx.coroutines.withContext
     val entryActionId=when {
         item.isPlayable -> "detail-play"
         item.type in setOf("Series","Season") -> "detail-resume"
-        else -> "detail-favorite"
+        model.canFavorite(item) -> "detail-favorite"
+        else -> "detail-back"
     }
     val entryActionFocus=remember(item.key) {FocusRequester()}
     // First section under the action row: Up there scrolls the row back in and focuses it, instead of
@@ -189,21 +190,22 @@ import kotlinx.coroutines.withContext
                             item {Action("≋  音频",modifier=Modifier.moveIntoContent()) {panel="audio"}}
                             item {Action("▱  版本",modifier=Modifier.moveIntoContent()) {panel="version"}}
                             item {Action("CC  字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle"}}
-                            item {Action("查找字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle-search"}}
+                            if(!model.isUgreen(item.sourceId)) item {Action("查找字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle-search"}}
                         }
-                        if(item.isPlayable) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played,modifier=Modifier.moveIntoContent()) {panel="played"}}
+                        if(model.canMarkPlayed(item)) item {Action(if(item.played) "已看" else "标记已看",id="detail-played",active=item.played,modifier=Modifier.moveIntoContent()) {panel="played"}}
                         if(item.type in setOf("Series","Season")) {
                             // Resume first: entering a series should offer what the user came back for.
                             item {Action("继续播放",id="detail-resume",primary=true,autoFocus=true,icon="play",
                                 modifier=Modifier.focusRequester(entryActionFocus).moveIntoContent()) {onPlay(item,false)}}
                             item {Action("从头播放",id="detail-start",primary=false,icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
                         }
-                        item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,
+                        if(model.canFavorite(item)) item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,
                             autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),
                             modifier=Modifier.then(if(entryActionId=="detail-favorite") Modifier.focusRequester(entryActionFocus) else Modifier).moveIntoContent()) {model.favorite(item)}}
                         if(model.canDelete(item)) item {Action("删除",id="detail-delete",icon="trash",
                             modifier=Modifier.moveIntoContent()) {model.requestDelete(item)}}
-                        item {Action("返回",modifier=Modifier.moveIntoContent()) {model.back()}}
+                        item {Action("返回",id="detail-back",autoFocus=entryActionId=="detail-back",
+                            modifier=Modifier.then(if(entryActionId=="detail-back") Modifier.focusRequester(entryActionFocus) else Modifier).moveIntoContent()) {model.back()}}
                     }
                 }
                 // Acceptance round 3: plain body colour, so the description stays legible over art.
@@ -291,7 +293,7 @@ import kotlinx.coroutines.withContext
             }
         }
         when(panel) {
-            "subtitle-search" -> model.sources.firstOrNull {it.id==item.sourceId}?.let {config->
+            "subtitle-search" -> model.sources.firstOrNull {it.id==item.sourceId && !it.isUgreen}?.let {config->
                 SubtitleSearchDialog(model.app.emby(config),model.app.store,item,version?.id.orEmpty(),{panel=""}) {track->
                     model.selectedSubtitleTrack[item.key]=track
                     model.selectedSubtitle.remove(item.key)

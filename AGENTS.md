@@ -1,5 +1,9 @@
 # SunnyTV development rules
 
+## Version numbering from 0.2.0
+
+用户于 2026-10-15 明确要求：从本次 `0.2.0` 起使用纯数字版本号（主版本.次版本.修订），不再使用 dev 后缀。Android versionCode 继续递增；0.2.0 使用 52，后续继续递增，不按 versionName 重置。
+
 ## Read first
 
 Read `docs/STATUS.md`, `docs/CODEX_HANDOFF.md`, `docs/DEVELOPMENT_PLAN.md`, `docs/DESIGN_SYSTEM.md`, and `docs/BUILD.md`. This is an existing development snapshot, not a blank project. The app is named SunnyTV.

@@ -122,6 +122,13 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
 
     fun source(id: String): SourceConfig = sources.firstOrNull { it.id == id }
         ?: throw IllegalArgumentException("来源已移除，请返回并重新选择媒体")
+    fun isUgreen(id:String):Boolean = sources.firstOrNull {it.id==id}?.isUgreen==true
+    fun canFavorite(item:MediaEntry):Boolean = sources.firstOrNull {it.id==item.sourceId}?.let {
+        EmbySource.canFavorite(it,item)
+    } ?: false
+    fun canMarkPlayed(item:MediaEntry):Boolean = sources.firstOrNull {it.id==item.sourceId}?.let {
+        EmbySource.canMarkPlayed(it,item)
+    } ?: false
 
     /**
      * Exactly one Emby source is browsed: the first configured one (or the explicitly stored id if
@@ -138,6 +145,9 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     fun activeSourceName():String = sources.firstOrNull {it.id==activeSourceId}?.name.orEmpty()
 
     fun navigate(next: Route, root: Boolean = false) {
+        if(next is Route.Detail && next.item.type=="Folder" && isUgreen(next.item.sourceId)) {
+            navigate(Route.Library(next.item),root);return
+        }
         if (next == route) return
         if (root) stack.clear() else {
             if (stack.size >= 32) stack.removeAt(0)
@@ -200,6 +210,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
 
     fun loadLatest(item:MediaEntry, sort:String=libraryLatestModes[item.key] ?: "DateCreated") {
         require(sort in listOf("DateCreated","PremiereDate","Random"))
+        if(isUgreen(item.sourceId) && sort!="DateCreated") {loadLatest(item,"DateCreated");return}
         val changed=(libraryLatestModes[item.key] ?: "DateCreated")!=sort
         libraryLatestModes[item.key]=sort
         if(changed) libraryLatest.remove(item.key)
@@ -236,8 +247,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             // Sample at most six libraries and six items each; never enumerate an entire library.
             val sampled=coroutineScope {libraries.shuffled().take(6).map {library->async {
                 artworkFeedSlots.withPermit {
-                    try {app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
-                        mixed=library.collectionType in setOf("","mixed","homevideos")).items}
+                    try {app.emby(source(library.sourceId)).recommendations(library.id,mixed=library.collectionType in setOf("","mixed","homevideos"))}
                     catch(e:CancellationException) {throw e}
                     catch(_:Exception) {emptyList()}
                 }
@@ -292,8 +302,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         launchLoad("recommend:${library.key}",replace=force) {
             val entries=artworkFeedSlots.withPermit {
                 // Seven entries: one large block plus six strips, exactly like the home carousel.
-                app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
-                    mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos")).items
+                app.emby(source(library.sourceId)).recommendations(library.id,mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos"))
             }
             entries.forEach {mediaLibraries[it.key]=library.key}
             recommendations[library.key]=preferFresh(entries,seenRecommend.getOrPut(library.key) {linkedSetOf()})
@@ -307,8 +316,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         val jobs=listOf(
             launchLoad("recommend:${library.key}",replace=true) {
                 val entries=artworkFeedSlots.withPermit {
-                    app.emby(source(library.sourceId)).library(library.id,sort="Random",limit=7,
-                        mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos")).items
+                    app.emby(source(library.sourceId)).recommendations(library.id,mixed=library.collectionType.lowercase() in setOf("","mixed","homevideos"))
                 }
                 entries.forEach {mediaLibraries[it.key]=library.key}
                 recommendations[library.key]=preferFresh(entries,seenRecommend.getOrPut(library.key) {linkedSetOf()})
@@ -335,6 +343,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
     fun itemActions(item:MediaEntry):List<MediaAction> {
         if(sources.firstOrNull {it.id==item.sourceId}?.kind != SourceKind.EMBY) return emptyList()
+        if(isUgreen(item.sourceId)) return emptyList()
         return when(item.type) {
             "Person","UserView" -> emptyList()
             "CollectionFolder","Folder","BoxSet","Season","Series" -> listOf(MediaAction.REFRESH_LIBRARY,MediaAction.REFRESH_METADATA)
@@ -433,6 +442,9 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         }
     }
     fun loadLibrary(item: MediaEntry, sort: String = "DateCreated", more: Boolean = false,ascending:Boolean=sort=="SortName") {
+        if(isUgreen(item.sourceId) && MediaLogic.ugreenSorts.none {it.first==sort}) {
+            loadLibrary(item,"SortName",more,true);return
+        }
         val sortKey="$sort:$ascending"
         val append = more && librarySort[item.key] == sortKey
         if(!append && librarySort[item.key] != sortKey) pages.remove(item.key)
@@ -459,7 +471,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         if(item.type=="Person") {loadPerson(item);return}
         launchLoad("detail:${item.key}", replace = true) {
             val api = app.emby(source(item.sourceId))
-            val entry = api.item(item.id)
+            val entry = if(isUgreen(item.sourceId) && item.type=="Season") item else api.item(item.id)
             details[item.key] = entry
             if (entry.type in setOf("Series", "Season")) {
                 val entries=api.children(entry)
@@ -472,7 +484,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
 
     fun loadPerson(person:MediaEntry) {
         launchLoad("person:${person.key}",replace=true) {
-            details[person.key]=app.emby(source(person.sourceId)).person(person.title)
+            details[person.key]=app.emby(source(person.sourceId)).person(person.title,person.id)
             loadPersonWorks(person)
         }
     }
@@ -499,7 +511,11 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             loads.remove(key)?.cancel()
             pages.remove(key)
             if (query.isNotBlank()) launchLoad(key, replace = true) {
-                pages[key] = app.emby(config).library("", query = query.trim())
+                pages[key] = if(config.isUgreen) {
+                    val matches=knownEntries().filter {it.sourceId==config.id && it.type in setOf("Movie","Series","Episode") &&
+                        it.title.contains(query.trim(),ignoreCase=true)}.distinctBy {it.key}
+                    MediaPage(matches,matches.size)
+                } else app.emby(config).library("", query = query.trim())
             }
         }
     }
@@ -550,6 +566,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     }
 
     fun favorite(item: MediaEntry) {
+        if(!canFavorite(item)) return
         launchLoad("favorite:${item.key}") {
             val current=details[item.key] ?: item
             val changed=app.emby(source(item.sourceId)).setFavorite(current, !current.favorite)
@@ -559,7 +576,7 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
     fun played(item:MediaEntry) {
         // A series/season write can update every episode and emit a notification per item.
         // This control intentionally operates on individual playable media only.
-        if(!item.isPlayable) return
+        if(!canMarkPlayed(item)) return
         launchLoad("played:${item.key}") {
             val current=details[item.key] ?: item
             val changed=app.emby(source(item.sourceId)).setPlayed(current,!current.played)
@@ -589,13 +606,16 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         }
     }
 
-    fun addSource(kind: SourceKind, name: String, base: String, user: String, password: String, onSuccess: () -> Unit) {
+    fun addSource(kind: SourceKind, name: String, base: String, user: String, password: String, onSuccess: () -> Unit,
+                  profile:EmbyProfile=EmbyProfile.STANDARD) {
         if (busy) return
         viewModelScope.launch {
             busy = true
             try {
                 val config = if (kind == SourceKind.EMBY) {
-                    EmbySource.login(base, name, user, password, app.http, app.store.deviceId)
+                    EmbySource.login(base, name, user, password, app.http, app.store.deviceId,profile).also {
+                        require(!it.isUgreen || app.emby(it).views().isNotEmpty()) {"已登录绿联，但没有可访问的媒体库，请先在影视中心配置媒体库和用户权限"}
+                    }
                 } else {
                     SourceConfig(UUID.randomUUID().toString(), kind, name.ifBlank { "CloudDrive2" },
                         HttpPolicy.serverBase(base), username = user, secret = password).also { app.dav(it).list() }

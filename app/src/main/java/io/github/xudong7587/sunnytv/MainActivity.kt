@@ -191,7 +191,7 @@ class MainActivity: ComponentActivity() {
                 CompositionLocalProvider(LocalPageActive provides navVisible) {TopNav(bridge)}
             }
             if(model.sourcesReady && model.sources.none {it.kind==SourceKind.EMBY}) {
-                AddSourceDialog(SourceKind.EMBY,onClose={},onConnected={model.navigate(Route.Home,root=true)},firstConnection=true)
+                FirstSourceDialog(onConnected={model.navigate(Route.Home,root=true)})
             }
             if(model.busy) Text("正在连接媒体…  返回可取消",color=SunnyColors.Accent,fontSize=14.sp,
                 modifier=Modifier.align(Alignment.BottomCenter).padding(18.dp).background(SunnyColors.Surface).padding(15.dp))
@@ -247,7 +247,7 @@ class MainActivity: ComponentActivity() {
             bridge.navActive=focusState.hasFocus
             if(focusState.hasFocus) scope.launch {bridge.revealTop?.invoke()}
         }.onPreviewKeyEvent {
-            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent()};true} else false
+            if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent(fromNavigation=true)};true} else false
         }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
                 FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),button=true,

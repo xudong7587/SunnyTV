@@ -445,8 +445,9 @@ import coil.request.ImageRequest
     var candidate by remember(library.key) {mutableStateOf<MediaEntry?>(null)}
     var displayed by remember(library.key) {mutableStateOf<MediaEntry?>(null)}
     var folderMode by rememberSaveable(library.key) {mutableStateOf(false)}
-    var sort by rememberSaveable(library.key) {mutableStateOf("DateCreated")}
-    var ascending by rememberSaveable(library.key) {mutableStateOf(false)}
+    val green=model.isUgreen(library.sourceId)
+    var sort by rememberSaveable(library.key) {mutableStateOf(if(green) "SortName" else "DateCreated")}
+    var ascending by rememberSaveable(library.key) {mutableStateOf(green)}
     var chooser by remember {mutableStateOf("")}
     var heroSelected by rememberSaveable(library.key) {mutableIntStateOf(0)}
     val recommendations=model.recommendations[library.key].orEmpty()
@@ -651,6 +652,7 @@ import coil.request.ImageRequest
                 // it simply starts at the very top of the screen once the grid is aligned to it.
                 // The inset keeps the title/buttons clear of the pinned bar; nothing of the banner
                 // can show above because the grid is aligned past it.
+                Column {
                 Row(Modifier.fillMaxWidth().padding(horizontal=pageSidePadding).padding(top=toolsTopInset)
                     .onSizeChanged {if(toolsHeightPx!=it.height) toolsHeightPx=it.height}
                     .testTag("library:pinned-tools"),verticalAlignment=Alignment.CenterVertically) {
@@ -693,6 +695,9 @@ import coil.request.ImageRequest
                         if(!episodeContainer) item {Action(if(folderMode) "按海报" else "按文件夹",
                             id="library-folder-mode",active=folderMode,collapseWhenIdle=true) {folderMode=!folderMode}}
                     }
+                }
+                if(green && !folderMode) Text("本地排序仅在 SunnyTV 内生效，首次需读取完整目录；缺少的数据排在最后。",
+                    color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp,modifier=Modifier.testTag("ugreen:local-sort-help").padding(horizontal=pageSidePadding))
                 }
             }
             if(folderMode) {
@@ -745,7 +750,8 @@ import coil.request.ImageRequest
         if(model.carouselRefreshing) SunnyBrandLoading(true,Modifier.matchParentSize(),scopeTag="library:loading",scrim=true)
     }
     if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"字幕优先级（未匹配时跟随媒体默认）";else->"展现方式"},
-        when(chooser) {"sort"->Presentation.sorts.map {(key,label)->key to if(key==sort) "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
+        when(chooser) {"sort"->(if(green) MediaLogic.ugreenSorts else Presentation.sorts).map {(key,label)->key to
+            (if(key==sort && key!="Random") "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label)+if(green && key!="SortName") " · 本地" else ""};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
             else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
         when(chooser) {"sort"->sort;"subtitle"->subtitlePreference;else->mode},onDismiss={chooser=""},
         // Twelve sort keys fit three to a row, so every option is reachable without scrolling.
@@ -818,6 +824,8 @@ import coil.request.ImageRequest
     fun run() {if(text.isNotBlank()) model.search(text.trim())}
     Column(Modifier.fillMaxSize().padding(horizontal=pageSidePadding).padding(top=pageTopPadding)) {
         SectionTitle("搜索你的媒体库")
+        if(model.activeEmbySources().any {it.isUgreen}) Text("绿联影视中心：仅筛选当前已加载内容；可先进入媒体库浏览，再按片名或拼音查找。",
+            color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=21.sp,modifier=Modifier.testTag("ugreen:search-scope"))
         // Remote keyboard first, the field under it: the D-pad starts on the letters and the text
         // being typed stays on screen right below the keys. Letters and digits share one centred
         // block with 退格 / 清除 sitting between them, so the hand does not travel to the far right
