@@ -1,3 +1,7 @@
+# 2026-10-15 发布已核验
+
+GitHub 已保留 v0.2.1 原包，并发布 v0.2.2（源码 9c439cf，versionCode54）为正式 latest。公开 `/releases/latest` 实际跳转 v0.2.2；通过 latest 下载的 BUILD_INFO、SHA256SUMS 及 APK 完整字节与本地一致。APK 26340399 字节，SHA256 `db1003971dee7a48b9e3230088a34d0e8d7926d377d09fbf842a0d87d78cf32a`。WebDAV latest.json 同步选择0.2.2 /54，远端完整回读校验一致，0.2.0及0.2.1历史包保留。API30 发布后再次执行官方版本检查/下载校验2/2通过，无自动安装到实体设备。官网线上10文件、响应式与原生截图验证记录见 WEBSITE-DEPLOYMENT。
+
 # 2026-10-15 官网与 GitHub latest 更新
 
 0.2.1 / 53 已以原 WebDAV 字节发布 GitHub（标签 v0.2.1，源码 a02e493）。0.2.2 / 54 修正应用内网页下载固定到官方 `/releases/latest`，原生版本查询读取 `latest/download/BUILD_INFO.txt`，仍不使用 REST API；保留严格 TLS、重定向边界、哈希/包身份/签名验证。新增数字正式版发行工作流，默认 latest，拒绝覆盖标签/资产。
