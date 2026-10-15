@@ -69,7 +69,7 @@ class GithubUpdateActivity:ComponentActivity() {
             catch(_:Exception) {status.text="无法打开系统安装器"}
         }}.apply {isEnabled=false}
         button("浏览官方发行页面") {
-            try {startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(release?.page ?: GithubUpdates.PAGE)))}
+            try {startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(GithubUpdates.LATEST_PAGE)))}
             catch(_:Exception) {status.text="设备没有可用浏览器。可直接在本页检查和下载更新。"}
         }
         setContentView(ScrollView(this).apply {addView(layout)})

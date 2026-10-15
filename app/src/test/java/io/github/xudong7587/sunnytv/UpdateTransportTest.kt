@@ -10,6 +10,19 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
 class UpdateTransportTest {
+    @Test fun latestReleaseAssetAliasFollowsRedirectWithoutCredentials()=runBlocking {
+        MockWebServer().use {web->MockWebServer().use {assets->
+            web.enqueue(MockResponse().setResponseCode(302).addHeader("Location",assets.url("/tagged/BUILD_INFO.txt")))
+            assets.enqueue(MockResponse().setBody("version=0.2.2\n"))
+            val text=ByteArrayOutputStream()
+            UpdateTransport(web.url("/owner/repo/releases/latest/download/").toString(),"","")
+                .fetch("BUILD_INFO.txt",16384) {b,n->text.write(b,0,n)}
+            assertEquals("version=0.2.2\n",text.toString())
+            assertEquals("/owner/repo/releases/latest/download/BUILD_INFO.txt",web.takeRequest().path)
+            val redirected=assets.takeRequest()
+            assertNull(redirected.getHeader("Authorization"));assertNull(redirected.getHeader("Cookie"))
+        }}
+    }
     @Test fun davPathsEncodeSpacesAndScopeCredentialsAcrossRedirect()=runBlocking {
         MockWebServer().use {nas->MockWebServer().use {cdn->
             nas.enqueue(MockResponse().setResponseCode(302).addHeader("Location",cdn.url("/latest.apk")))

@@ -7,11 +7,22 @@ import org.junit.Test
 class GithubUpdatePolicyTest {
     @Test fun releaseBrowserStaysOnOfficialRepository() {
         assertTrue(GithubUpdates.allowedPage(GithubUpdates.PAGE))
+        assertTrue(GithubUpdates.allowedPage(GithubUpdates.LATEST_PAGE))
+        assertFalse(GithubUpdates.allowedPage(GithubUpdates.LATEST_PAGE+"?redirect=evil"))
         assertTrue(GithubUpdates.allowedPage("https://github.com/xudong7587/SunnyTV/releases/tag/v0.1.0-dev34.4"))
         assertFalse(GithubUpdates.allowedPage("https://github.com/other/project/releases"))
         assertFalse(GithubUpdates.allowedPage("http://github.com/xudong7587/SunnyTV/releases"))
         assertFalse(GithubUpdates.allowedPage("https://github.com.evil.invalid/xudong7587/SunnyTV/releases"))
         assertFalse(GithubUpdates.allowedPage("https://user:secret@github.com/xudong7587/SunnyTV/releases"))
+    }
+    @Test fun stableManifestUsesExactOfficialAssetsAndRejectsPrereleasesOrPathInjection() {
+        fun info(version:String)="version=$version\nversionCode=54\napplicationId=io.github.xudong7587.sunnytv.debug\ndebuggable=false\n"
+        val release=GithubUpdates.parseLatestInfo(info("0.2.2"))
+        assertEquals("${GithubUpdates.PAGE}/tag/v0.2.2",release.page)
+        assertEquals("${GithubUpdates.PAGE}/download/v0.2.2/SunnyTV-v0.2.2.apk",release.apk)
+        for(v in listOf("0.2.2-dev1","../../evil","0.2.2?token=evil","0.2.2\nversion=0.2.3")) {
+            assertThrows(IllegalArgumentException::class.java) {GithubUpdates.parseLatestInfo(info(v))}
+        }
     }
     private fun entry(version:String,date:String,host:String="github.com")="""<entry><link href="https://$host/xudong7587/SunnyTV/releases/tag/v$version"/><updated>$date</updated></entry>"""
     @Test fun officialFeedIncludesNewestDevelopmentReleaseAndIgnoresOtherHosts() {

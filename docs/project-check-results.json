@@ -62,6 +62,14 @@
       "passed": true
     },
     {
+      "name": "Python syntax generate-showcase-art.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax package-native-relink.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax publish-webdav-update.py",
       "passed": true
     },

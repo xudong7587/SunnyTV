@@ -45,3 +45,7 @@ The user explicitly removed the dev14 certificate restriction on 2026-09-18. Rea
 这是用户明确授权的 SunnyTV 升级目录写入例外，不允许操作该目录以外 NAS 媒体。挂载缺失时记录未同步，不改写其它位置假装成功。
 以公开 dev29（`543b25d`）为本轮基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
 WebDAV 地址、用户名和密码由用户在终端「设置 → 实验升级」填写，不推断或导出私有凭据。自动模式为应用启动时检查并下载，安装交给系统确认。
+
+## GitHub stable releases from 0.2.2
+
+官网、README 和应用内 GitHub 网页下载默认指向 `/releases/latest`；原生更新读取官方 latest 下载元数据。纯数字正式版使用 `release-stable.yml` 并设置 latest，不发布为 prerelease，不覆盖已有标签或资产。同版本 APK 一经 WebDAV 或 GitHub 分发即保持不变，客户端变更须递增数字版本及 versionCode。

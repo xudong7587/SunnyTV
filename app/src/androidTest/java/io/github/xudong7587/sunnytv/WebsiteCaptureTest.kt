@@ -87,4 +87,3 @@ class WebsiteCaptureTest {
         server.close()
     }
 }
-

@@ -21,10 +21,13 @@ import org.xml.sax.helpers.DefaultHandler
 
 internal object GithubUpdates {
     const val PAGE = "https://github.com/xudong7587/SunnyTV/releases"
+    const val LATEST_PAGE = "$PAGE/latest"
+    private const val LATEST_DOWNLOAD = "$LATEST_PAGE/download/"
     fun allowedPage(value:String):Boolean {
         val url=value.toHttpUrlOrNull() ?: return false
         return url.scheme=="https" && url.host=="github.com" && url.port==443 && url.username.isEmpty() && url.password.isEmpty() &&
-            (url.encodedPath=="/xudong7587/SunnyTV/releases" || url.encodedPath.startsWith("/xudong7587/SunnyTV/releases/tag/"))
+            url.query==null && url.fragment==null &&
+            (url.encodedPath=="/xudong7587/SunnyTV/releases" || url.encodedPath=="/xudong7587/SunnyTV/releases/latest" || url.encodedPath.startsWith("/xudong7587/SunnyTV/releases/tag/"))
     }
     data class Release(val versionName:String,val versionCode:Long,val page:String,val apk:String)
     internal fun latestFeedPage(text:String):String {
@@ -77,16 +80,18 @@ internal object GithubUpdates {
         return UpdateTransport(base,"","") to name
     }
     suspend fun latest():Release=withTimeout(45000) {withContext(Dispatchers.IO) {
-        // The public Atom feed includes prereleases and avoids the unauthenticated REST API quota.
-        val feed=ByteArrayOutputStream()
-        UpdateTransport("https://github.com/xudong7587/SunnyTV/","","").fetch("releases.atom",1048576) {b,n->feed.write(b,0,n)}
-        val page=latestFeedPage(feed.toString("UTF-8"))
-        val tag=page.substringAfter("$PAGE/tag/")
-        val base="https://github.com/xudong7587/SunnyTV/releases/download/$tag/"
+        // GitHub's latest asset alias follows the officially selected stable release, without REST quota.
+        // SafeHttp retains strict TLS, scoped headers and bounded redirects on the download route.
         val text=ByteArrayOutputStream()
-        UpdateTransport(base,"","").fetch("BUILD_INFO.txt",16384) {b,n->text.write(b,0,n)}
-        parseReleaseInfo(tag,page,base+"SunnyTV-$tag.apk",text.toString("UTF-8"))
+        UpdateTransport(LATEST_DOWNLOAD,"","").fetch("BUILD_INFO.txt",16384) {b,n->text.write(b,0,n)}
+        parseLatestInfo(text.toString("UTF-8"))
     }}
+    internal fun parseLatestInfo(text:String):Release {
+        val version=text.lineSequence().firstOrNull {it.startsWith("version=")}?.removePrefix("version=").orEmpty()
+        require(version.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+"))) {"官方最新正式版编号无效"}
+        val tag="v$version"
+        return parseReleaseInfo(tag,"$PAGE/tag/$tag","$PAGE/download/$tag/SunnyTV-$tag.apk",text)
+    }
     internal fun parseReleaseInfo(tag:String,page:String,apk:String,text:String):Release {
         val info=text.lineSequence().mapNotNull {line->line.indexOf('=').takeIf {it>0}?.let {line.substring(0,it) to line.substring(it+1)}}.toMap()
         val version=info["version"].orEmpty();val code=info["versionCode"]?.toLongOrNull() ?: 0
