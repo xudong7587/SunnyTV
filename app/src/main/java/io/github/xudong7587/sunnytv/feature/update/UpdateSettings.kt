@@ -28,7 +28,18 @@ import java.io.File
     }
 }
 
+internal object UpdateChannels { val showWebDav=false }
+
 @Composable fun UpdateSettings() {
+    if(!UpdateChannels.showWebDav) {
+        GithubUpdatePanel()
+        return
+    }
+    LegacyUpdateSettings()
+}
+
+/** Retained with its saved configuration for a future re-enable. */
+@Composable private fun LegacyUpdateSettings() {
     val context=LocalContext.current
     val keyboard=LocalSoftwareKeyboardController.current
     val store=remember {ConfigStore(context)}

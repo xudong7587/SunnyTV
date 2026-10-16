@@ -12,14 +12,14 @@ import java.net.InetAddress
 import java.net.SocketTimeoutException
 
 class AutomaticUpdateStartupTest {
-    @Test fun disabledDavDoesNotContactSavedServerOnStartOrResume() {
+    @Test fun hiddenDavDoesNotContactSavedServerEvenWhenPreviouslyEnabled() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val store=ConfigStore(context);val previous=store.updateConfig();val auto=store.automaticUpdates();val enabled=store.webDavUpdatesEnabled()
         ServerSocket(0,2,InetAddress.getByName("127.0.0.1")).use {server->
             server.soTimeout=1000
             try {
                 store.saveUpdateConfig("http://127.0.0.1:${server.localPort}/dav/","fixture-user","fixture-password")
-                store.setAutomaticUpdates(true);store.setWebDavUpdatesEnabled(false)
+                store.setAutomaticUpdates(true);store.setWebDavUpdatesEnabled(true)
                 ActivityScenario.launch<MainActivity>(Intent(context,MainActivity::class.java)).use {scenario->
                     scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED)
                     assertTrue(runCatching {server.accept().close()}.exceptionOrNull() is SocketTimeoutException)
@@ -29,3 +29,4 @@ class AutomaticUpdateStartupTest {
         }
     }
 }
+

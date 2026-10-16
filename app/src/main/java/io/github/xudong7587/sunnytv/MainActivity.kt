@@ -100,7 +100,7 @@ class MainActivity: ComponentActivity() {
     override fun onStart() {
         super.onStart()
         if(returningFromUpdateInstaller) {returningFromUpdateInstaller=false;return}
-        if(io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).let {it.webDavUpdatesEnabled() && it.automaticUpdates()}) {
+        if(io.github.xudong7587.sunnytv.feature.update.UpdateChannels.showWebDav && io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).let {it.webDavUpdatesEnabled() && it.automaticUpdates()}) {
             startupUpdateJob=lifecycleScope.launch {
                 try {
                     val ready=io.github.xudong7587.sunnytv.feature.update.ExperimentalUpdater(this@MainActivity).download()
@@ -267,3 +267,4 @@ class MainActivity: ComponentActivity() {
         if(!compact) Spacer(Modifier.width(100.dp))
     }
 }
+
