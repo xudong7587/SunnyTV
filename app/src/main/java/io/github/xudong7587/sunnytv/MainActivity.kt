@@ -97,9 +97,30 @@ class MainActivity: ComponentActivity() {
     }
     private var startupUpdateJob:kotlinx.coroutines.Job?=null
     private var returningFromUpdateInstaller=false
+    private var pendingAutomaticInstall:java.io.File?=null
     override fun onStart() {
         super.onStart()
         if(returningFromUpdateInstaller) {returningFromUpdateInstaller=false;return}
+        if(io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).githubAutomaticUpdates()) {
+            startupUpdateJob=lifecycleScope.launch {
+                try {
+                    val ready=io.github.xudong7587.sunnytv.feature.update.prepareAutomaticGithubUpdate(
+                        true,BuildConfig.VERSION_CODE.toLong(),
+                        {io.github.xudong7587.sunnytv.feature.update.GithubUpdates.latest()},
+                        {release->
+                            android.widget.Toast.makeText(this@MainActivity,"发现新版 ${release.versionName}，正在下载更新",android.widget.Toast.LENGTH_LONG).show()
+                            io.github.xudong7587.sunnytv.feature.update.GithubUpdates.download(this@MainActivity,release.apk)
+                        })
+                    if(ready!=null && io.github.xudong7587.sunnytv.core.storage.ConfigStore(this@MainActivity).githubAutomaticUpdates()) {
+                        returningFromUpdateInstaller=true
+                        if(android.os.Build.VERSION.SDK_INT>=26 && !packageManager.canRequestPackageInstalls()) pendingAutomaticInstall=ready
+                        io.github.xudong7587.sunnytv.feature.update.ExperimentalUpdater(this@MainActivity).install(ready)
+                    }
+                } catch(e:kotlinx.coroutines.CancellationException) {throw e}
+                catch(_:Exception) { /* Offline startup remains usable; manual retry is in software updates. */ }
+            }
+            return
+        }
         if(io.github.xudong7587.sunnytv.feature.update.UpdateChannels.showWebDav && io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).let {it.webDavUpdatesEnabled() && it.automaticUpdates()}) {
             startupUpdateJob=lifecycleScope.launch {
                 try {
@@ -118,6 +139,15 @@ class MainActivity: ComponentActivity() {
     override fun onRestart() { super.onRestart(); model.afterPlayback() }
     override fun onResume() {
         super.onResume()
+        pendingAutomaticInstall?.let {file->
+            if(android.os.Build.VERSION.SDK_INT<26 || packageManager.canRequestPackageInstalls()) {
+                pendingAutomaticInstall=null
+                if(io.github.xudong7587.sunnytv.core.storage.ConfigStore(this).githubAutomaticUpdates()) {
+                    returningFromUpdateInstaller=true
+                    runCatching {io.github.xudong7587.sunnytv.feature.update.ExperimentalUpdater(this).install(file)}
+                }
+            }
+        }
         window.decorView.post {applyPreferredDisplayMode(window,model.settings.displayModePreference)}
     }
 }

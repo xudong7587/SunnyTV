@@ -5,6 +5,8 @@ import androidx.compose.runtime.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -24,6 +26,8 @@ import java.io.File
     val context=LocalContext.current
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     val scope=rememberCoroutineScope()
+    val store=remember {io.github.xudong7587.sunnytv.core.storage.ConfigStore(context)}
+    var automatic by remember {mutableStateOf(store.githubAutomaticUpdates())}
     var release by remember {mutableStateOf<GithubUpdates.Release?>(null)}
     var status by remember {mutableStateOf("正在检查最新版本…")}
     var busy by remember {mutableStateOf(false)}
@@ -78,6 +82,16 @@ import java.io.File
         }) {
             Text("下载并更新",color=if(busy || (ready==null && (release?.versionCode ?: 0)<=BuildConfig.VERSION_CODE)) SunnyColors.Secondary else SunnyColors.Text,
                 fontSize=15.sp,modifier=Modifier.padding(16.dp))
+        }
+        FocusTile("update:github-auto",Modifier.fillMaxWidth().semantics {
+            role=Role.Switch
+            toggleableState=if(automatic) ToggleableState.On else ToggleableState.Off
+            stateDescription=if(automatic) "开启" else "关闭"
+        },onClick={automatic=!automatic;store.setGithubAutomaticUpdates(automatic)}) {
+            Column(Modifier.padding(16.dp)) {
+                Text("GitHub 自动更新 · ${if(automatic) "开启" else "关闭"}",color=SunnyColors.Text,fontSize=15.sp)
+                Text("进入软件时检查最新版，自动下载并打开系统安装确认",color=SunnyColors.Secondary,fontSize=12.sp)
+            }
         }
     }
 }
