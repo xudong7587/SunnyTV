@@ -192,6 +192,18 @@ import java.util.List;
   private static byte[] getExtraData(String mimeType, List<byte[]> initializationData) {
     switch (mimeType) {
       case MimeTypes.AUDIO_AAC:
+        byte[] aacConfig = initializationData.get(0);
+        // ADTS with channel_configuration=0 carries its PCE in the raw AAC frame.
+        // AdtsReader only supplies a two-byte LC config, without that PCE. Passing
+        // this incomplete config to avcodec_open2 makes initialization fail before
+        // FFmpeg can read the channel layout from the first frame. Full configs
+        // (including their PCE), and all standard channel configs, stay intact.
+        if (aacConfig.length == 2
+            && ((aacConfig[0] & 0xff) >> 3) == 2
+            && ((aacConfig[1] >> 3) & 0x0f) == 0) {
+          return null;
+        }
+        return aacConfig;
       case MimeTypes.AUDIO_OPUS:
         return initializationData.get(0);
       case MimeTypes.AUDIO_ALAC:

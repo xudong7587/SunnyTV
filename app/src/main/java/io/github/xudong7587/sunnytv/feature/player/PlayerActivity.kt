@@ -102,6 +102,9 @@ class PlayerActivity: ComponentActivity() {
             return cachedTranscodeSource
         }
     private var cloudSession: CloudVideoSource.Session? = null
+    // Some cloud AAC streams only carry their custom channel layout at the start.
+    // Prime the existing decoder there before seeking to the requested resume time.
+    private var cloudBootstrapTarget: Long? = null
     private var cloudVariants by mutableStateOf<List<CloudVideoSource.Variant>>(emptyList())
     private var cloudNotice by mutableStateOf("")
     private var cloudDiscoveryJob: Job? = null
@@ -235,6 +238,7 @@ class PlayerActivity: ComponentActivity() {
     }
     private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
         rendered=false;error="";firstFrameMs=-1;headerMs=-1;totalStartupMs=-1;sourceStartupMs=-1
+        cloudBootstrapTarget=lastPosition.takeIf {isCloudQuality && it>0}
         // Each player instance gets its own single automatic first-frame retry budget.
         autoRetryAttempts=0
         val includeSourceTime = originalLaunch
@@ -386,6 +390,12 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
             override fun onPlaybackStateChanged(playbackState:Int) {
+                if(playbackState==Player.STATE_READY && cloudBootstrapTarget!=null) {
+                    val target=cloudBootstrapTarget!!
+                    cloudBootstrapTarget=null
+                    p.seekTo(target)
+                    return
+                }
                 status=when(playbackState) {Player.STATE_BUFFERING->"正在缓冲…";Player.STATE_ENDED->"播放结束";else->""}
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
                 if(playbackState==Player.STATE_READY && quality!="original" && !isCloudQuality && !p.playWhenReady) pauseTranscode()
@@ -454,6 +464,7 @@ class PlayerActivity: ComponentActivity() {
                 clientNetworkNotice=if(sourceRate>0 && actualRate<sourceRate) "播放器接收速度可能不足，建议在清晰度中选择低码率档位。" else ""
             }
             override fun onRenderedFirstFrame(eventTime:AnalyticsListener.EventTime,output:Any,renderTimeMs:Long) {
+                if(cloudBootstrapTarget!=null) return
                 if(!rendered) {
                     rendered=true
                     if(!cloudAutoDiscovered) {cloudAutoDiscovered=true;discoverCloudQuality()}
@@ -473,7 +484,7 @@ class PlayerActivity: ComponentActivity() {
         })
         startReporter()
         loadPlayerMetadata()
-        p.setMediaItem(media.build(),if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
+        p.setMediaItem(media.build(),if(cloudBootstrapTarget!=null) 0 else if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
             while(isActive) {
@@ -583,7 +594,7 @@ class PlayerActivity: ComponentActivity() {
             onFailure = { withContext(Dispatchers.Main) { reportFailures++ } }
         )
     }
-    private fun absolutePosition():Long = transcodePausedPosition ?: player?.let {
+    private fun absolutePosition():Long = cloudBootstrapTarget ?: transcodePausedPosition ?: player?.let {
         if(quality=="original" || isCloudQuality) it.currentPosition.coerceAtLeast(0) else {
             val windowOffset=if(it.currentTimeline.isEmpty) 0 else it.currentTimeline.getWindow(it.currentMediaItemIndex,Timeline.Window()).positionInFirstPeriodMs
             (transcodeOffset+windowOffset+it.currentPosition.coerceAtLeast(0)).coerceAtMost(transcodeDuration)
@@ -591,6 +602,7 @@ class PlayerActivity: ComponentActivity() {
     } ?: lastPosition
     private fun seekToAbsolute(target:Long) {
         if(qualitySwitching) return
+        if(cloudBootstrapTarget!=null) {cloudBootstrapTarget=target;position=target;return}
         if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) {
             player?.seekTo(target);position=target
             if(transcodePausedPosition!=null) transcodePausedPosition=target

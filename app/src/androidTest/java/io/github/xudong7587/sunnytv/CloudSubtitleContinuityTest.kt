@@ -21,7 +21,7 @@ class CloudSubtitleContinuityTest {
     private fun player(a:PlayerActivity)=PlayerActivity::class.java.getDeclaredMethod("getPlayer")
         .apply {isAccessible=true}.invoke(a) as ExoPlayer
 
-    private class Fixture(embedded:Boolean=false):AutoCloseable {
+    private class Fixture(embedded:Boolean=false,pceAudio:Boolean=false):AutoCloseable {
         val server=ServerSocket(0,8,InetAddress.getByName("127.0.0.1"))
         val paths=CopyOnWriteArrayList<String>()
         val root="http://127.0.0.1:${server.localPort}"
@@ -54,7 +54,8 @@ class CloudSubtitleContinuityTest {
                             path=="/subtitle.vtt" -> "WEBVTT\n\n00:00:00.000 --> 00:00:29.900\n字幕连续性测试\n".toByteArray()
                             path=="/api/cloud-video/discover" -> """{"protocol":"mediaindex-cloud-video-v1","variants":[$metadata]}""".toByteArray()
                             path=="/api/cloud-video/sessions" -> """{"protocol":"mediaindex-cloud-video-v1","sessionId":"$sid","sessionToken":"$token","playlistUrl":"/api/cloud-video/sessions/$sid/index.m3u8?st=$token","variant":$metadata,"delivery":"direct","seekMode":"hls-vod"}""".toByteArray()
-                            path.endsWith("index.m3u8") -> "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:30\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:30.0,\ncloud.ts\n#EXT-X-ENDLIST\n".toByteArray()
+                            path.endsWith("index.m3u8") -> if(pceAudio) assets.open("quality/pce.m3u8").use {it.readBytes()} else "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:30\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:30.0,\ncloud.ts\n#EXT-X-ENDLIST\n".toByteArray()
+                            pceAudio && path.substringAfterLast('/').matches(Regex("pce-[0-9]+\\.ts")) -> assets.open("quality/"+path.substringAfterLast('/')).use {it.readBytes()}
                             path.endsWith("cloud.ts") -> ts
                             else -> "{}".toByteArray()
                         }
@@ -77,6 +78,45 @@ class CloudSubtitleContinuityTest {
 
     @Test fun embeddedSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(true)
     @Test fun externalSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(false)
+
+    @Test fun cloudInBandPcePrimesBeforePausedResumeAndSurvivesSeeking() {
+        Fixture(pceAudio=true).use {f->
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,
+                PlaybackRequest("",f.root+"/api/play/fixture","PCE 云端音频",startMs=4000))).use {scenario->
+                rule.waitUntil(15000) {f.paths.any {it=="/api/cloud-video/discover"}}
+                var old:ExoPlayer?=null
+                scenario.onActivity {old=player(it);old!!.pause()}
+                rule.onNodeWithTag("player:quality").performClick()
+                rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
+                fun readyAt(target:Long):Boolean {
+                    var ready=false
+                    scenario.onActivity {a->val p=player(a)
+                        assertNull("Cloud audio failed: ${p.playerError?.errorCodeName}",p.playerError)
+                        ready=p!==old && p.playbackState==androidx.media3.common.Player.STATE_READY &&
+                            kotlin.math.abs(target-p.currentPosition)<700 && p.audioDecoderCounters?.renderedOutputBufferCount?.let {it>0}==true
+                    }
+                    return ready
+                }
+                rule.waitUntil(25000) {readyAt(4000)}
+                scenario.onActivity {a->val p=player(a)
+                    assertFalse(p.playWhenReady)
+                    assertEquals(androidx.media3.common.MimeTypes.AUDIO_AAC,p.audioFormat!!.sampleMimeType)
+                    assertEquals(0,(p.audioFormat!!.initializationData[0][1].toInt() shr 3) and 15)
+                    p.seekTo(1500)
+                }
+                rule.waitUntil(10000) {readyAt(1500)}
+                scenario.onActivity {player(it).seekTo(4000)}
+                rule.waitUntil(10000) {readyAt(4000)}
+                scenario.onActivity {player(it).play()}
+                rule.waitUntil(10000) {
+                    var advancing=false
+                    scenario.onActivity {a->assertNull(player(a).playerError);advancing=player(a).currentPosition>5000}
+                    advancing
+                }
+            }
+        }
+    }
 
     private fun verifyContinuity(embedded:Boolean) {
         Fixture(embedded=embedded).use {f->
