@@ -34,7 +34,8 @@ class ExperimentalUpdateUiTest {
             assertTrue(store.githubAutomaticUpdates())
             for(tag in listOf("update:webdav","update:save","update:auto","update:check","WebDAV 用户名"))
                 rule.onNodeWithTag(tag).assertDoesNotExist()
-            rule.onNodeWithTag("about:mediaindex").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithTag("settings:viewport").performScrollToNode(hasTestTag("about:mediaindex"))
+            rule.onNodeWithTag("about:mediaindex").assertIsDisplayed()
             assertEquals("fixture-user",store.updateConfig().second)
             assertTrue(store.webDavUpdatesEnabled());assertTrue(store.automaticUpdates())
         } finally {
