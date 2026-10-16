@@ -20,8 +20,10 @@ class LocalAudioDecoderTest {
     @Test fun aacStereo44100DecodesRawHlsSamples() = decodeAac("tone-stereo.aac",2,byteArrayOf(0x12,0x10))
     @Test fun aacSixChannels44100DecodesRawHlsSamples() = decodeAac("tone-surround.aac",6,byteArrayOf(0x12,0x30))
     @Test fun aacEightChannels44100DecodesRawHlsSamples() = decodeAac("tone-eight.aac",8)
+    @Test fun aacEightChannelsWithInBandPceDecodesRawHlsSamples() = decodeAac("tone-pce-eight.aac",8,byteArrayOf(0x12,0x00),0)
+    @Test fun aacSixChannelsWithInBandPceDecodesRawHlsSamples() = decodeAac("tone-pce-surround.aac",6,byteArrayOf(0x12,0x00),0)
 
-    private fun decodeAac(asset:String,channels:Int,config:ByteArray?=null) {
+    private fun decodeAac(asset:String,channels:Int,config:ByteArray?=null,declaredChannels:Int=channels) {
         val adts=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
         assertEquals(0xff,adts[0].toInt() and 0xff)
         assertEquals(0xf0,adts[1].toInt() and 0xf0)
@@ -35,7 +37,7 @@ class LocalAudioDecoderTest {
         val asc=(objectType shl 11) or (frequencyIndex shl 7) or (channelConfig shl 3)
         val actualConfig=byteArrayOf((asc shr 8).toByte(),asc.toByte())
         if(config!=null) assertArrayEquals(config,actualConfig)
-        decodePacket(adts.copyOfRange(header,length),MimeTypes.AUDIO_AAC,channels,44100,listOf(actualConfig))
+        decodePacket(adts.copyOfRange(header,length),MimeTypes.AUDIO_AAC,channels,44100,listOf(actualConfig),declaredChannels)
     }
     @Test fun centerOnlySixAndEightChannelsReachBothStereoSpeakers() {
         for(channels in listOf(3,5,6,7,8)) {
@@ -64,8 +66,8 @@ class LocalAudioDecoderTest {
         val packet=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
         decodePacket(packet,mime,channels,48000)
     }
-    private fun decodePacket(packet:ByteArray,mime:String,channels:Int,rate:Int,initialization:List<ByteArray> = emptyList()) {
-        val decoder=FfmpegAudioDecoder(Format.Builder().setSampleMimeType(mime).setChannelCount(channels)
+    private fun decodePacket(packet:ByteArray,mime:String,channels:Int,rate:Int,initialization:List<ByteArray> = emptyList(),declaredChannels:Int=channels) {
+        val decoder=FfmpegAudioDecoder(Format.Builder().setSampleMimeType(mime).setChannelCount(declaredChannels)
             .setSampleRate(rate).setInitializationData(initialization).build(),2,2,packet.size,false)
         try {
             val input=checkNotNull(decoder.dequeueInputBuffer())
