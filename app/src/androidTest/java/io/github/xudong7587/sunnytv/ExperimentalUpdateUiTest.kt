@@ -22,13 +22,19 @@ class ExperimentalUpdateUiTest {
             store.setWebDavUpdatesEnabled(true);store.setAutomaticUpdates(true)
             store.setGithubAutomaticUpdates(false)
             val model=AppModel(rule.activity.application,false,emptyList())
-            rule.setContent {CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme(model.settings) {UpdateSettings()}}}
+            rule.setContent {CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme(model.settings) {SettingsScreen()}}}
+            rule.onNodeWithTag("settings:categories").performScrollToNode(hasTestTag("settings:关于"))
+            rule.onNodeWithTag("settings:关于").performClick()
+            rule.onNodeWithTag("settings:软件升级").assertDoesNotExist()
             rule.onNodeWithTag("update:github").assertIsDisplayed()
+            val title=rule.onAllNodesWithText("SunnyTV").fetchSemanticsNodes().first {it.boundsInRoot.top>=0}
+            assertTrue(title.boundsInRoot.top < rule.onNodeWithTag("update:github").fetchSemanticsNode().boundsInRoot.top)
             rule.onNodeWithTag("update:github-download").assertIsDisplayed()
             rule.onNodeWithTag("update:github-auto").assertIsOff().performClick().assertIsOn()
             assertTrue(store.githubAutomaticUpdates())
             for(tag in listOf("update:webdav","update:save","update:auto","update:check","WebDAV 用户名"))
                 rule.onNodeWithTag(tag).assertDoesNotExist()
+            rule.onNodeWithTag("about:mediaindex").performScrollTo().assertIsDisplayed()
             assertEquals("fixture-user",store.updateConfig().second)
             assertTrue(store.webDavUpdatesEnabled());assertTrue(store.automaticUpdates())
         } finally {
