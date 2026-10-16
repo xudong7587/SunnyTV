@@ -49,6 +49,8 @@ jobs:
           ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -ac 8 -c:a aac -b:a 512k -frames:a 1 -f adts app/src/androidTest/assets/tone-eight.aac
           ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -ac 6 -c:a aac -aac_pce 1 -b:a 384k -frames:a 1 -f adts app/src/androidTest/assets/tone-pce-surround.aac
           ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -ac 8 -c:a aac -aac_pce 1 -b:a 512k -frames:a 1 -f adts app/src/androidTest/assets/tone-pce-eight.aac
+          mkdir -p app/src/androidTest/assets/quality
+          ffmpeg -v error -f lavfi -i 'color=c=blue:s=320x180:r=24:d=6' -f lavfi -i 'sine=frequency=440:sample_rate=44100:duration=6' -c:v libx264 -threads 1 -preset ultrafast -g 24 -pix_fmt yuv420p -c:a aac -aac_pce 1 -ac 8 -b:a 512k -t 6 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename 'app/src/androidTest/assets/quality/pce-%d.ts' app/src/androidTest/assets/quality/pce.m3u8
       - name: Select existing repository signing key
         env:
           KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
