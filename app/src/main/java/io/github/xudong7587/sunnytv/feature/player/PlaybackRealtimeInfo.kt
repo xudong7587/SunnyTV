@@ -22,7 +22,8 @@ internal data class PlaybackRealtimeInfo(
     val videoBitrate:Long=0,val streamBitrate:Long=0,val audioMime:String?=null,
     val sampleRate:Int=0,val channels:Int=0,val audioBitrate:Long=0,
     val bytesPerSecond:Double=0.0,val bufferedMs:Long=0,
-    val videoDecoder:String="",val audioDecoder:String=""
+    val videoDecoder:String="",val audioDecoder:String="",
+    val bufferBytes:Long=0,val bufferBudgetBytes:Long=0
 ) {
     private fun number(value:Double)=String.format(Locale.ROOT,"%.2f",value)
     private fun rate(value:Long)=if(value>0) "${number(value/1_000_000.0)} Mbps" else "—"
@@ -40,7 +41,9 @@ internal data class PlaybackRealtimeInfo(
         val speed=bytesPerSecond.takeIf {it.isFinite() && it>=0} ?: 0.0
         add("下载 ${number(speed/1_000_000)} MB/s · ${number(speed*8/1_000_000)} Mbps")
         add("缓冲 ${number(bufferedMs.coerceAtLeast(0)/1000.0)} s")
+        if(bufferBudgetBytes>0) add("缓冲内存 ${number(bufferBytes.coerceAtLeast(0)/1048576.0)} / ${number(bufferBudgetBytes/1048576.0)} MiB")
         if(videoDecoder.isNotBlank()) add("视频解码 $videoDecoder")
         if(audioDecoder.isNotBlank()) add("音频解码 $audioDecoder")
     }.joinToString("\n")
 }
+

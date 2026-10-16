@@ -6,6 +6,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlaybackRealtimeInfoTest {
+    @Test fun showsMeasuredBufferAllocationSeparatelyFromBudget() {
+        val text=PlaybackRealtimeInfo(bufferBytes=48L*1024*1024,bufferBudgetBytes=171L*1024*1024).text()
+        assertTrue(text.contains("缓冲内存 48.00 / 171.00 MiB"))
+        assertFalse(PlaybackRealtimeInfo().text().contains("缓冲内存"))
+    }
+
     @Test fun countsOnlyNewBytesAndReturnsZeroDuringIdle() {
         val meter=PlaybackRateMeter();assertEquals(0.0,meter.sample(1000),0.0)
         meter.addBytes(1_250_000);assertEquals(1_250_000.0,meter.sample(2000),0.0)
@@ -25,3 +31,4 @@ class PlaybackRealtimeInfoTest {
         assertTrue(empty.contains("视频 —"));assertTrue(empty.contains("下载 0.00 MB/s"));assertFalse(empty.contains("NaN"))
     }
 }
+

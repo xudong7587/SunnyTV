@@ -304,16 +304,18 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
         val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors).setLoadErrorHandlingPolicy(errorPolicy)
+        val bufferBudget=io.github.xudong7587.sunnytv.core.playback.PlaybackBufferPolicy.targetBytes(Runtime.getRuntime().maxMemory())
+        val bufferAllocator=androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024)
         val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
             .setLoadControl(DefaultLoadControl.Builder()
                 .setBufferDurationsMs(30_000,120_000,2_500,5_000)
-                .setTargetBufferBytes(io.github.xudong7587.sunnytv.core.playback.PlaybackBufferPolicy.targetBytes(Runtime.getRuntime().maxMemory()))
+                .setTargetBufferBytes(bufferBudget)
                 // Keep the byte ceiling: forcing 30s at 80 Mbps would allocate ~300 MB
                 // even on a small-heap TV. The larger budget extends actual read-ahead.
                 .setPrioritizeTimeOverSizeThresholds(false)
-                .setAllocator(androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024))
+                .setAllocator(bufferAllocator)
                 .build())
             .setSeekBackIncrementMs(settings.seekStepSeconds*1000L).setSeekForwardIncrementMs(settings.seekStepSeconds*1000L)
             .build()
@@ -573,6 +575,7 @@ class PlayerActivity: ComponentActivity() {
                             audioMime=audio?.sampleMimeType,sampleRate=audio?.sampleRate ?: 0,channels=audio?.channelCount ?: 0,
                             audioBitrate=audio?.bitrate?.toLong() ?: 0,bytesPerSecond=speed,
                             bufferedMs=(p.bufferedPosition-p.currentPosition).coerceAtLeast(0),
+                            bufferBytes=bufferAllocator.totalBytesAllocated.toLong(),bufferBudgetBytes=bufferBudget.toLong(),
                             videoDecoder=videoDecoder,audioDecoder=audioDecoder)
                     }
                 }
