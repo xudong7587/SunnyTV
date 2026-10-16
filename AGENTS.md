@@ -41,10 +41,10 @@ The user explicitly removed the dev14 certificate restriction on 2026-09-18. Rea
 ## Local WebDAV update distribution (dev30 onward)
 
 用户要求：以后 SunnyTV 新版本将经过现有签名及发行检查的升级包同步到 `Z:\V1 Tools\SunnyTV-updata`。
-使用 `scripts/publish-webdav-update.py` 发布：先写带版本和哈希的不可变 APK，再更新固定入口 `latest.json`；不覆盖同版本不同内容，不删除历史包。
+用户于 2026-10-16 调整更新协议：0.2.5 起客户端先读取 GitHub latest 元数据，再从 WebDAV 升级目录下载与官方最新版同名的 `SunnyTV-v版本.apk`，验证包名、版本及既有签名，不读取 WebDAV JSON。使用 `scripts/publish-webdav-update.py` 发布同名不可变 APK，同时保留带哈希文件及 `latest.json`，供旧版客户端升级；不覆盖同版本不同内容，不删除历史包。
 这是用户明确授权的 SunnyTV 升级目录写入例外，不允许操作该目录以外 NAS 媒体。挂载缺失时记录未同步，不改写其它位置假装成功。
 以公开 dev29（`543b25d`）为本轮基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
-WebDAV 地址、用户名和密码由用户在终端「设置 → 实验升级」填写，不推断或导出私有凭据。自动模式为应用启动时检查并下载，安装交给系统确认。
+WebDAV 地址、用户名和密码由用户在终端「设置 → 软件升级」填写，不推断或导出私有凭据。WebDAV 默认关闭，开启后才显示配置；自动模式还需 WebDAV 开关开启，应用启动时检查并下载，安装交给系统确认。
 
 ## GitHub stable releases from 0.2.2
 

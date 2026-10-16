@@ -42,6 +42,9 @@ class PlayerPanelFocusTest {
         try {
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/fixture.mp4","焦点测试")
+            val store=io.github.xudong7587.sunnytv.core.storage.ConfigStore(context)
+            val oldInfo=store.realtimePlaybackInfo();store.setRealtimePlaybackInfo(false)
+            try {
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario->
                 // TV navigation starts with hardware keys; semantic clicks alone leave Android in touch mode.
                 InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
@@ -57,7 +60,14 @@ class PlayerPanelFocusTest {
                 rule.onNodeWithText("原始声道（默认）").assertExists()
                 rule.onNodeWithTag("player:close").performClick()
                 awaitFocus(rule.onNodeWithContentDescription("音频输出"))
-                rule.onNodeWithContentDescription("音频输出").assertIsFocused()
+                rule.onNodeWithContentDescription("音频输出").assertIsFocused().performKeyInput {pressKey(Key.DirectionLeft)}
+                awaitFocus(rule.onNodeWithTag("player:stats"))
+                rule.onNodeWithTag("player:stats").assertIsOff().performKeyInput {pressKey(Key.DirectionCenter)}
+                rule.onNodeWithTag("player:stats").assertIsOn()
+                rule.onNodeWithTag("player:realtime-overlay").assertTextContains("下载",substring=true).assertIsDisplayed()
+                scenario.recreate()
+                rule.onNodeWithTag("player:stats").assertIsOn().performClick().assertIsOff()
+                rule.onNodeWithTag("player:realtime-overlay").assertDoesNotExist()
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithTag("player:close").performClick()
                 awaitFocus(rule.onNodeWithTag("player:speed"))
@@ -67,6 +77,7 @@ class PlayerPanelFocusTest {
                 awaitFocus(rule.onNodeWithTag("player:info"))
                 rule.onNodeWithTag("player:info").assertIsFocused()
             }
+            } finally {store.setRealtimePlaybackInfo(oldInfo)}
         } finally {
             release.countDown()
             server.close()

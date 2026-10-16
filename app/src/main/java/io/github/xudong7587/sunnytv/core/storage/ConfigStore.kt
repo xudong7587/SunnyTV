@@ -43,6 +43,10 @@ class ConfigStore(context: Context) {
     fun saveUpdateConfig(url:String,user:String,password:String) {
         prefs.edit().putString("updateUrl",url).putString("updateUser",user).putString("updateSecret",encrypt(password)).apply()
     }
+    fun webDavUpdatesEnabled():Boolean=prefs.getBoolean("webDavUpdatesEnabled",false)
+    fun setWebDavUpdatesEnabled(enabled:Boolean) {prefs.edit().putBoolean("webDavUpdatesEnabled",enabled).apply()}
+    fun realtimePlaybackInfo():Boolean=prefs.getBoolean("realtimePlaybackInfo",false)
+    fun setRealtimePlaybackInfo(enabled:Boolean) {prefs.edit().putBoolean("realtimePlaybackInfo",enabled).apply()}
     fun automaticUpdates():Boolean=prefs.getBoolean("automaticUpdates",false)
     fun setAutomaticUpdates(enabled:Boolean) {prefs.edit().putBoolean("automaticUpdates",enabled).apply()}
     fun sources(): List<SourceConfig> {
