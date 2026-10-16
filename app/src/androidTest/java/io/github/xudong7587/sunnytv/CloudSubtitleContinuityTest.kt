@@ -211,14 +211,16 @@ class CloudSubtitleContinuityTest {
                 explicitSubtitle=true,subtitleTrackId="emby-sub:4")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,req)).use {scenario->
                 fun awaitCue(text:String) {
-                    rule.waitUntil(15000) {
+                    var diagnostic=""
+                    try {rule.waitUntil(15000) {
                         var found=false
                         scenario.onActivity {a->val p=player(a)
                             assertNull(p.playerError)
+                            diagnostic="state=${p.playbackState}; position=${p.currentPosition}; cues=${p.currentCues.cues.map {it.text}}"
                             found=p.currentCues.cues.any {it.text.toString()==text}
                         }
                         found
-                    }
+                    }} catch(e:Throwable) {throw AssertionError("Expected cue $text; $diagnostic",e)}
                 }
                 awaitCue("MIDDLE")
                 var frozen=0L
@@ -245,7 +247,11 @@ class CloudSubtitleContinuityTest {
                 rule.onNodeWithTag("subtitle-timing:close").performClick()
                 rule.onNodeWithTag("player:quality").performClick()
                 rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
-                rule.waitUntil(15000) {var cloud=false;scenario.onActivity {cloud=player(it).currentMediaItem?.localConfiguration?.uri?.path?.endsWith("index.m3u8")==true};cloud}
+                var cloudDiagnostic=""
+                try {rule.waitUntil(15000) {var cloud=false;scenario.onActivity {
+                    cloudDiagnostic="position=${player(it).currentPosition}; mime=${player(it).currentMediaItem?.localConfiguration?.mimeType}; error=${player(it).playerError?.errorCodeName}"
+                    cloud=player(it).currentMediaItem?.localConfiguration?.uri?.path?.endsWith("index.m3u8")==true
+                };cloud}} catch(e:Throwable) {throw AssertionError("Cloud route not ready: $cloudDiagnostic",e)}
                 awaitCue("EARLY")
                 scenario.onActivity {player(it).seekTo(24_000)}
                 awaitCue("LATE")

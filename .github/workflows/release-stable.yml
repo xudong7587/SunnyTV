@@ -1,6 +1,10 @@
 name: Publish verified SunnyTV stable
 on:
   workflow_dispatch:
+  # One-off publication requested for 0.2.6; main-only and immutable-release checks remain.
+  push:
+    branches: [main]
+    paths: ['docs/RELEASE-0.2.6.md']
 permissions:
   contents: write
 concurrency:
@@ -123,3 +127,4 @@ jobs:
       - name: Remove ephemeral runner key copy
         if: always()
         run: rm -f "$HOME/.android/debug.keystore"
+

@@ -48,6 +48,21 @@ jobs:
           profile: tv_1080p
           disable-animations: true
           script: bash gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
+      - name: Print failure details
+        if: failure()
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for failure in case.findall('failure') + case.findall('error'):
+                      print(case.attrib.get('name'), failure.text)
+          PYCODE
       - name: Preserve test evidence
         if: always()
         uses: actions/upload-artifact@v4
