@@ -40,23 +40,37 @@ public final class CloudHlsSourceFactory {
 
   public static MediaSource create(MediaItem item, DataSource.Factory dataSource,
       HlsExtractorFactory extractors, LoadErrorHandlingPolicy policy) {
+    return create(item, dataSource, extractors, policy, 0);
+  }
+
+  public static MediaSource create(MediaItem item, DataSource.Factory dataSource,
+      HlsExtractorFactory extractors, LoadErrorHandlingPolicy policy, long subtitleProgressMs) {
+    MediaItem videoItem = item.buildUpon().setSubtitleConfigurations(java.util.Collections.emptyList()).build();
+    MediaSource video = new HlsMediaSource.Factory(dataSource).setExtractorFactory(extractors)
+        .setLoadErrorHandlingPolicy(policy).createMediaSource(videoItem);
+    return mergeSubtitles(video, item, dataSource, policy, subtitleProgressMs);
+  }
+
+  /** Original and cloud playback share the same external subtitle timeline. */
+  public static MediaSource mergeSubtitles(MediaSource video, MediaItem item,
+      DataSource.Factory dataSource, LoadErrorHandlingPolicy policy, long subtitleProgressMs) {
     ArrayList<MediaSource> sources = new ArrayList<>();
-    sources.add(new HlsMediaSource.Factory(dataSource).setExtractorFactory(extractors)
-        .setLoadErrorHandlingPolicy(policy).createMediaSource(item));
+    sources.add(video);
     DefaultSubtitleParserFactory parsers = new DefaultSubtitleParserFactory();
     for (MediaItem.SubtitleConfiguration subtitle : item.localConfiguration.subtitleConfigurations) {
       Format format = new Format.Builder().setSampleMimeType(subtitle.mimeType)
           .setLanguage(subtitle.language).setSelectionFlags(subtitle.selectionFlags)
           .setRoleFlags(subtitle.roleFlags).setLabel(subtitle.label).setId(subtitle.id).build();
       boolean supported = parsers.supportsFormat(format);
-      sources.add(new ProgressiveMediaSource.Factory(dataSource,
+      MediaSource text = new ProgressiveMediaSource.Factory(dataSource,
             () -> new Extractor[] {supported ? new TimedSubtitleExtractor(parsers.create(format))
                 : new UnknownSubtitlesExtractor(format)})
             .enableLazyLoadingWithSingleTrack(SubtitleExtractor.TRACK_ID, supported
                 ? format.buildUpon().setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
                     .setCodecs(format.sampleMimeType)
                     .setCueReplacementBehavior(parsers.getCueReplacementBehavior(format)).build() : format)
-            .setLoadErrorHandlingPolicy(policy).createMediaSource(MediaItem.fromUri(subtitle.uri)));
+            .setLoadErrorHandlingPolicy(policy).createMediaSource(MediaItem.fromUri(subtitle.uri));
+      sources.add(subtitleProgressMs == 0 ? text : new SubtitleOffsetMediaSource(text, subtitleProgressMs));
     }
     return sources.size() == 1 ? sources.get(0) : new MergingMediaSource(sources.toArray(new MediaSource[0]));
   }
@@ -106,3 +120,4 @@ public final class CloudHlsSourceFactory {
     @Override public void release() {}
   }
 }
+

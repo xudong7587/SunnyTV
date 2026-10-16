@@ -5,6 +5,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SubtitleSelectionTest {
+    @Test fun embeddedIdentitySurvivesNestedCloudAndSidecarMerges() {
+        val tracks=listOf(SubtitleSelection.Option("0:1:7","内嵌","zh"),
+            SubtitleSelection.Option("1:emby-sub:4","外挂","zh"))
+        assertEquals(0,SubtitleSelection.choose(tracks,"zh",true,id="0:7"))
+        assertEquals(0,SubtitleSelection.choose(listOf(SubtitleSelection.Option("7","内嵌","zh")),"zh",true,id="0:1:7"))
+        assertNull(SubtitleSelection.choose(tracks,"zh",true,id="8"))
+    }
+
     @Test fun mergedSourcesKeepExternalIdentityAcrossSourceIndexChanges() {
         val merged=listOf(SubtitleSelection.Option("0:7","内嵌","zh"),SubtitleSelection.Option("1:emby-sub:4","外挂","zh"))
         assertEquals(1,SubtitleSelection.choose(merged,"zh",true,id="emby-sub:4"))
@@ -36,3 +44,4 @@ class SubtitleSelectionTest {
         assertNull(SubtitleSelection.choose(options,"zh",true,ordinal=1))
     }
 }
+

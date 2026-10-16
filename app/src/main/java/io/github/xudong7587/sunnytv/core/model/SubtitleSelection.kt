@@ -3,7 +3,7 @@ package io.github.xudong7587.sunnytv.core.model
 /** Exact media choices never fall back to a different same-language file. Preferences can fall back to defaults. */
 object SubtitleSelection {
     // MergingMediaSource prefixes child format IDs with their numeric source index.
-    fun stableId(id:String):String = id.replace(Regex("^(?:[0-9]+:)+(emby-sub:)"),"$1")
+    fun stableId(id:String):String = id.replace(Regex("^(?:[0-9]+:)+"),"")
     data class Option(val id:String,val title:String,val language:String,val supported:Boolean=true) {
         val external get()=stableId(id).startsWith("emby-sub:")
     }
@@ -21,3 +21,4 @@ object SubtitleSelection {
         return if(preference=="zh-Hans") options.indexOfFirst {it.supported && Presentation.languageMatches("zh",it.language,it.title)}.takeIf {it>=0} else null
     }
 }
+

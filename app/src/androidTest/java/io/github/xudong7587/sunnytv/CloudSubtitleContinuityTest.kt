@@ -21,7 +21,8 @@ class CloudSubtitleContinuityTest {
     private fun player(a:PlayerActivity)=PlayerActivity::class.java.getDeclaredMethod("getPlayer")
         .apply {isAccessible=true}.invoke(a) as ExoPlayer
 
-    private class Fixture(embedded:Boolean=false,pceAudio:Boolean=false):AutoCloseable {
+    private class Fixture(embedded:Boolean=false,pceAudio:Boolean=false,
+        subtitleText:String="WEBVTT\n\n00:00:00.000 --> 00:00:29.900\n字幕连续性测试\n"):AutoCloseable {
         val server=ServerSocket(0,8,InetAddress.getByName("127.0.0.1"))
         val paths=CopyOnWriteArrayList<String>()
         val root="http://127.0.0.1:${server.localPort}"
@@ -51,7 +52,7 @@ class CloudSubtitleContinuityTest {
                         while(remaining>0) {if(input.read()<0) break;remaining--}
                         val body=when {
                             path=="/api/play/fixture" || path=="/third-party.mp4" -> mp4
-                            path=="/subtitle.vtt" -> "WEBVTT\n\n00:00:00.000 --> 00:00:29.900\n字幕连续性测试\n".toByteArray()
+                            path=="/subtitle.vtt" -> subtitleText.toByteArray()
                             path=="/api/cloud-video/discover" -> """{"protocol":"mediaindex-cloud-video-v1","variants":[$metadata]}""".toByteArray()
                             path=="/api/cloud-video/sessions" -> """{"protocol":"mediaindex-cloud-video-v1","sessionId":"$sid","sessionToken":"$token","playlistUrl":"/api/cloud-video/sessions/$sid/index.m3u8?st=$token","variant":$metadata,"delivery":"direct","seekMode":"hls-vod"}""".toByteArray()
                             path.endsWith("index.m3u8") -> if(pceAudio) assets.open("quality/pce.m3u8").use {it.readBytes()} else "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:30\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:30.0,\ncloud.ts\n#EXT-X-ENDLIST\n".toByteArray()
@@ -78,6 +79,7 @@ class CloudSubtitleContinuityTest {
 
     @Test fun embeddedSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(true)
     @Test fun externalSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(false)
+    @Test fun embeddedSubtitleSurvivesCloudWithoutAnExtractionEndpoint() = verifyContinuity(true,false)
 
     @Test fun cloudInBandPcePrimesBeforePausedResumeAndSurvivesSeeking() {
         Fixture(pceAudio=true).use {f->
@@ -140,19 +142,26 @@ class CloudSubtitleContinuityTest {
         }
     }
 
-    private fun verifyContinuity(embedded:Boolean) {
+    private fun verifyContinuity(embedded:Boolean,sidecar:Boolean=true) {
         Fixture(embedded=embedded).use {f->
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             val request=PlaybackRequest("",f.root+"/api/play/fixture","自动查询与字幕",startMs=5000,
-                subtitles=listOf(ExternalSubtitle(f.root+"/subtitle.vtt","text/vtt","zh","测试字幕","emby-sub:4",!embedded)),
+                subtitles=if(sidecar) listOf(ExternalSubtitle(f.root+"/subtitle.vtt","text/vtt","zh","测试字幕","emby-sub:4",!embedded)) else emptyList(),
                 sourceTracks=listOf(MediaTrack(4,"Subtitle","zh","测试字幕","mov_text")),
                 explicitSubtitle=true,subtitleOrdinal=if(embedded) 0 else -1,subtitleTrackId=if(embedded) "" else "emby-sub:4")
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario->
                 rule.waitUntil(15000) {f.paths.count {it=="/api/cloud-video/discover"}==1}
                 var old:ExoPlayer?=null
                 var pausedPosition=0L
+                var expectedCues=emptyList<String>()
+                rule.waitUntil(10000) {
+                    var hasCues=false
+                    scenario.onActivity {hasCues=player(it).currentCues.cues.isNotEmpty()}
+                    hasCues
+                }
                 scenario.onActivity {
                     old=player(it);old!!.pause();pausedPosition=old!!.currentPosition
+                    expectedCues=old!!.currentCues.cues.map {cue->cue.text.toString()}
                     val text=old!!.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}
                     assertTrue(text.any {g->(0 until g.length).any {i->g.isTrackSelected(i) && (SubtitleSelection.stableId(g.getTrackFormat(i).id.orEmpty()).startsWith("emby-sub:") != embedded)}})
                 }
@@ -163,7 +172,7 @@ class CloudSubtitleContinuityTest {
                     var ready=false
                     scenario.onActivity {a->
                         val p=player(a)
-                        ready=p!==old && p.currentCues.cues.any {it.text.toString().contains("字幕连续性测试")}
+                        ready=p!==old && p.currentCues.cues.map {it.text.toString()}==expectedCues
                         val req=PlayerActivity::class.java.getDeclaredField("request").apply {isAccessible=true}.get(a) as PlaybackRequest
                         diagnostic="state=${p.playbackState}; id=${req.subtitleTrackId}; title=${req.subtitleTitle}; ordinal=${req.subtitleOrdinal}; tracks="+
                             p.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}.flatMap {g->(0 until g.length).map {i->"${g.getTrackFormat(i).id}:${g.isTrackSelected(i)}"}}+
@@ -178,6 +187,7 @@ class CloudSubtitleContinuityTest {
                     assertTrue(p.currentTracks.groups.any {it.type==C.TRACK_TYPE_TEXT && it.isSelected})
                 }
                 assertEquals(1,f.paths.count {it=="/api/cloud-video/discover"})
+                if(embedded) assertFalse("Must not rely on server-side embedded extraction",f.paths.contains("/subtitle.vtt"))
                 rule.onNodeWithTag("player:subtitle").performClick()
                 rule.onNodeWithText("关闭字幕").performClick()
                 rule.onNodeWithTag("player:quality").performClick()
@@ -188,6 +198,63 @@ class CloudSubtitleContinuityTest {
                     original
                 }
                 scenario.onActivity {assertTrue(C.TRACK_TYPE_TEXT in player(it).trackSelectionParameters.disabledTrackTypes)}
+            }
+        }
+    }
+
+    @Test fun subtitleTimingMovesOnlyCuesAndSurvivesCloudSwitchAndSeek() {
+        val vtt="WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nEARLY\n\n00:00:10.000 --> 00:00:20.000\nMIDDLE\n\n00:00:20.000 --> 00:00:29.900\nLATE\n"
+        Fixture(subtitleText=vtt).use {f->
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            val req=PlaybackRequest("",f.root+"/api/play/fixture","字幕微调",startMs=12_000,
+                subtitles=listOf(ExternalSubtitle(f.root+"/subtitle.vtt","text/vtt","zh","Timing","emby-sub:4",true)),
+                explicitSubtitle=true,subtitleTrackId="emby-sub:4")
+            ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,req)).use {scenario->
+                fun awaitCue(text:String) {
+                    rule.waitUntil(15000) {
+                        var found=false
+                        scenario.onActivity {a->val p=player(a)
+                            assertNull(p.playerError)
+                            found=p.currentCues.cues.any {it.text.toString()==text}
+                        }
+                        found
+                    }
+                }
+                awaitCue("MIDDLE")
+                var frozen=0L
+                scenario.onActivity {player(it).pause();player(it).seekTo(12_000);frozen=12_000}
+                awaitCue("MIDDLE")
+                rule.waitUntil(15000) {f.paths.contains("/api/cloud-video/discover")}
+                rule.onNodeWithTag("player:subtitle-timing").performClick()
+                rule.onNodeWithTag("player:subtitle").assertDoesNotExist()
+                val toolbar=rule.onNodeWithTag("subtitle-timing:overlay").fetchSemanticsNode().boundsInRoot
+                val video=rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot
+                assertTrue("Toolbar must reserve space above the complete video and subtitles",video.top>=toolbar.height)
+                for((step,cue) in listOf(-3000L to "EARLY",-500L to "EARLY",10_000L to "MIDDLE",
+                    3000L to "LATE",500L to "LATE",-10_000L to "MIDDLE")) {
+                    var old:ExoPlayer?=null
+                    scenario.onActivity {old=player(it)}
+                    rule.onNodeWithTag("subtitle-timing:$step").performClick()
+                    rule.waitUntil(15000) {var changed=false;scenario.onActivity {changed=player(it)!==old};changed}
+                    awaitCue(cue)
+                    scenario.onActivity {assertFalse(player(it).playWhenReady);assertEquals(frozen,player(it).currentPosition)}
+                    rule.onNodeWithTag("subtitle-timing:overlay").assertIsDisplayed()
+                }
+                rule.onNodeWithTag("subtitle-timing:-3000").performClick()
+                awaitCue("EARLY")
+                rule.onNodeWithTag("subtitle-timing:close").performClick()
+                rule.onNodeWithTag("player:quality").performClick()
+                rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
+                rule.waitUntil(15000) {var cloud=false;scenario.onActivity {cloud=player(it).currentMediaItem?.localConfiguration?.uri?.path?.endsWith("index.m3u8")==true};cloud}
+                awaitCue("EARLY")
+                scenario.onActivity {player(it).seekTo(24_000)}
+                awaitCue("LATE")
+                scenario.onActivity {player(it).seekTo(12_000)}
+                awaitCue("EARLY")
+                rule.onNodeWithTag("player:subtitle-timing").performClick()
+                rule.onNodeWithTag("subtitle-timing:reset").performClick()
+                awaitCue("MIDDLE")
+                rule.onNodeWithTag("subtitle-timing:offset").assertTextContains("+0.0 秒",substring=true)
             }
         }
     }
@@ -209,3 +276,4 @@ class CloudSubtitleContinuityTest {
         }
     }
 }
+
