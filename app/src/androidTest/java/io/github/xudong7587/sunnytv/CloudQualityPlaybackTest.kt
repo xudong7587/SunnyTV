@@ -106,10 +106,7 @@ class CloudQualityPlaybackTest {
                 scenario.onActivity {
                     val after=player(it)!!
                     assertNotSame(before,after)
-                    // The decoder primes at the head; the user's pending resume
-                    // time remains intact even while this fixture withholds media.
-                    assertEquals(0L,after.currentPosition)
-                    assertEquals(42000L,PlayerActivity::class.java.getDeclaredMethod("absolutePosition").apply {isAccessible=true}.invoke(it))
+                    assertEquals(42000L,after.currentPosition)
                     assertFalse(after.playWhenReady)
                     assertTrue(after.currentMediaItem!!.localConfiguration!!.uri.path!!.startsWith("/api/cloud-video/"))
                 }

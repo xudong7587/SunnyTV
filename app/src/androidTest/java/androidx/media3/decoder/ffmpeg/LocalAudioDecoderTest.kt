@@ -22,6 +22,16 @@ class LocalAudioDecoderTest {
     @Test fun aacEightChannels44100DecodesRawHlsSamples() = decodeAac("tone-eight.aac",8)
     @Test fun aacEightChannelsWithInBandPceDecodesRawHlsSamples() = decodeAac("tone-pce-eight.aac",8,byteArrayOf(0x12,0x00),0)
     @Test fun aacSixChannelsWithInBandPceDecodesRawHlsSamples() = decodeAac("tone-pce-surround.aac",6,byteArrayOf(0x12,0x00),0)
+    @Test fun completePceConfigCanColdDecodeAFrameWithoutPce() {
+        val adts=InstrumentationRegistry.getInstrumentation().context.assets.open("tone-pce-eight.aac").use {it.readBytes()}
+        fun length(at:Int)=((adts[at+3].toInt() and 3) shl 11) or ((adts[at+4].toInt() and 255) shl 3) or ((adts[at+5].toInt() and 224) shr 5)
+        val firstLength=length(0)
+        val config=checkNotNull(io.github.xudong7587.sunnytv.feature.player.AacPceConfig.fromFrame(byteArrayOf(0x12,0),adts.copyOfRange(7,firstLength)))
+        assertEquals(8,config.channels)
+        val next=adts.copyOfRange(firstLength+7,firstLength+length(firstLength))
+        assertNotEquals("Fixture must omit PCE from the middle frame",5,(next[0].toInt() and 255) shr 5)
+        decodePacket(next,MimeTypes.AUDIO_AAC,8,44100,listOf(config.bytes))
+    }
 
     private fun decodeAac(asset:String,channels:Int,config:ByteArray?=null,declaredChannels:Int=channels) {
         val adts=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
