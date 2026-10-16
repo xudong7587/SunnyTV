@@ -29,6 +29,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.*
@@ -65,6 +68,8 @@ class PlayerActivity: ComponentActivity() {
     private lateinit var request: PlaybackRequest
     private var player by mutableStateOf<ExoPlayer?>(null)
     private var controls by mutableStateOf(true)
+    private var realtimeInfo by mutableStateOf(false)
+    private var realtimeSnapshot by mutableStateOf(PlaybackRealtimeInfo())
     private var panel by mutableStateOf("")
     private var position by mutableLongStateOf(0)
     private var duration by mutableLongStateOf(0)
@@ -164,6 +169,7 @@ class PlayerActivity: ComponentActivity() {
         val payload=intent.getSerializableExtra("request") as? PlaybackRequest
         if(payload==null) {finish();return}
         request=payload
+        realtimeInfo=app.store.realtimePlaybackInfo()
         val config=resources.configuration
         @Suppress("DEPRECATION")
         val playbackDisplayId=windowManager.defaultDisplay.displayId
@@ -253,7 +259,18 @@ class PlayerActivity: ComponentActivity() {
                 firstHeader.compareAndSet(-1,SystemClock.elapsedRealtime()-started)
                 response
             }).build()
+        val rateMeter=PlaybackRateMeter().apply {sample(SystemClock.elapsedRealtime())}
+        var videoDecoder="";var audioDecoder=""
+        realtimeSnapshot=PlaybackRealtimeInfo()
         val dataSource=OkHttpDataSource.Factory(client).setUserAgent(io.github.xudong7587.sunnytv.core.network.HttpPolicy.USER_AGENT)
+            .setTransferListener(object:androidx.media3.datasource.TransferListener {
+                override fun onTransferInitializing(source:androidx.media3.datasource.DataSource,dataSpec:androidx.media3.datasource.DataSpec,isNetwork:Boolean) {}
+                override fun onTransferStart(source:androidx.media3.datasource.DataSource,dataSpec:androidx.media3.datasource.DataSpec,isNetwork:Boolean) {}
+                override fun onTransferEnd(source:androidx.media3.datasource.DataSource,dataSpec:androidx.media3.datasource.DataSpec,isNetwork:Boolean) {}
+                override fun onBytesTransferred(source:androidx.media3.datasource.DataSource,dataSpec:androidx.media3.datasource.DataSpec,isNetwork:Boolean,bytesTransferred:Int) {
+                    if(isNetwork) rateMeter.addBytes(bytesTransferred)
+                }
+            })
         val extractors=DefaultExtractorsFactory().apply {
             if(ignoreMp4EditLists) setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
         }
@@ -466,6 +483,10 @@ class PlayerActivity: ComponentActivity() {
             }
         })
         p.addAnalyticsListener(object:AnalyticsListener {
+            override fun onVideoDecoderInitialized(eventTime:AnalyticsListener.EventTime,decoderName:String,initializedTimestampMs:Long,initializationDurationMs:Long) {videoDecoder=decoderName}
+            override fun onAudioDecoderInitialized(eventTime:AnalyticsListener.EventTime,decoderName:String,initializedTimestampMs:Long,initializationDurationMs:Long) {audioDecoder=decoderName}
+            override fun onVideoDisabled(eventTime:AnalyticsListener.EventTime,decoderCounters:androidx.media3.exoplayer.DecoderCounters) {videoDecoder=""}
+            override fun onAudioDisabled(eventTime:AnalyticsListener.EventTime,decoderCounters:androidx.media3.exoplayer.DecoderCounters) {audioDecoder=""}
             private var measuredBytes=0L
             private var measuredMs=0L
             override fun onBandwidthEstimate(eventTime:AnalyticsListener.EventTime,totalLoadTimeMs:Int,totalBytesLoaded:Long,bitrateEstimate:Long) {
@@ -510,6 +531,21 @@ class PlayerActivity: ComponentActivity() {
                 // Segment prompts also need position while the OSD is hidden.
                 position=absolutePosition();duration=if(quality=="original" || isCloudQuality) p.duration.coerceAtLeast(0) else transcodeDuration
                 tick++
+                if(tick%2==0) {
+                    val speed=rateMeter.sample(SystemClock.elapsedRealtime())
+                    if(realtimeInfo) {
+                        val video=p.videoFormat;val audio=p.audioFormat
+                        realtimeSnapshot=PlaybackRealtimeInfo(
+                            width=video?.width ?: 0,height=video?.height ?: 0,frameRate=video?.frameRate ?: 0f,
+                            videoMime=video?.sampleMimeType,videoBitrate=video?.bitrate?.toLong() ?: 0,
+                            streamBitrate=if(isCloudQuality) cloudSession?.variant?.bandwidth ?: 0 else if(quality=="original")
+                                mediaContext?.item?.versions?.firstOrNull {it.id==request.mediaSourceId}?.bitrate ?: 0 else 0,
+                            audioMime=audio?.sampleMimeType,sampleRate=audio?.sampleRate ?: 0,channels=audio?.channelCount ?: 0,
+                            audioBitrate=audio?.bitrate?.toLong() ?: 0,bytesPerSecond=speed,
+                            bufferedMs=(p.bufferedPosition-p.currentPosition).coerceAtLeast(0),
+                            videoDecoder=videoDecoder,audioDecoder=audioDecoder)
+                    }
+                }
                 if(tick%20==0 && rendered) {
                     reporter?.progress(position, !p.isPlaying,duration)
                     app.store.savePosition(request.localKey,position)
@@ -876,8 +912,8 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
 
-            if(settings.diagnostics) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3",
-                color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopEnd).padding(25.dp).background(Color.Black.copy(.62f),RoundedCornerShape(10.dp)).padding(12.dp))
+            if(settings.diagnostics && !realtimeInfo) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3",
+                color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopEnd).padding(top=85.dp,end=25.dp).background(Color.Black.copy(.62f),RoundedCornerShape(10.dp)).padding(12.dp))
 
             if(activeSkip!=null && rendered && error.isBlank() && panel.isBlank()) {
                 SkipSegmentPrompt(activeSkip,onSkip={
@@ -895,6 +931,11 @@ class PlayerActivity: ComponentActivity() {
 
             if(controls && panel.isBlank() && error.isBlank()) {
                 Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    PlayerControl("实时信息","stats",selected=realtimeInfo,showFocusLabel=false,
+                        modifier=Modifier.focusProperties {down=progressFocus}.semantics {
+                            role=Role.Switch;toggleableState=if(realtimeInfo) ToggleableState.On else ToggleableState.Off
+                            stateDescription=if(realtimeInfo) "开启" else "关闭"
+                        }) {realtimeInfo=!realtimeInfo;app.store.setRealtimePlaybackInfo(realtimeInfo)}
                     PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=progressFocus},
                         initial=returnControl=="audio-output",showFocusLabel=true) {returnControl="audio-output";panel="audio-output"}
                     if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
@@ -905,7 +946,7 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
             if(controls && panel.isBlank() && error.isBlank()) {
-                Box(Modifier.align(Alignment.TopStart).padding(start=if(tvPlayback) 40.dp else 24.dp,top=30.dp).width(titleWidth).height(82.dp)) {PlayerMediaTitle()}
+                if(!realtimeInfo) Box(Modifier.align(Alignment.TopStart).padding(start=if(tvPlayback) 40.dp else 24.dp,top=30.dp).width(titleWidth).height(82.dp)) {PlayerMediaTitle()}
                 LaunchedEffect(controls,playing,panel,error,gestureActive,controlInteractionSerial) {
                     if(playing && panel.isEmpty() && error.isEmpty() && !gestureActive) {delay(6000);controls=false}
                 }
@@ -951,6 +992,12 @@ class PlayerActivity: ComponentActivity() {
                     }
                 }
             }
+            if(realtimeInfo && panel.isBlank()) Text(realtimeSnapshot.text(),color=Color.White.copy(.88f),fontSize=12.sp,lineHeight=17.sp,
+                modifier=Modifier.align(Alignment.TopStart).padding(start=if(tvPlayback) 28.dp else 16.dp,
+                    top=if(controls && maxWidth<500.dp) 84.dp else 20.dp)
+                    .widthIn(max=(maxWidth-32.dp).coerceAtMost(340.dp))
+                    .testTag("player:realtime-overlay")
+                    .background(Color.Black.copy(.48f),RoundedCornerShape(8.dp)).padding(horizontal=10.dp,vertical=7.dp))
             if(panel.isNotBlank()) PlayerPanel()
         }
     }

@@ -183,6 +183,11 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
                     drawRect(color,Offset(x(3f),y(18.6f)),Size(l,t));drawRect(color,Offset(x(3f),y(15f)),Size(t,l))
                     drawRect(color,Offset(x(15f),y(18.6f)),Size(l,t));drawRect(color,Offset(x(18.6f),y(15f)),Size(t,l))
                 }
+                "stats" -> {
+                    repeat(3) {i->
+                        drawRoundRect(color,Offset(x(4f+i*6f),y(14f-i*4f)),Size(x(3.5f),y(6f+i*4f)),CornerRadius(x(.8f)))
+                    }
+                }
                 "info" -> {
                     drawCircle(color,x(9f),Offset(x(12f),y(12f)))
                     drawCircle(Color.Black.copy(.72f),x(1.15f),Offset(x(12f),y(7.7f)))
@@ -201,7 +206,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
         }
         if(icon=="rewind" || icon=="forward") {
             Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","exit","rewind","forward")) {
+        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","stats","exit","rewind","forward")) {
             LineIcon(icon,color,Modifier.size(18.dp))
         }
     }

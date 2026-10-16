@@ -22,6 +22,10 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
 import androidx.media3.extractor.Extractor;
 import androidx.media3.extractor.ExtractorInput;
 import androidx.media3.extractor.ExtractorOutput;
+import androidx.media3.extractor.IndexSeekMap;
+import androidx.media3.extractor.text.SubtitleParser;
+import androidx.media3.extractor.text.CuesWithTiming;
+import androidx.media3.common.util.Consumer;
 import androidx.media3.extractor.PositionHolder;
 import androidx.media3.extractor.SeekMap;
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory;
@@ -46,7 +50,7 @@ public final class CloudHlsSourceFactory {
           .setRoleFlags(subtitle.roleFlags).setLabel(subtitle.label).setId(subtitle.id).build();
       boolean supported = parsers.supportsFormat(format);
       sources.add(new ProgressiveMediaSource.Factory(dataSource,
-            () -> new Extractor[] {supported ? new SubtitleExtractor(parsers.create(format), null)
+            () -> new Extractor[] {supported ? new TimedSubtitleExtractor(parsers.create(format))
                 : new UnknownSubtitlesExtractor(format)})
             .enableLazyLoadingWithSingleTrack(SubtitleExtractor.TRACK_ID, supported
                 ? format.buildUpon().setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
@@ -55,6 +59,33 @@ public final class CloudHlsSourceFactory {
             .setLoadErrorHandlingPolicy(policy).createMediaSource(MediaItem.fromUri(subtitle.uri)));
     }
     return sources.size() == 1 ? sources.get(0) : new MergingMediaSource(sources.toArray(new MediaSource[0]));
+  }
+
+  /** Preserve cue end times: ProgressiveMediaPeriod otherwise infers last-start + 10ms.
+   * A single long cue can then be treated as finished after a bootstrap/backward seek. */
+  private static final class TimedSubtitleExtractor implements Extractor {
+    private final SubtitleExtractor delegate;
+    private ExtractorOutput output;
+    private long durationUs;
+    TimedSubtitleExtractor(SubtitleParser parser) {
+      delegate = new SubtitleExtractor(new SubtitleParser() {
+        @Override public int getCueReplacementBehavior() { return parser.getCueReplacementBehavior(); }
+        @Override public void reset() { parser.reset(); }
+        @Override public void parse(byte[] data, int offset, int length, OutputOptions options,
+            Consumer<CuesWithTiming> consumer) {
+          parser.parse(data, offset, length, options, cues -> {
+            if (cues.endTimeUs != C.TIME_UNSET) durationUs = Math.max(durationUs, cues.endTimeUs);
+            consumer.accept(cues);
+          });
+          if (durationUs > 0) output.seekMap(new IndexSeekMap(new long[] {0}, new long[] {0}, durationUs));
+        }
+      }, null);
+    }
+    @Override public boolean sniff(ExtractorInput input) throws IOException { return delegate.sniff(input); }
+    @Override public void init(ExtractorOutput output) { this.output = output; delegate.init(output); }
+    @Override public int read(ExtractorInput input, PositionHolder position) throws IOException { return delegate.read(input, position); }
+    @Override public void seek(long position, long timeUs) { delegate.seek(position, timeUs); }
+    @Override public void release() { delegate.release(); }
   }
 
   private static final class UnknownSubtitlesExtractor implements Extractor {

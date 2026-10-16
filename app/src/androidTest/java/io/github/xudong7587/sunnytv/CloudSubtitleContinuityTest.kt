@@ -111,15 +111,31 @@ class CloudSubtitleContinuityTest {
                     assertTrue(p.audioFormat!!.initializationData[0].size>2)
                     p.seekTo(1500)
                 }
-                rule.waitUntil(10000) {readyAt(1500)}
+                try {rule.waitUntil(10000) {readyAt(1500)}} catch(e:Throwable) {throw AssertionError(audioDiagnostic,e)}
                 scenario.onActivity {player(it).seekTo(4000)}
-                rule.waitUntil(10000) {readyAt(4000)}
+                try {rule.waitUntil(10000) {readyAt(4000)}} catch(e:Throwable) {throw AssertionError(audioDiagnostic,e)}
                 scenario.onActivity {player(it).play()}
                 rule.waitUntil(10000) {
                     var advancing=false
                     scenario.onActivity {a->assertNull(player(a).playerError);advancing=player(a).currentPosition>5000}
                     advancing
                 }
+                val store=io.github.xudong7587.sunnytv.core.storage.ConfigStore(context)
+                val previous=store.realtimePlaybackInfo()
+                try {
+                    if(!previous) rule.onNodeWithTag("player:stats").performClick()
+                    rule.waitUntil(5000) {rule.onAllNodesWithText("320×180",substring=true).fetchSemanticsNodes().isNotEmpty()}
+                    rule.onNodeWithTag("player:realtime-overlay").assertTextContains("AAC",substring=true)
+                        .assertTextContains("8 声道",substring=true).assertTextContains("流标称码率 7.50 Mbps",substring=true)
+                    scenario.onActivity {it.onBackPressedDispatcher.onBackPressed()}
+                    rule.onNodeWithTag("player:stats").assertDoesNotExist()
+                    rule.onNodeWithTag("player:realtime-overlay").assertIsDisplayed()
+                    val screenshot=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                    java.io.File(context.cacheDir,"realtime-info.png").outputStream().use {
+                        check(screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it))
+                    }
+                    screenshot.recycle()
+                } finally {store.setRealtimePlaybackInfo(previous)}
             }
         }
     }
@@ -134,8 +150,9 @@ class CloudSubtitleContinuityTest {
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,request)).use {scenario->
                 rule.waitUntil(15000) {f.paths.count {it=="/api/cloud-video/discover"}==1}
                 var old:ExoPlayer?=null
+                var pausedPosition=0L
                 scenario.onActivity {
-                    old=player(it);old!!.pause()
+                    old=player(it);old!!.pause();pausedPosition=old!!.currentPosition
                     val text=old!!.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}
                     assertTrue(text.any {g->(0 until g.length).any {i->g.isTrackSelected(i) && (SubtitleSelection.stableId(g.getTrackFormat(i).id.orEmpty()).startsWith("emby-sub:") != embedded)}})
                 }
@@ -157,7 +174,7 @@ class CloudSubtitleContinuityTest {
                 scenario.onActivity {a->
                     val p=player(a)
                     assertFalse(p.playWhenReady)
-                    assertTrue(kotlin.math.abs(5000L-p.currentPosition)<=1000L)
+                    assertTrue("Paused quality switch: expected $pausedPosition, got ${p.currentPosition}",kotlin.math.abs(pausedPosition-p.currentPosition)<=1000L)
                     assertTrue(p.currentTracks.groups.any {it.type==C.TRACK_TYPE_TEXT && it.isSelected})
                 }
                 assertEquals(1,f.paths.count {it=="/api/cloud-video/discover"})

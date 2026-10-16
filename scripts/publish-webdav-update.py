@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish a verified release APK first, then switch the fixed read-only DAV manifest."""
+"""Publish the official same-name APK plus a legacy manifest for pre-0.2.5 clients."""
 import argparse
 import hashlib
 import json
@@ -43,21 +43,23 @@ def main():
         old=json.loads(latest.read_text(encoding='utf-8-sig'))
         if old['versionCode']>int(code): raise RuntimeError('Refusing to replace latest with an older version')
         if old['versionCode']==int(code) and old.get('sha256')!=digest: raise RuntimeError('Same version has different bytes; increment version')
-    target=destination/name
-    if target.exists():
-        if hashlib.sha256(target.read_bytes()).hexdigest()!=digest: raise RuntimeError('Existing immutable APK has different bytes')
-    else:
-        partial=destination/(name+'.part')
-        try:
-            shutil.copyfile(args.apk,partial)
-            if hashlib.sha256(partial.read_bytes()).hexdigest()!=digest: raise RuntimeError('NAS copy checksum mismatch')
-            os.replace(partial,target)
-        finally:
-            if partial.exists(): partial.unlink()
+    # New clients fetch the exact GitHub asset filename; older clients keep their manifest route.
+    for asset_name in (name,f'SunnyTV-v{version}.apk'):
+        target=destination/asset_name
+        if target.exists():
+            if hashlib.sha256(target.read_bytes()).hexdigest()!=digest: raise RuntimeError('Existing immutable APK has different bytes')
+        else:
+            partial=destination/(asset_name+'.part')
+            try:
+                shutil.copyfile(args.apk,partial)
+                if hashlib.sha256(partial.read_bytes()).hexdigest()!=digest: raise RuntimeError('NAS copy checksum mismatch')
+                os.replace(partial,target)
+            finally:
+                if partial.exists(): partial.unlink()
     temporary=destination/'latest.json.part'
     temporary.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     os.replace(temporary,latest)
     if json.loads(latest.read_text(encoding='utf-8'))!=manifest: raise RuntimeError('NAS manifest verification failed')
-    print(f'Published {name}; latest.json now selects version {version}.')
+    print(f'Published SunnyTV-v{version}.apk and {name}; latest.json now selects version {version}.')
 
 if __name__=='__main__': main()
