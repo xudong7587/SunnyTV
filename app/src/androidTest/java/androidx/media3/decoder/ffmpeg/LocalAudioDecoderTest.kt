@@ -10,13 +10,33 @@ import org.junit.Test
 class LocalAudioDecoderTest {
     @Test fun nativeDecodersArePresent() {
         assertTrue(FfmpegLibrary.isAvailable())
-        listOf(MimeTypes.AUDIO_AC3,MimeTypes.AUDIO_E_AC3,MimeTypes.AUDIO_E_AC3_JOC,
+        listOf(MimeTypes.AUDIO_AAC,MimeTypes.AUDIO_AC3,MimeTypes.AUDIO_E_AC3,MimeTypes.AUDIO_E_AC3_JOC,
             MimeTypes.AUDIO_DTS,MimeTypes.AUDIO_DTS_HD,MimeTypes.AUDIO_TRUEHD).forEach {
             assertTrue("Missing $it",FfmpegLibrary.supportsFormat(it))
         }
     }
     @Test fun eac3SixChannelsDecodeToNonSilentPcm() = decode("tone.eac3",MimeTypes.AUDIO_E_AC3,6)
     @Test fun dtsSixChannelsDecodeToNonSilentPcm() = decode("tone.dts",MimeTypes.AUDIO_DTS,6)
+    @Test fun aacStereo44100DecodesRawHlsSamples() = decodeAac("tone-stereo.aac",2,byteArrayOf(0x12,0x10))
+    @Test fun aacSixChannels44100DecodesRawHlsSamples() = decodeAac("tone-surround.aac",6,byteArrayOf(0x12,0x30))
+    @Test fun aacEightChannels44100DecodesRawHlsSamples() = decodeAac("tone-eight.aac",8)
+
+    private fun decodeAac(asset:String,channels:Int,config:ByteArray?=null) {
+        val adts=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
+        assertEquals(0xff,adts[0].toInt() and 0xff)
+        assertEquals(0xf0,adts[1].toInt() and 0xf0)
+        val header=if(adts[1].toInt() and 1==1) 7 else 9
+        val length=((adts[3].toInt() and 3) shl 11) or ((adts[4].toInt() and 0xff) shl 3) or ((adts[5].toInt() and 0xe0) shr 5)
+        assertTrue(length>header && length<=adts.size)
+        // HLS's ADTS extractor supplies raw AAC plus AudioSpecificConfig to the renderer.
+        val objectType=((adts[2].toInt() and 0xc0) shr 6)+1
+        val frequencyIndex=(adts[2].toInt() and 0x3c) shr 2
+        val channelConfig=((adts[2].toInt() and 1) shl 2) or ((adts[3].toInt() and 0xc0) shr 6)
+        val asc=(objectType shl 11) or (frequencyIndex shl 7) or (channelConfig shl 3)
+        val actualConfig=byteArrayOf((asc shr 8).toByte(),asc.toByte())
+        if(config!=null) assertArrayEquals(config,actualConfig)
+        decodePacket(adts.copyOfRange(header,length),MimeTypes.AUDIO_AAC,channels,44100,listOf(actualConfig))
+    }
     @Test fun centerOnlySixAndEightChannelsReachBothStereoSpeakers() {
         for(channels in listOf(3,5,6,7,8)) {
             val processor=io.github.xudong7587.sunnytv.feature.player.AudioOutputMixing.processor(2)
@@ -42,8 +62,11 @@ class LocalAudioDecoderTest {
     }
     private fun decode(asset:String,mime:String,channels:Int) {
         val packet=InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use {it.readBytes()}
+        decodePacket(packet,mime,channels,48000)
+    }
+    private fun decodePacket(packet:ByteArray,mime:String,channels:Int,rate:Int,initialization:List<ByteArray> = emptyList()) {
         val decoder=FfmpegAudioDecoder(Format.Builder().setSampleMimeType(mime).setChannelCount(channels)
-            .setSampleRate(48000).build(),2,2,packet.size,false)
+            .setSampleRate(rate).setInitializationData(initialization).build(),2,2,packet.size,false)
         try {
             val input=checkNotNull(decoder.dequeueInputBuffer())
             input.ensureSpaceForWrite(packet.size);input.data!!.put(packet);input.flip()
@@ -60,7 +83,7 @@ class LocalAudioDecoderTest {
                 while(pcm.hasRemaining()) if(pcm.get().toInt()!=0) nonzero=true
                 assertTrue("Silent PCM",nonzero)
                 assertEquals(channels,decoder.channelCount)
-                assertEquals(48000,decoder.sampleRate)
+                assertEquals(rate,decoder.sampleRate)
             } finally {buffer.release()}
         } finally {decoder.release()}
     }
