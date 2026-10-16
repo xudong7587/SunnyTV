@@ -138,6 +138,7 @@ class PlayerActivity: ComponentActivity() {
     private val audioManager get() = getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
+    private var originalSubtitleUrl:String?=null
     private var subtitleProgressMs by mutableLongStateOf(0L)
     private var subtitleAdjustmentJob:Job?=null
     private var subtitleToolbarHeightPx by mutableIntStateOf(0)
@@ -539,12 +540,12 @@ class PlayerActivity: ComponentActivity() {
                 // The original media has its own scoped transport. Never send Emby credentials
                 // through the cloud CDN client, nor use the cloud URL as the subtitle source.
                 val originalData=OkHttpDataSource.Factory(app.http.scopedClient(request.scope,playback=true))
-                val originalItem=MediaItem.Builder().setUri(if(useFallbackRoute) request.fallbackUrl ?: request.stableUrl else request.stableUrl)
+                val originalItem=MediaItem.Builder().setUri(originalSubtitleUrl ?: if(useFallbackRoute) request.fallbackUrl ?: request.stableUrl else request.stableUrl)
                     .setMimeType(request.mimeHint).build()
                 val original=DefaultMediaSourceFactory(originalData,extractors).setLoadErrorHandlingPolicy(errorPolicy)
                     .createMediaSource(originalItem)
                 val text=androidx.media3.exoplayer.source.FilteringMediaSource(original,C.TRACK_TYPE_TEXT)
-                if(!isCloudQuality) video=androidx.media3.exoplayer.source.FilteringMediaSource(video,
+                video=androidx.media3.exoplayer.source.FilteringMediaSource(video,
                     setOf(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO,C.TRACK_TYPE_METADATA,C.TRACK_TYPE_CAMERA_MOTION))
                 video=androidx.media3.exoplayer.source.MergingMediaSource(video,
                     androidx.media3.exoplayer.source.SubtitleOffsetMediaSource(text,subtitleProgressMs))
@@ -634,7 +635,7 @@ class PlayerActivity: ComponentActivity() {
             quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
             cloudDiscoveryGeneration++;cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false;cloudAutoDiscovered=false
         }
-        if(next.stableUrl!=request.stableUrl || next.embyItemId!=request.embyItemId) subtitleProgressMs=0L
+        if(next.stableUrl!=request.stableUrl || next.embyItemId!=request.embyItemId) {subtitleProgressMs=0L;originalSubtitleUrl=null}
         request=next
         if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
         createPlayer()
@@ -750,6 +751,7 @@ class PlayerActivity: ComponentActivity() {
             .flatMap {g->(0 until g.length).map {g to it}}
         val chosen=tracks.firstOrNull {(g,i)->g.isTrackSelected(i)} ?: return
         val f=chosen.first.getTrackFormat(chosen.second)
+        if(quality=="original") originalSubtitleUrl=currentPlaybackUrl()
         // Keep embedded identity. Emby cannot always extract subtitles from a STRM;
         // cloud playback reads the original text track instead of guessing a sidecar URL.
         request=request.copy(explicitSubtitle=true,subtitleTrackId=SubtitleSelection.stableId(f.id.orEmpty()),
