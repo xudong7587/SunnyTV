@@ -46,9 +46,7 @@ import java.io.File
     val scope=rememberCoroutineScope()
     var job by remember {mutableStateOf<Job?>(null)}
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        UpdateButton("GitHub 官方更新 · 检查最新版本","update:github",Modifier.fillMaxWidth()) {
-            context.startActivity(android.content.Intent(context,GithubUpdateActivity::class.java))
-        }
+        GithubUpdatePanel()
         FocusTile("update:webdav",Modifier.fillMaxWidth().semantics {
             role=Role.Switch;toggleableState=if(enabled) ToggleableState.On else ToggleableState.Off
             stateDescription=if(enabled) "开启" else "关闭"
@@ -131,3 +129,4 @@ import java.io.File
     }
     confirmation?.let {message->MessageDialog(message) {confirmation=null}}
 }
+

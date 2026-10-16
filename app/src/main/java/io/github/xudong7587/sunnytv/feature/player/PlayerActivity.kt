@@ -287,6 +287,14 @@ class PlayerActivity: ComponentActivity() {
                     val httpCode = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
                         .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                         .firstOrNull()?.responseCode
+                    if(isCloudQuality) {
+                        val delay=PlaybackRecovery.cloudRetryDelay(loadErrorInfo.errorCount,
+                            PlaybackFailure.errorCodeOf(loadErrorInfo.exception),httpCode,
+                            PlaybackFailure.causeNames(loadErrorInfo.exception)) ?: return C.TIME_UNSET
+                        autoRetryAttempts++
+                        // Retry the failed load in place: preserve buffered media, position and pause state.
+                        return delay
+                    }
                     if(quality!="original" && !isCloudQuality && TranscodeSource.retryPendingSegment(httpCode,loadErrorInfo.errorCount,
                             loadErrorInfo.loadEventInfo.uri.path?.endsWith(".ts")==true)) {
                         window.decorView.post { if(error.isBlank()) status="服务器正在准备转码分片，请稍候" }
@@ -304,7 +312,11 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
         val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors).setLoadErrorHandlingPolicy(errorPolicy)
-        val bufferBudget=io.github.xudong7587.sunnytv.core.playback.PlaybackBufferPolicy.targetBytes(Runtime.getRuntime().maxMemory())
+        val memoryInfo=android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
+        val bufferBudget=io.github.xudong7587.sunnytv.core.playback.PlaybackBufferPolicy.targetBytes(
+            Runtime.getRuntime().maxMemory(),memoryInfo.totalMem.coerceAtLeast(1L),
+            memoryInfo.availMem.coerceAtLeast(1L),memoryInfo.lowMemory)
         val bufferAllocator=androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024)
         val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper

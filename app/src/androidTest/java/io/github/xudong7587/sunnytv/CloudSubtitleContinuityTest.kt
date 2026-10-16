@@ -21,10 +21,11 @@ class CloudSubtitleContinuityTest {
     private fun player(a:PlayerActivity)=PlayerActivity::class.java.getDeclaredMethod("getPlayer")
         .apply {isAccessible=true}.invoke(a) as ExoPlayer
 
-    private class Fixture(embedded:Boolean=false,pceAudio:Boolean=false,
+    private class Fixture(embedded:Boolean=false,pceAudio:Boolean=false,dropSegments:Boolean=false,
         subtitleText:String="WEBVTT\n\n00:00:00.000 --> 00:00:29.900\n字幕连续性测试\n"):AutoCloseable {
         val server=ServerSocket(0,8,InetAddress.getByName("127.0.0.1"))
         val paths=CopyOnWriteArrayList<String>()
+        val dropped=java.util.concurrent.atomic.AtomicInteger()
         val root="http://127.0.0.1:${server.localPort}"
         val variant="a".repeat(32)
         val sid="b".repeat(32)
@@ -50,6 +51,9 @@ class CloudSubtitleContinuityTest {
                         }
                         var remaining=headers["content-length"]?.toIntOrNull() ?: 0
                         while(remaining>0) {if(input.read()<0) break;remaining--}
+                        // Simulate provider closing a later HLS response before sending headers.
+                        if(dropSegments && path.endsWith("pce-4.ts") && dropped.getAndIncrement()<2)
+                            return@runCatching
                         val body=when {
                             path=="/api/play/fixture" || path=="/third-party.mp4" -> mp4
                             path=="/subtitle.vtt" -> subtitleText.toByteArray()
@@ -80,6 +84,30 @@ class CloudSubtitleContinuityTest {
     @Test fun embeddedSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(true)
     @Test fun externalSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(false)
     @Test fun embeddedSubtitleSurvivesCloudWithoutAnExtractionEndpoint() = verifyContinuity(true,false)
+
+    @Test fun cloudRecoversFromInterruptedLaterSegmentWithoutRecreatingPlayer() {
+        Fixture(pceAudio=true,dropSegments=true).use {f->
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,
+                PlaybackRequest("",f.root+"/api/play/fixture","云端断连恢复"))).use {scenario->
+                rule.waitUntil(15000) {f.paths.any {it=="/api/cloud-video/discover"}}
+                rule.onNodeWithTag("player:quality").performClick()
+                rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
+                var cloud:ExoPlayer?=null
+                rule.waitUntil(25000) {
+                    var recovered=false
+                    scenario.onActivity {a->val p=player(a)
+                        assertNull(p.playerError)
+                        if(f.dropped.get()>0 && cloud==null) cloud=p
+                        if(cloud!=null) assertSame(cloud,p)
+                        recovered=f.dropped.get()>=3 && p.currentPosition>9000
+                    }
+                    recovered
+                }
+                assertEquals(1,f.paths.count {it=="/api/cloud-video/sessions"})
+            }
+        }
+    }
 
     @Test fun cloudInBandPcePrimesBeforePausedResumeAndSurvivesSeeking() {
         Fixture(pceAudio=true).use {f->

@@ -47,7 +47,7 @@ jobs:
           arch: x86_64
           profile: tv_1080p
           disable-animations: true
-          script: bash gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
+          script: bash gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
       - name: Print failure details
         if: failure()
         run: |

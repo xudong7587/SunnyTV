@@ -52,6 +52,8 @@ object PlaybackFailure {
             chain.any {it is SocketTimeoutException} -> "读取媒体超时：媒体服务在限定时间内没有返回数据，也没有断开连接。"
             chain.any {it is ConnectException} -> "电视无法连接媒体服务。"
             chain.any {it is SocketException} -> "媒体网络连接已断开或被重置，请检查当前网络与媒体源的连通性。"
+            chain.any {it is EOFException} && chain.any {it is HttpDataSource.HttpDataSourceException || it is ExecutionException} ->
+                "媒体源网络响应提前断开，请稍后重试或切换播放线路。"
             chain.any {it is EOFException} -> "媒体数据提前结束，请检查本地文件是否完整，以及 Emby 是否中断了读取。"
             chain.any {it is FileNotFoundException} -> "媒体文件不可读取或已不存在。"
             isMp4IndexFailure(error,mime) -> "MP4 索引或时间编辑表读取失败；SunnyTV 已支持一次兼容模式重试。"
@@ -78,3 +80,4 @@ object PlaybackFailure {
         return if(facts.isBlank()) "$header\n$types" else "$header\n$facts\n$types"
     }
 }
+

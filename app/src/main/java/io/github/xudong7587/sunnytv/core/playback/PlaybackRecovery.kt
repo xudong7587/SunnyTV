@@ -40,6 +40,15 @@ object PlaybackRecovery {
         return errorCode in RETRYABLE_CODES || causeNames.any { it in RETRYABLE_CAUSES }
     }
 
+    /** Per-load budget, including after first frame. Successful HLS loads reset Media3's count. */
+    fun cloudRetryDelay(errorCount:Int,errorCode:Int,httpStatus:Int?,causeNames:List<String>):Long? {
+        if(errorCount !in 1..4) return null
+        if(causeNames.any {it in FALLBACK_BLOCKING_CAUSES || it == "ParserException" || it == "FileNotFoundException"}) return null
+        val transient=if(httpStatus!=null) httpStatus in setOf(408,429,500,502,503,504)
+            else errorCode in RETRYABLE_CODES
+        return if(transient) 500L shl (errorCount-1) else null
+    }
+
     /**
      * True when the failure is about *reaching* the media source rather than about its bytes, so
      * asking Emby to read the same item server-side is worth one attempt. Decoding, parsing and
@@ -87,3 +96,4 @@ object PlaybackRecovery {
         else -> "媒体服务返回 HTTP $code。"
     }
 }
+
