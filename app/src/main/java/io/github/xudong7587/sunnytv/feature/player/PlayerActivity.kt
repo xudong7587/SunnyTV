@@ -138,6 +138,10 @@ class PlayerActivity: ComponentActivity() {
     private val audioManager get() = getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var selectionNotice by mutableStateOf("")
     private var availableTracks by mutableStateOf(Tracks.EMPTY)
+    private var originalSubtitleUrl:String?=null
+    private var subtitleProgressMs by mutableLongStateOf(0L)
+    private var subtitleAdjustmentJob:Job?=null
+    private var subtitleToolbarHeightPx by mutableIntStateOf(0)
     private var subtitleManuallySelected=false
     private var audioOutputMaximum by mutableIntStateOf(0)
     private var audioManuallySelected=false
@@ -169,6 +173,7 @@ class PlayerActivity: ComponentActivity() {
         val payload=intent.getSerializableExtra("request") as? PlaybackRequest
         if(payload==null) {finish();return}
         request=payload
+        subtitleProgressMs=savedInstanceState?.getLong("subtitleProgressMs",0L) ?: 0L
         realtimeInfo=app.store.realtimePlaybackInfo()
         val config=resources.configuration
         @Suppress("DEPRECATION")
@@ -221,9 +226,10 @@ class PlayerActivity: ComponentActivity() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
     }
-    override fun onSaveInstanceState(outState: Bundle) {outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
 
     override fun onStop() {
+        subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
         routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
             lastPosition=absolutePosition(); app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
@@ -298,14 +304,18 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
         val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors).setLoadErrorHandlingPolicy(errorPolicy)
+        val bufferBudget=io.github.xudong7587.sunnytv.core.playback.PlaybackBufferPolicy.targetBytes(Runtime.getRuntime().maxMemory())
+        val bufferAllocator=androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024)
         val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
             .setLoadControl(DefaultLoadControl.Builder()
                 .setBufferDurationsMs(30_000,120_000,2_500,5_000)
-                .setTargetBufferBytes((Runtime.getRuntime().maxMemory()/8)
-                    .coerceIn(48L*1024*1024,160L*1024*1024).toInt())
-                .setAllocator(androidx.media3.exoplayer.upstream.DefaultAllocator(true,256*1024))
+                .setTargetBufferBytes(bufferBudget)
+                // Keep the byte ceiling: forcing 30s at 80 Mbps would allocate ~300 MB
+                // even on a small-heap TV. The larger budget extends actual read-ahead.
+                .setPrioritizeTimeOverSizeThresholds(false)
+                .setAllocator(bufferAllocator)
                 .build())
             .setSeekBackIncrementMs(settings.seekStepSeconds*1000L).setSeekForwardIncrementMs(settings.seekStepSeconds*1000L)
             .build()
@@ -520,9 +530,31 @@ class PlayerActivity: ComponentActivity() {
         })
         startReporter()
         loadPlayerMetadata()
-        if(isCloudQuality) {
-            p.setMediaSource(androidx.media3.exoplayer.source.CloudHlsSourceFactory.create(media.build(),dataSource,pceExtractors,errorPolicy),lastPosition)
-        } else p.setMediaItem(media.build(),if(quality=="original" || transcodeSession?.vod==true) lastPosition else 0)
+        val item=media.build()
+        val externalSelected=request.subtitles.any {SubtitleSelection.stableId(it.id)==SubtitleSelection.stableId(request.subtitleTrackId)}
+        val embeddedSelected=request.explicitSubtitle && !externalSelected
+        if(isCloudQuality || (quality=="original" && subtitleProgressMs!=0L)) {
+            val videoItem=item.buildUpon().setSubtitleConfigurations(emptyList()).build()
+            var video:androidx.media3.exoplayer.source.MediaSource=if(isCloudQuality)
+                androidx.media3.exoplayer.source.CloudHlsSourceFactory.create(videoItem,dataSource,pceExtractors,errorPolicy)
+            else sourceFactory.createMediaSource(videoItem)
+            if(embeddedSelected && (isCloudQuality || subtitleProgressMs!=0L)) {
+                // The original media has its own scoped transport. Never send Emby credentials
+                // through the cloud CDN client, nor use the cloud URL as the subtitle source.
+                val originalData=OkHttpDataSource.Factory(app.http.scopedClient(request.scope,playback=true))
+                val originalItem=MediaItem.Builder().setUri(originalSubtitleUrl ?: if(useFallbackRoute) request.fallbackUrl ?: request.stableUrl else request.stableUrl)
+                    .setMimeType(request.mimeHint).build()
+                val original=DefaultMediaSourceFactory(originalData,extractors).setLoadErrorHandlingPolicy(errorPolicy)
+                    .createMediaSource(originalItem)
+                val text=androidx.media3.exoplayer.source.FilteringMediaSource(original,C.TRACK_TYPE_TEXT)
+                video=androidx.media3.exoplayer.source.FilteringMediaSource(video,
+                    setOf(C.TRACK_TYPE_VIDEO,C.TRACK_TYPE_AUDIO,C.TRACK_TYPE_METADATA,C.TRACK_TYPE_CAMERA_MOTION))
+                video=androidx.media3.exoplayer.source.MergingMediaSource(video,
+                    androidx.media3.exoplayer.source.SubtitleOffsetMediaSource(text,subtitleProgressMs))
+            }
+            p.setMediaSource(androidx.media3.exoplayer.source.CloudHlsSourceFactory.mergeSubtitles(
+                video,item,dataSource,errorPolicy,subtitleProgressMs),lastPosition)
+        } else p.setMediaItem(item,if(quality=="original" || transcodeSession?.vod==true) lastPosition else 0)
         p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
@@ -543,6 +575,7 @@ class PlayerActivity: ComponentActivity() {
                             audioMime=audio?.sampleMimeType,sampleRate=audio?.sampleRate ?: 0,channels=audio?.channelCount ?: 0,
                             audioBitrate=audio?.bitrate?.toLong() ?: 0,bytesPerSecond=speed,
                             bufferedMs=(p.bufferedPosition-p.currentPosition).coerceAtLeast(0),
+                            bufferBytes=bufferAllocator.totalBytesAllocated.toLong(),bufferBudgetBytes=bufferBudget.toLong(),
                             videoDecoder=videoDecoder,audioDecoder=audioDecoder)
                     }
                 }
@@ -605,6 +638,7 @@ class PlayerActivity: ComponentActivity() {
             quality="original";transcodeOffset=0;transcodeDuration=0;transcodePausedPosition=null
             cloudDiscoveryGeneration++;cloudDiscoveryJob?.cancel();cloudVariants=emptyList();cloudNotice="";cloudLoading=false;cloudAutoDiscovered=false
         }
+        if(next.stableUrl!=request.stableUrl || next.embyItemId!=request.embyItemId) {subtitleProgressMs=0L;originalSubtitleUrl=null}
         request=next
         if(!preserveRoute) {useFallbackRoute=false;fallbackRouteUsed=false}
         createPlayer()
@@ -720,16 +754,16 @@ class PlayerActivity: ComponentActivity() {
             .flatMap {g->(0 until g.length).map {g to it}}
         val chosen=tracks.firstOrNull {(g,i)->g.isTrackSelected(i)} ?: return
         val f=chosen.first.getTrackFormat(chosen.second)
-        val embedded=tracks.filterNot {(g,i)->SubtitleSelection.stableId(g.getTrackFormat(i).id.orEmpty()).startsWith("emby-sub:")}
-        val sourceTrack=if(quality=="original" && !SubtitleSelection.stableId(f.id.orEmpty()).startsWith("emby-sub:"))
-            request.sourceTracks.filter {it.type=="Subtitle" && !it.external}.getOrNull(embedded.indexOf(chosen)) else null
-        val extracted=sourceTrack?.let {track->request.subtitles.firstOrNull {it.id=="emby-sub:${track.index}"}}
-        request=request.copy(explicitSubtitle=true,subtitleTrackId=extracted?.id ?: SubtitleSelection.stableId(f.id.orEmpty()),
-            subtitleTitle=extracted?.title ?: f.label.orEmpty(),
+        if(quality=="original") originalSubtitleUrl=currentPlaybackUrl()
+        // Keep embedded identity. Emby cannot always extract subtitles from a STRM;
+        // cloud playback reads the original text track instead of guessing a sidecar URL.
+        request=request.copy(explicitSubtitle=true,subtitleTrackId=SubtitleSelection.stableId(f.id.orEmpty()),
+            subtitleTitle=f.label.orEmpty(),
             subtitlePreference=f.language?.takeIf {it.isNotBlank()} ?: request.subtitlePreference,subtitleOrdinal=-1)
     }
     private fun changeQuality(next:String,target:Long=absolutePosition(),play:Boolean=player?.playWhenReady ?: resumePlayWhenReady) {
         if(qualitySwitching) return
+        subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
         qualityJob=lifecycleScope.launch {
             qualitySwitching=true;controls=true;status="正在切换清晰度…"
             val source=transcodeSource
@@ -824,7 +858,7 @@ class PlayerActivity: ComponentActivity() {
                 isFocusable=false
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
             }},update={view->
-                view.player=player;view.resizeMode=resizeMode
+                view.player=player;view.resizeMode=if(panel=="subtitle-timing") AspectRatioFrameLayout.RESIZE_MODE_FIT else resizeMode
                 // 裁切 is Media3's own ZOOM: the aspect ratio is kept and the picture is grown until
                 // the screen is filled, so a 18:9 file loses its sides and a 16:10 file its top and
                 // bottom — and nothing more. The old extra 1.12 upscale cut a further 12% of the
@@ -837,7 +871,9 @@ class PlayerActivity: ComponentActivity() {
                     appliedSubtitle[0]=key
                     applySubtitleAppearance(view,settings,subtitleInk,subtitleAccent,resolvedSubtitleFont)
                 }
-            },modifier=Modifier.fillMaxSize())
+            },modifier=Modifier.fillMaxSize().padding(top=if(panel=="subtitle-timing") {
+                if(subtitleToolbarHeightPx>0) with(androidx.compose.ui.platform.LocalDensity.current) {subtitleToolbarHeightPx.toDp()} else 180.dp
+            } else 0.dp).testTag("player:video"))
 
             if(panel.isBlank()) PlayerTouchSurface(
                 onTap={controls=!controls},
@@ -980,6 +1016,7 @@ class PlayerActivity: ComponentActivity() {
                             PlayerControl("清晰度："+qualityLabel(),"quality",badge=qualityBadge(),initial=returnControl=="quality") {openQualityPanel()}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
                             if((quality=="original" || isCloudQuality) && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
+                            if((quality=="original" || isCloudQuality) && availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT}) PlayerControl("字幕微调","subtitle-timing",initial=returnControl=="subtitle-timing") {returnControl="subtitle-timing";openSubtitleTiming()}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
@@ -1023,6 +1060,7 @@ class PlayerActivity: ComponentActivity() {
             "subtitle-search" -> (mediaContext?.item ?: MediaEntry(request.embyItemId,request.sourceId,request.title,"Video")).let {item->app.store.sources().firstOrNull {it.id==request.sourceId && !it.isUgreen}?.let {config->
                 SubtitleSearchDialog(app.emby(config),app.store,item,request.mediaSourceId,{panel=""}) {applyDownloadedSubtitle(it)}
             }}
+            "subtitle-timing" -> SubtitleTimingPanel()
             "audio-output" -> AudioOutputPanel()
             "audio","subtitles" -> TrackPanel()
             "chapters" -> ChapterPanel()
@@ -1074,6 +1112,29 @@ class PlayerActivity: ComponentActivity() {
             }
         }
     }
+    private fun openSubtitleTiming() {
+        rememberSubtitleSelection()
+        panel="subtitle-timing"
+    }
+    private fun adjustSubtitleProgress(deltaMs:Long) {
+        subtitleProgressMs=(subtitleProgressMs+deltaMs).coerceIn(-300_000L,300_000L)
+        subtitleAdjustmentJob?.cancel()
+        // Coalesce repeated clicks. Reprepare at the same video position so a backwards
+        // adjustment can recover cues already discarded by Media3, including while paused.
+        subtitleAdjustmentJob=lifecycleScope.launch {
+            delay(180)
+            if(player!=null) {
+                rememberSubtitleSelection()
+                replacePlayback(request,preserveRoute=true)
+            }
+        }
+    }
+    @Composable private fun SubtitleTimingPanel() {
+        val enabled=request.explicitSubtitle && player!=null
+        SubtitleTimingOverlay(subtitleProgressMs,enabled,
+            onAdjust={adjustSubtitleProgress(it)},onReset={adjustSubtitleProgress(-subtitleProgressMs)},
+            onClose={panel=""},onHeight={subtitleToolbarHeightPx=it})
+    }
     @Composable private fun TrackPanel() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val groups=availableTracks.groups.filter {it.type==type}
@@ -1082,6 +1143,7 @@ class PlayerActivity: ComponentActivity() {
         }
         PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
             if(source?.isUgreen==false && (quality=="original" || isCloudQuality) && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
+            if(type==C.TRACK_TYPE_TEXT) PlayerOption("字幕微调") {openSubtitleTiming()}
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
@@ -1168,3 +1230,4 @@ class PlayerActivity: ComponentActivity() {
         private fun clock(ms:Long):String {val seconds=ms.coerceAtLeast(0)/1000;return if(seconds>=3600) "%d:%02d:%02d".format(seconds/3600,seconds/60%60,seconds%60) else "%02d:%02d".format(seconds/60,seconds%60)}
     }
 }
+

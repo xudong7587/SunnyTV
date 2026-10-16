@@ -40,23 +40,37 @@ public final class CloudHlsSourceFactory {
 
   public static MediaSource create(MediaItem item, DataSource.Factory dataSource,
       HlsExtractorFactory extractors, LoadErrorHandlingPolicy policy) {
+    return create(item, dataSource, extractors, policy, 0);
+  }
+
+  public static MediaSource create(MediaItem item, DataSource.Factory dataSource,
+      HlsExtractorFactory extractors, LoadErrorHandlingPolicy policy, long subtitleProgressMs) {
+    MediaItem videoItem = item.buildUpon().setSubtitleConfigurations(java.util.Collections.emptyList()).build();
+    MediaSource video = new HlsMediaSource.Factory(dataSource).setExtractorFactory(extractors)
+        .setLoadErrorHandlingPolicy(policy).createMediaSource(videoItem);
+    return mergeSubtitles(video, item, dataSource, policy, subtitleProgressMs);
+  }
+
+  /** Original and cloud playback share the same external subtitle timeline. */
+  public static MediaSource mergeSubtitles(MediaSource video, MediaItem item,
+      DataSource.Factory dataSource, LoadErrorHandlingPolicy policy, long subtitleProgressMs) {
     ArrayList<MediaSource> sources = new ArrayList<>();
-    sources.add(new HlsMediaSource.Factory(dataSource).setExtractorFactory(extractors)
-        .setLoadErrorHandlingPolicy(policy).createMediaSource(item));
+    sources.add(video);
     DefaultSubtitleParserFactory parsers = new DefaultSubtitleParserFactory();
     for (MediaItem.SubtitleConfiguration subtitle : item.localConfiguration.subtitleConfigurations) {
       Format format = new Format.Builder().setSampleMimeType(subtitle.mimeType)
           .setLanguage(subtitle.language).setSelectionFlags(subtitle.selectionFlags)
           .setRoleFlags(subtitle.roleFlags).setLabel(subtitle.label).setId(subtitle.id).build();
       boolean supported = parsers.supportsFormat(format);
-      sources.add(new ProgressiveMediaSource.Factory(dataSource,
-            () -> new Extractor[] {supported ? new TimedSubtitleExtractor(parsers.create(format))
+      MediaSource text = new ProgressiveMediaSource.Factory(dataSource,
+            () -> new Extractor[] {supported ? new TimedSubtitleExtractor(parsers.create(format), subtitleProgressMs * 1000L)
                 : new UnknownSubtitlesExtractor(format)})
             .enableLazyLoadingWithSingleTrack(SubtitleExtractor.TRACK_ID, supported
                 ? format.buildUpon().setSampleMimeType(MimeTypes.APPLICATION_MEDIA3_CUES)
                     .setCodecs(format.sampleMimeType)
                     .setCueReplacementBehavior(parsers.getCueReplacementBehavior(format)).build() : format)
-            .setLoadErrorHandlingPolicy(policy).createMediaSource(MediaItem.fromUri(subtitle.uri)));
+            .setLoadErrorHandlingPolicy(policy).createMediaSource(MediaItem.fromUri(subtitle.uri));
+      sources.add(text);
     }
     return sources.size() == 1 ? sources.get(0) : new MergingMediaSource(sources.toArray(new MediaSource[0]));
   }
@@ -67,15 +81,21 @@ public final class CloudHlsSourceFactory {
     private final SubtitleExtractor delegate;
     private ExtractorOutput output;
     private long durationUs;
-    TimedSubtitleExtractor(SubtitleParser parser) {
+    TimedSubtitleExtractor(SubtitleParser parser, long progressOffsetUs) {
       delegate = new SubtitleExtractor(new SubtitleParser() {
         @Override public int getCueReplacementBehavior() { return parser.getCueReplacementBehavior(); }
         @Override public void reset() { parser.reset(); }
         @Override public void parse(byte[] data, int offset, int length, OutputOptions options,
             Consumer<CuesWithTiming> consumer) {
-          parser.parse(data, offset, length, options, cues -> {
-            if (cues.endTimeUs != C.TIME_UNSET) durationUs = Math.max(durationUs, cues.endTimeUs);
-            consumer.accept(cues);
+          // Keep the extractor, its cached samples, seek filtering and published duration
+          // in the VIDEO time domain. Shifting only the MediaPeriod leaves lazy subtitle
+          // seek/discard decisions in a different time domain after a paused forward seek.
+          // SubtitleExtractor performs seek filtering after these converted samples arrive.
+          parser.parse(data, offset, length, OutputOptions.allCues(), cues -> {
+            long startUs = cues.startTimeUs == C.TIME_UNSET ? C.TIME_UNSET : cues.startTimeUs - progressOffsetUs;
+            CuesWithTiming shifted = new CuesWithTiming(cues.cues, startUs, cues.durationUs);
+            if (shifted.endTimeUs != C.TIME_UNSET) durationUs = Math.max(durationUs, shifted.endTimeUs);
+            consumer.accept(shifted);
           });
           if (durationUs > 0) output.seekMap(new IndexSeekMap(new long[] {0}, new long[] {0}, durationUs));
         }
@@ -106,3 +126,4 @@ public final class CloudHlsSourceFactory {
     @Override public void release() {}
   }
 }
+

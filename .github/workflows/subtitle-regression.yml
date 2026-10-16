@@ -1,0 +1,74 @@
+name: Subtitle and playback regression
+on:
+  pull_request:
+    paths:
+      - 'app/src/**'
+      - '.github/workflows/subtitle-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  subtitles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Build pinned native audio libraries
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;26.1.10909125' 'cmake;3.22.1'
+          bash scripts/build-audio-decoders.sh
+      - name: Generate the synthetic PCE regression fixture
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          mkdir -p app/src/androidTest/assets/quality
+          ffmpeg -v error -f lavfi -i 'color=c=blue:s=320x180:r=24:d=12' -f lavfi -i 'sine=frequency=440:sample_rate=44100:duration=12' -c:v libx264 -threads 1 -preset ultrafast -g 24 -pix_fmt yuv420p -c:a aac -aac_pce 1 -ac 8 -b:a 512k -t 12 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename 'app/src/androidTest/assets/quality/pce-%d.ts' app/src/androidTest/assets/quality/pce.m3u8
+      - name: Unit tests and Android compilation
+        run: bash gradlew --no-daemon --console=plain testDebugUnitTest assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify subtitle continuity, timing and player focus
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: tv_1080p
+          disable-animations: true
+          script: bash gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest
+      - name: Print failure details
+        if: failure()
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for failure in case.findall('failure') + case.findall('error'):
+                      print(case.attrib.get('name'), failure.text)
+          PYCODE
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: subtitle-regression-results
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/

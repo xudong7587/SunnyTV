@@ -73,7 +73,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
         }
         .clickable(onClick=onClick),contentAlignment=Alignment.Center) {
         PlayerGlyph(icon,glyph,badge,emphasis)
-        AnimatedVisibility(focused && showFocusLabel,
+        AnimatedVisibility((focused || icon=="subtitle-timing") && showFocusLabel,
             enter=fadeIn(motion.fade(150))+scaleIn(motion.spring(),initialScale=.94f),
             exit=fadeOut(motion.fade(120))+scaleOut(motion.spring(),targetScale=.96f),
             modifier=Modifier.align(Alignment.TopCenter).offset(y=(-39).dp)) {
@@ -159,7 +159,7 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
                         drawRoundRect(color,Offset(x(9f),y(yy+.5f)),Size(x(11f),y(2f)),CornerRadius(x(1f)))
                     }
                 }
-                "subtitle" -> {
+                "subtitle","subtitle-timing" -> {
                     drawRoundRect(color.copy(alpha=.28f),Offset(x(3f),y(5f)),Size(x(18f),y(14f)),CornerRadius(x(2.3f)))
                     drawRoundRect(color,Offset(x(6f),y(10f)),Size(x(5f),y(2.2f)),CornerRadius(x(1f)))
                     drawRoundRect(color,Offset(x(13f),y(10f)),Size(x(5f),y(2.2f)),CornerRadius(x(1f)))
@@ -204,9 +204,11 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
                 }
             }
         }
-        if(icon=="rewind" || icon=="forward") {
+        if(icon=="subtitle-timing") {
+            Text("↔",color=color,fontSize=13.sp,fontWeight=FontWeight.Bold,modifier=Modifier.align(Alignment.BottomCenter))
+        } else if(icon=="rewind" || icon=="forward") {
             Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","audio","cast","frame","info","stats","exit","rewind","forward")) {
+        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","subtitle-timing","audio","cast","frame","info","stats","exit","rewind","forward")) {
             LineIcon(icon,color,Modifier.size(18.dp))
         }
     }
@@ -230,3 +232,4 @@ import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
             maxLines=3,overflow=TextOverflow.Ellipsis)
     }
 }
+
