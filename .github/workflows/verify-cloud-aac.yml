@@ -1,5 +1,7 @@
 name: Verify cloud AAC fix candidate
 on:
+  push:
+    branches: [codex/cloud-aac-fix-20261016]
   workflow_dispatch:
 permissions:
   contents: write
