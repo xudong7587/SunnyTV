@@ -83,26 +83,32 @@ class CloudSubtitleContinuityTest {
         Fixture(pceAudio=true).use {f->
             val context=InstrumentationRegistry.getInstrumentation().targetContext
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,
-                PlaybackRequest("",f.root+"/api/play/fixture","PCE 云端音频",startMs=4000))).use {scenario->
+                PlaybackRequest("",f.root+"/api/play/fixture","PCE 云端音频",startMs=4000,
+                    subtitles=listOf(ExternalSubtitle(f.root+"/subtitle.vtt","text/vtt","zh","测试字幕","pce-sub",true))))).use {scenario->
                 rule.waitUntil(15000) {f.paths.any {it=="/api/cloud-video/discover"}}
                 var old:ExoPlayer?=null
-                scenario.onActivity {old=player(it);old!!.pause()}
+                var resumeTarget=0L
+                scenario.onActivity {old=player(it);old!!.pause();resumeTarget=old!!.currentPosition}
                 rule.onNodeWithTag("player:quality").performClick()
                 rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
+                var audioDiagnostic=""
                 fun readyAt(target:Long):Boolean {
                     var ready=false
                     scenario.onActivity {a->val p=player(a)
                         assertNull("Cloud audio failed: ${p.playerError?.errorCodeName}",p.playerError)
+                        audioDiagnostic="state=${p.playbackState}; position=${p.currentPosition}; mime=${p.audioFormat?.sampleMimeType}; channels=${p.audioFormat?.channelCount}; decoded=${p.audioDecoderCounters?.renderedOutputBufferCount}; cues=${p.currentCues.cues.map {it.text}}; bootstrap="+PlayerActivity::class.java.getDeclaredField("cloudBootstrapTarget").apply {isAccessible=true}.get(a)
                         ready=p!==old && p.playbackState==androidx.media3.common.Player.STATE_READY &&
-                            kotlin.math.abs(target-p.currentPosition)<700 && p.audioDecoderCounters?.renderedOutputBufferCount?.let {it>0}==true
+                            kotlin.math.abs(target-p.currentPosition)<700 && p.audioDecoderCounters?.renderedOutputBufferCount?.let {it>0}==true &&
+                            p.currentCues.cues.any {it.text.toString().contains("字幕连续性测试")}
                     }
                     return ready
                 }
-                rule.waitUntil(25000) {readyAt(4000)}
+                try {rule.waitUntil(25000) {readyAt(resumeTarget)}} catch(e:Throwable) {throw AssertionError(audioDiagnostic,e)}
                 scenario.onActivity {a->val p=player(a)
                     assertFalse(p.playWhenReady)
                     assertEquals(androidx.media3.common.MimeTypes.AUDIO_AAC,p.audioFormat!!.sampleMimeType)
-                    assertEquals(0,(p.audioFormat!!.initializationData[0][1].toInt() shr 3) and 15)
+                    assertEquals(8,p.audioFormat!!.channelCount)
+                    assertTrue(p.audioFormat!!.initializationData[0].size>2)
                     p.seekTo(1500)
                 }
                 rule.waitUntil(10000) {readyAt(1500)}

@@ -102,8 +102,7 @@ class PlayerActivity: ComponentActivity() {
             return cachedTranscodeSource
         }
     private var cloudSession: CloudVideoSource.Session? = null
-    // Some cloud AAC streams only carry their custom channel layout at the start.
-    // Prime the existing decoder there before seeking to the requested resume time.
+    // For in-band AAC PCE only, preserve the user's time while reading layout metadata.
     private var cloudBootstrapTarget: Long? = null
     private var cloudVariants by mutableStateOf<List<CloudVideoSource.Variant>>(emptyList())
     private var cloudNotice by mutableStateOf("")
@@ -238,7 +237,7 @@ class PlayerActivity: ComponentActivity() {
     }
     private fun createPlayer(ignoreMp4EditLists:Boolean=mp4EditListFallbackUsed) {
         rendered=false;error="";firstFrameMs=-1;headerMs=-1;totalStartupMs=-1;sourceStartupMs=-1
-        cloudBootstrapTarget=lastPosition.takeIf {isCloudQuality && it>0}
+        cloudBootstrapTarget=null
         // Each player instance gets its own single automatic first-frame retry budget.
         autoRetryAttempts=0
         val includeSourceTime = originalLaunch
@@ -258,10 +257,9 @@ class PlayerActivity: ComponentActivity() {
         val extractors=DefaultExtractorsFactory().apply {
             if(ignoreMp4EditLists) setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
         }
-        val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors)
-            // Bounded recovery: one automatic retry, only for a transient transport failure that happens
-            // before the first frame. Everything else stays fatal and keeps the explicit retry button.
-            .setLoadErrorHandlingPolicy(object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(PlaybackRecovery.MAX_AUTO_RETRIES) {
+        // Bounded recovery: one automatic retry, only for a transient transport failure that happens
+        // before the first frame. Everything else stays fatal and keeps the explicit retry button.
+        val errorPolicy=object: androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(PlaybackRecovery.MAX_AUTO_RETRIES) {
                 override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                     val httpCode = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
                         .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
@@ -281,7 +279,8 @@ class PlayerActivity: ComponentActivity() {
                     window.decorView.post {if(error.isBlank()) status=PlaybackRecovery.RETRY_NOTICE}
                     return PlaybackRecovery.RETRY_DELAY_MS
                 }
-            })
+            }
+        val sourceFactory=DefaultMediaSourceFactory(dataSource,extractors).setLoadErrorHandlingPolicy(errorPolicy)
         val p=ExoPlayer.Builder(this,AudioOutputFactory(this,audioOutputMaximum).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)).setMediaSourceFactory(sourceFactory)
             // High-bitrate sources (115 / STRM direct play) need real read-ahead: keep a deeper
             // buffer, size the target to the device heap and read in bigger chunks.
@@ -318,6 +317,28 @@ class PlayerActivity: ComponentActivity() {
                 .setMimeType(sub.mime).setLanguage(sub.language).setLabel(sub.title).setId(sub.id)
                 .setSelectionFlags(if(sub.isDefault) C.SELECTION_FLAG_DEFAULT else 0).build()
         })
+        var cloudPrimeAttempted=false
+        var primeTextParameters:androidx.media3.common.TrackSelectionParameters?=null
+        val pceExtractors=PceHlsExtractorFactory(
+            missingConfig={window.decorView.post {
+                if(player===p && !cloudPrimeAttempted && lastPosition>0) {
+                    cloudPrimeAttempted=true
+                    cloudBootstrapTarget=p.currentPosition.coerceAtLeast(0)
+                    primeTextParameters=p.trackSelectionParameters
+                    p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT,true).build()
+                    p.seekTo(0)
+                }
+            }},
+            completeConfig={window.decorView.post {
+                if(player===p && cloudBootstrapTarget!=null) {
+                    val target=cloudBootstrapTarget!!
+                    cloudBootstrapTarget=null
+                    p.seekTo(target)
+                    primeTextParameters?.let {p.trackSelectionParameters=it}
+                    primeTextParameters=null
+                }
+            }}
+        )
         p.addListener(object:Player.Listener {
             override fun onVideoSizeChanged(videoSize:VideoSize) {
                 if(!tvPlayback && videoSize.width>0 && videoSize.height>0) {
@@ -390,12 +411,6 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
             override fun onPlaybackStateChanged(playbackState:Int) {
-                if(playbackState==Player.STATE_READY && cloudBootstrapTarget!=null) {
-                    val target=cloudBootstrapTarget!!
-                    cloudBootstrapTarget=null
-                    p.seekTo(target)
-                    return
-                }
                 status=when(playbackState) {Player.STATE_BUFFERING->"正在缓冲…";Player.STATE_ENDED->"播放结束";else->""}
                 if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
                 if(playbackState==Player.STATE_READY && quality!="original" && !isCloudQuality && !p.playWhenReady) pauseTranscode()
@@ -484,7 +499,10 @@ class PlayerActivity: ComponentActivity() {
         })
         startReporter()
         loadPlayerMetadata()
-        p.setMediaItem(media.build(),if(cloudBootstrapTarget!=null) 0 else if(quality=="original" || isCloudQuality || transcodeSession?.vod==true) lastPosition else 0);p.prepare();p.playWhenReady=resumePlayWhenReady
+        if(isCloudQuality) {
+            p.setMediaSource(androidx.media3.exoplayer.source.CloudHlsSourceFactory.create(media.build(),dataSource,pceExtractors,errorPolicy),lastPosition)
+        } else p.setMediaItem(media.build(),if(quality=="original" || transcodeSession?.vod==true) lastPosition else 0)
+        p.prepare();p.playWhenReady=resumePlayWhenReady
         progressJob=lifecycleScope.launch {
             var tick=0
             while(isActive) {
