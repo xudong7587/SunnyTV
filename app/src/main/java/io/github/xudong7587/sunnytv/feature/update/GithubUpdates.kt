@@ -102,7 +102,7 @@ internal object GithubUpdates {
         require(name=="SunnyTV-v$version.apk" && apk=="https://github.com/xudong7587/SunnyTV/releases/download/$tag/$name") {"官方升级版本不匹配"}
         return Release(version,code,page,apk)
     }
-    suspend fun download(context:Context,selected:String):File=withContext(Dispatchers.IO) {
+    suspend fun download(context:Context,selected:String,onProgress:(Int?)->Unit={}):File=withContext(Dispatchers.IO) {
         val release=latest()
         require(selected==release.apk) {"官方最新版本已变化，请重新检查后下载"}
         val (transport,name)=transportForAsset(selected)
@@ -115,7 +115,14 @@ internal object GithubUpdates {
         val partial=File(directory,"github-${UUID.randomUUID()}.part.apk")
         try {
             val digest=MessageDigest.getInstance("SHA-256")
-            partial.outputStream().use {output->transport.fetch(name,268435456) {bytes,count->output.write(bytes,0,count);digest.update(bytes,0,count)}}
+            var lastPercent=-2
+            partial.outputStream().use {output->transport.fetch(name,268435456,progress={received,total->
+                val percent=if(total>0) ((received*100/total).coerceIn(0,100)).toInt() else null
+                if((percent ?: -1)!=lastPercent) {
+                    lastPercent=percent ?: -1
+                    withContext(Dispatchers.Main) {onProgress(percent)}
+                }
+            }) {bytes,count->output.write(bytes,0,count);digest.update(bytes,0,count)}}
             require(partial.length()>0 && digest.digest().joinToString("") {"%02x".format(it)}.equals(expected,true)) {"升级包校验失败"}
             @Suppress("DEPRECATION")
             val archive=context.packageManager.getPackageArchiveInfo(partial.path,PackageManager.GET_SIGNATURES) ?: error("APK 无效")
@@ -132,3 +139,4 @@ internal object GithubUpdates {
         } finally {partial.delete()}
     }
 }
+

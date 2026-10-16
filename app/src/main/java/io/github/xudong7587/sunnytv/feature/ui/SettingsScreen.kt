@@ -333,8 +333,10 @@ import kotlinx.coroutines.*
                     }}
                     item {Text("设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\nABI：${Build.SUPPORTED_ABIS.joinToString()}\n应用：${BuildConfig.VERSION_NAME}\n网络日志不包含 Token、Cookie 或完整媒体地址。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=25.sp)}
                 }
-                "软件升级" -> {item {io.github.xudong7587.sunnytv.feature.update.UpdateSettings()}}
                 "关于" -> {
+                    item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
+                    item {Text("让自己的媒体库，回到大屏。",color=SunnyColors.Secondary,fontSize=14.sp)}
+                    item {io.github.xudong7587.sunnytv.feature.update.UpdateSettings()}
                     item {SectionTitle("MediaIndex · 作者的媒体索引项目", "115 云端清晰度支持")}
                     item {Text("将网盘媒体整理为可供 Emby 使用的 STRM，并通过稳定播放入口连接原始文件。配合支持云端清晰度的 MediaIndex 版本，SunnyTV 可查询 115 已生成的 4K / 1080P 通道，无需 NAS 重新编码。第三方 STRM 仍可播放原画；能否使用 115 清晰度取决于播放入口是否提供对应接口。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                     item {val uri=androidx.compose.ui.platform.LocalUriHandler.current
@@ -342,8 +344,6 @@ import kotlinx.coroutines.*
                             Text("前往 GitHub 查看详情",color=SunnyColors.Accent,fontSize=15.sp,modifier=Modifier.padding(horizontal=18.dp,vertical=14.dp))
                         }}
 
-                    item {Text("SunnyTV",color=SunnyColors.Accent,fontSize=38.sp,fontWeight=FontWeight.Bold)}
-                    item {Text("让自己的媒体库，回到大屏。\n\n独立 Android TV 客户端。\nKotlin · Compose for TV · Media3\nEmby · MediaIndex STRM\n\n${BuildConfig.VERSION_NAME} 是开发测试版，不是已通过电视验收的正式版。\n针对电视遥控器操作与流畅浏览设计。",color=SunnyColors.Secondary,fontSize=14.sp,lineHeight=24.sp)}
                 }
             }
         }
@@ -424,7 +424,7 @@ import kotlinx.coroutines.*
 
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
     // 字体 merged into 外观; the data-source page sits below 性能.
-    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","软件升级","关于")
+    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","关于")
     @Composable fun Category(cat:String) {
         FocusTile("settings:$cat",if(LocalCompact.current) Modifier.widthIn(min=64.dp) else Modifier.width(165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))
@@ -521,3 +521,4 @@ import kotlinx.coroutines.*
         }
     }
 }
+

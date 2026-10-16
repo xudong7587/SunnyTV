@@ -47,6 +47,8 @@ class ConfigStore(context: Context) {
     fun setWebDavUpdatesEnabled(enabled:Boolean) {prefs.edit().putBoolean("webDavUpdatesEnabled",enabled).apply()}
     fun realtimePlaybackInfo():Boolean=prefs.getBoolean("realtimePlaybackInfo",false)
     fun setRealtimePlaybackInfo(enabled:Boolean) {prefs.edit().putBoolean("realtimePlaybackInfo",enabled).apply()}
+    fun githubAutomaticUpdates():Boolean=prefs.getBoolean("githubAutomaticUpdates",false)
+    fun setGithubAutomaticUpdates(enabled:Boolean) {prefs.edit().putBoolean("githubAutomaticUpdates",enabled).apply()}
     fun automaticUpdates():Boolean=prefs.getBoolean("automaticUpdates",false)
     fun setAutomaticUpdates(enabled:Boolean) {prefs.edit().putBoolean("automaticUpdates",enabled).apply()}
     fun sources(): List<SourceConfig> {
@@ -165,3 +167,4 @@ class ConfigStore(context: Context) {
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }
 }
+

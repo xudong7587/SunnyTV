@@ -1,10 +1,10 @@
 name: Publish verified SunnyTV stable
 on:
   workflow_dispatch:
-  # One-off publication requested for 0.2.6; main-only and immutable-release checks remain.
+  # One-off publication requested for 0.2.7; main-only and immutable-release checks remain.
   push:
     branches: [main]
-    paths: ['docs/RELEASE-0.2.6.md']
+    paths: ['docs/RELEASE-0.2.7.md']
 permissions:
   contents: write
 concurrency:
@@ -90,7 +90,7 @@ jobs:
           arch: x86_64
           profile: tv_1080p
           disable-animations: true
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
       - name: Publish a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
