@@ -170,7 +170,9 @@ void Player::draw() {
     gl<Finish>("glFinish")();
     {
         CurrentContext current(window_, videoContext_);
-        mpv_opengl_fbo fbo{int(fbo_), 1280, 720, 0}; int flip = 1, block = 0;
+        mpv_render_context_update(context_);
+        // SDL target textures already use their bottom row as the UI's top row.
+        mpv_opengl_fbo fbo{int(fbo_), 1280, 720, 0}; int flip = 0, block = 0;
         mpv_render_param params[] = {{MPV_RENDER_PARAM_OPENGL_FBO, &fbo}, {MPV_RENDER_PARAM_FLIP_Y, &flip}, {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block}, {MPV_RENDER_PARAM_INVALID, nullptr}};
         const int result=mpv_render_context_render(context_, params);
         if(result<0)throw std::runtime_error(std::string("视频画面输出失败：")+mpv_error_string(result));
@@ -182,6 +184,7 @@ void Player::draw() {
                 gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER,fbo_);
                 unsigned char pixel[4]{};gl<ReadPixels>("glReadPixels")(640,80,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
                 std::fprintf(stderr,"Video FBO pixel: %u %u %u %u; frame %.3f\n",pixel[0],pixel[1],pixel[2],pixel[3],state_.position);
+                gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER,0);
             }
         }
 #endif
