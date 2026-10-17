@@ -23,10 +23,12 @@ struct Transfer {
     Response response;
     Sink sink;
     const std::atomic_bool* cancel;
-    size_t bytes = 0, maxBytes;
+    size_t bytes = 0, maxBytes, headerBytes = 0;
     bool failed = false;
     static size_t header(char* data, size_t size, size_t count, void* opaque) {
         auto& t = *static_cast<Transfer*>(opaque); size_t n = size * count;
+        t.headerBytes += n;
+        if (t.headerBytes > 65536) { t.failed = true; return 0; }
         std::string line(data, n);
         if (line.rfind("HTTP/", 0) == 0) { t.response.headers.clear(); std::istringstream in(line); std::string protocol; in >> protocol >> t.response.status; }
         else if (line == "\r\n") { if (t.response.status >= 200 && !redirect(t.response.status) && t.sink.start && !t.sink.start(t.response)) { t.failed = true; return 0; } }
@@ -35,7 +37,9 @@ struct Transfer {
     }
     static size_t write(char* data, size_t size, size_t count, void* opaque) {
         auto& t = *static_cast<Transfer*>(opaque); size_t n = size * count;
-        if (redirect(t.response.status)) return n;
+        // Stop reading redirect bodies immediately. A video redirect must not keep an unlimited
+        // body open before the next hop can apply credential scoping.
+        if (redirect(t.response.status)) return 0;
         if (n > t.maxBytes - std::min(t.bytes, t.maxBytes) || (t.cancel && t.cancel->load())) { t.failed = true; return 0; }
         t.bytes += n;
         if (t.sink.data) { if (!t.sink.data(data, n)) { t.failed = true; return 0; } } else t.response.body.append(data, n);
@@ -101,9 +105,10 @@ Response Http::stream(const Request& original, const Sink& sink, const std::atom
         curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, Transfer::header); curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &transfer);
         curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, Transfer::write); curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &transfer);
         curl_easy_setopt(curl.get(), CURLOPT_XFERINFOFUNCTION, Transfer::progress); curl_easy_setopt(curl.get(), CURLOPT_XFERINFODATA, &transfer); curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);
-        if (req.method != "GET") { curl_easy_setopt(curl.get(), CURLOPT_CUSTOMREQUEST, req.method.c_str()); curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, req.body.data()); curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE_LARGE, curl_off_t(req.body.size())); }
+        if (req.method == "HEAD") curl_easy_setopt(curl.get(), CURLOPT_NOBODY, 1L);
+        else if (req.method != "GET") { curl_easy_setopt(curl.get(), CURLOPT_CUSTOMREQUEST, req.method.c_str()); curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, req.body.data()); curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE_LARGE, curl_off_t(req.body.size())); }
         CURLcode result = curl_easy_perform(curl.get());
-        if (result != CURLE_OK) { if (cancel && cancel->load()) throw std::runtime_error("操作已取消"); if (transfer.failed) throw std::runtime_error("响应超限或传输已停止"); throw std::runtime_error("连接 " + u.host + " 失败（网络/TLS，" + std::to_string(int(result)) + "）"); }
+        if (result != CURLE_OK && !redirect(transfer.response.status)) { if (cancel && cancel->load()) throw std::runtime_error("操作已取消"); if (transfer.failed) throw std::runtime_error("响应超限或传输已停止"); throw std::runtime_error("连接 " + u.host + " 失败（网络/TLS，" + std::to_string(int(result)) + "）"); }
         auto& response = transfer.response;
         if (redirect(response.status)) { auto it = response.headers.find("location"); if (it == response.headers.end()) throw std::runtime_error("重定向缺少地址"); if (req.method != "GET") throw std::runtime_error("已阻止认证或写入请求重定向"); std::string next = resolveUrl(req.url, it->second); if (u.scheme == "https" && validateUrl(next).scheme != "https") throw std::runtime_error("已阻止 HTTPS 降级跳转"); req.url = next; continue; }
         return response;

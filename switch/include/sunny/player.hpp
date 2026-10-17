@@ -8,7 +8,7 @@
 
 namespace sunny {
 struct PlayerState {
-    bool loaded = false, paused = false, ended = false, failed = false;
+    bool loaded = false, started = false, paused = false, ended = false, failed = false;
     double position = 0, duration = 0;
     std::string decoder, videoCodec, audioCodec;
     int width = 0, height = 0;

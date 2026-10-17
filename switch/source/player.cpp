@@ -6,7 +6,8 @@
 
 namespace sunny {
 namespace {
-template <typename T> T gl(const char* name) { auto p = SDL_GL_GetProcAddress(name); if (!p) throw std::runtime_error("OpenGL 功能不可用"); return reinterpret_cast<T>(p); }
+template <typename T> T gl(const char* name) { auto p = SDL_GL_GetProcAddress(name);
+        if (!p) throw std::runtime_error("OpenGL 功能不可用"); return reinterpret_cast<T>(p); }
 using GenFramebuffers = void (*)(GLsizei, GLuint*);
 using DeleteFramebuffers = void (*)(GLsizei, const GLuint*);
 using BindFramebuffer = void (*)(GLenum, GLuint);
@@ -14,13 +15,17 @@ using FramebufferTexture2D = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
 using CheckFramebufferStatus = GLenum (*)(GLenum);
 using GetIntegerv = void (*)(GLenum, GLint*);
 void* getProc(void*, const char* name) { return SDL_GL_GetProcAddress(name); }
-void command(mpv_handle* h, const char* a, const char* b = nullptr, const char* c = nullptr, const char* d = nullptr) { const char* args[] = {a, b, c, d, nullptr}; if (mpv_command(h, args) < 0) throw std::runtime_error("播放器操作失败"); }
+void command(mpv_handle* h, const char* a, const char* b = nullptr, const char* c = nullptr, const char* d = nullptr) { const char* args[] = {a, b, c, d, nullptr};
+        if (mpv_command(h, args) < 0) throw std::runtime_error("播放器操作失败"); }
 double number(mpv_handle* h, const char* name) { double v = 0; mpv_get_property(h, name, MPV_FORMAT_DOUBLE, &v); return v; }
-std::string text(mpv_handle* h, const char* name) { char* p = mpv_get_property_string(h, name); if (!p) return ""; std::string s = p; mpv_free(p); return s; }
+std::string text(mpv_handle* h, const char* name) { char* p = mpv_get_property_string(h, name);
+        if (!p) return "";
+    std::string s = p; mpv_free(p); return s; }
 }
 void Player::option(const char* key, const char* value) { if (mpv_set_option_string(mpv_, key, value) < 0) throw std::runtime_error(std::string("播放器参数不可用：") + key); }
 Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
-    mpv_ = mpv_create(); if (!mpv_) throw std::runtime_error("播放器创建失败");
+    mpv_ = mpv_create();
+        if (!mpv_) throw std::runtime_error("播放器创建失败");
     try {
         option("config", "no"); option("terminal", "no"); option("msg-level", "all=no");
         option("vo", "libmpv"); option("ao", "hos,sdl"); option("hwdec", "auto-copy");
@@ -36,7 +41,8 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         mpv_opengl_init_params init{getProc, nullptr};
         mpv_render_param params[] = {{MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_OPENGL)}, {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &init}, {MPV_RENDER_PARAM_INVALID, nullptr}};
         if (mpv_render_context_create(&context_, mpv_, params) < 0) throw std::runtime_error("播放器图形初始化失败");
-        SDL_RendererInfo info{}; SDL_GetRendererInfo(renderer_, &info); if (!info.name || std::string(info.name) != "opengl") throw std::runtime_error("需要 SDL OpenGL 渲染器");
+        SDL_RendererInfo info{}; SDL_GetRendererInfo(renderer_, &info);
+        if (!info.name || std::string(info.name) != "opengl") throw std::runtime_error("需要 SDL OpenGL 渲染器");
         video_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 1280, 720);
         if (!video_) throw std::runtime_error("无法创建视频画面");
         SDL_RenderFlush(renderer_);
@@ -48,14 +54,19 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER, GLuint(old)); SDL_GL_UnbindTexture(video_);
         if (!complete) throw std::runtime_error("视频画面缓冲初始化失败");
     } catch (...) {
-        if (context_) mpv_render_context_free(context_); context_ = nullptr;
-        if (mpv_) mpv_terminate_destroy(mpv_); mpv_ = nullptr;
-        if (video_) SDL_DestroyTexture(video_); video_ = nullptr;
+        if (context_) mpv_render_context_free(context_);
+        context_ = nullptr;
+        if (mpv_) mpv_terminate_destroy(mpv_);
+        mpv_ = nullptr;
+        if (video_) SDL_DestroyTexture(video_);
+        video_ = nullptr;
         throw;
     }
 }
 Player::~Player() {
-    close(); if (context_) mpv_render_context_free(context_); if (mpv_) mpv_terminate_destroy(mpv_);
+    close();
+        if (context_) mpv_render_context_free(context_);
+        if (mpv_) mpv_terminate_destroy(mpv_);
     if (fbo_) gl<DeleteFramebuffers>("glDeleteFramebuffers")(1, &fbo_);
     if (video_) SDL_DestroyTexture(video_);
 }
@@ -73,6 +84,7 @@ void Player::close() {
 void Player::poll() {
     while (auto* event = mpv_wait_event(mpv_, 0)) {
         if (event->event_id == MPV_EVENT_NONE) break;
+        if (event->event_id == MPV_EVENT_PLAYBACK_RESTART) state_.started = true;
         if (event->event_id == MPV_EVENT_FILE_LOADED) {
             state_.loaded = true; state_.ended = false; state_.failed = false;
             for (const auto& sub : playback_.subtitles) { try { command(mpv_, "sub-add", gateway_->add(sub.url, playback_.scope).c_str(), sub.isDefault ? "select" : "auto", sub.title.c_str()); } catch (...) {} }
