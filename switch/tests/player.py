@@ -28,7 +28,10 @@ with tempfile.TemporaryDirectory(prefix='sunny-player-') as tmp:
         for driver in ['opengles2', 'opengl']:
             for no_scripts in ['', '1']:
                 env['SUNNYTV_TEST_RENDER_DRIVER'] = driver
-                env['SUNNYTV_TEST_NO_SCRIPTS'] = no_scripts
+                if no_scripts:
+                    env['SUNNYTV_TEST_NO_SCRIPTS'] = no_scripts
+                else:
+                    env.pop('SUNNYTV_TEST_NO_SCRIPTS', None)
                 result = subprocess.run([str(root / 'build/host/player-tests'), f'http://127.0.0.1:{server.server_port}/synthetic.mp4', f'http://127.0.0.1:{server.server_port}/index.m3u8'], env=env, timeout=40)
                 if result.returncode:
                     failures.append((driver, no_scripts))

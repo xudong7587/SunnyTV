@@ -57,15 +57,18 @@ int main(int argc, char** argv) {
                 if (colored<100) { SDL_RenderPresent(renderer);player.presented();SDL_Delay(10);continue; }
                 auto pixel=[&](int x,int y,int channel){return pixels[size_t((y*1280+x)*4+channel)];};
                 if(pixel(40,40,1)<230||pixel(40,40,0)>20)throw std::runtime_error("SDL overlay corrupted after mpv draw");
-                if(pixel(640,80,0)<180||pixel(640,80,2)>60||pixel(640,640,2)<180||pixel(640,640,0)>60)
+                if(pixel(640,80,0)<180||pixel(640,80,2)>60||pixel(640,640,2)<180||pixel(640,640,0)>60) {
+                    std::cerr<<"Top RGB="<<int(pixel(640,80,0))<<','<<int(pixel(640,80,1))<<','<<int(pixel(640,80,2))
+                             <<"; bottom RGB="<<int(pixel(640,640,0))<<','<<int(pixel(640,640,1))<<','<<int(pixel(640,640,2))<<'\n';
                     throw std::runtime_error("Video orientation or red/blue channels are incorrect");
+                }
                 played=true; break;
             }
             SDL_RenderPresent(renderer);
             player.presented();
             SDL_Delay(10);
         }
-        if (!played) throw std::runtime_error("Video never produced playback progress");
+        if (!played) throw std::runtime_error("Video never produced a correctly rendered frame");
         player.setSubtitleDelay(0.5); if (player.subtitleDelay()!=0.5) throw std::runtime_error("Subtitle delay did not apply");
         player.pause(); player.seek(1); player.close();
         p.url=argv[2]; player.open(p,std::string(48,'c')); start=SDL_GetTicks(); played=false;
