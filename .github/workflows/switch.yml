@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Switch libraries
-        run: dkp-pacman -Syu --noconfirm --needed switch-libmpv switch-sdl2_ttf switch-sdl2_image switch-curl switch-pkg-config
+        run: dkp-pacman -S --noconfirm --needed switch-libmpv switch-sdl2_ttf switch-sdl2_image switch-curl switch-pkg-config
       - name: Build NRO
         run: |
           . /opt/devkitpro/switchvars.sh

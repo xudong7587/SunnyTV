@@ -54,7 +54,14 @@ int main(int argc, char** argv) {
                 if (SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_RGBA32,pixels.data(),1280*4)!=0) throw std::runtime_error("Cannot read video pixels");
                 int colored=0;
                 for(size_t i=0;i<pixels.size();i+=400) if (pixels[i]>20||pixels[i+1]>20||pixels[i+2]>20) ++colored;
-                if (colored<100) throw std::runtime_error("Playback advanced but video frame was black");
+                if (colored<100) {
+                    std::cerr<<"Readback colored samples="<<colored<<"; center RGBA=";
+                    for(int c=0;c<4;++c)std::cerr<<int(pixels[(360*1280+640)*4+c])<<' ';
+                    std::cerr<<"; overlay RGBA=";
+                    for(int c=0;c<4;++c)std::cerr<<int(pixels[(40*1280+40)*4+c])<<' ';
+                    std::cerr<<'\n';
+                    throw std::runtime_error("Playback advanced but video frame was black");
+                }
                 auto pixel=[&](int x,int y,int channel){return pixels[size_t((y*1280+x)*4+channel)];};
                 if(pixel(40,40,1)<230||pixel(40,40,0)>20)throw std::runtime_error("SDL overlay corrupted after mpv draw");
                 if(pixel(640,80,0)<180||pixel(640,80,2)>60||pixel(640,640,2)<180||pixel(640,640,0)>60)

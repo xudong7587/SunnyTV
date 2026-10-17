@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory(prefix='sunny-player-') as tmp:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     env = os.environ.copy()
     env['NO_PROXY'] = env['no_proxy'] = '127.0.0.1,localhost'
+    env['SUNNYTV_TEST_GL_TRACE'] = '1'
     try:
         for driver in ['opengl', 'opengles2']:
             for no_scripts in ['', '1']:

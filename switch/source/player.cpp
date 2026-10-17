@@ -2,6 +2,7 @@
 #include <SDL2/SDL_opengl.h>
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 
 namespace sunny {
@@ -168,7 +169,19 @@ void Player::draw() {
         CurrentContext current(window_, videoContext_);
         mpv_opengl_fbo fbo{int(fbo_), 1280, 720, 0}; int flip = 1, block = 0;
         mpv_render_param params[] = {{MPV_RENDER_PARAM_OPENGL_FBO, &fbo}, {MPV_RENDER_PARAM_FLIP_Y, &flip}, {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block}, {MPV_RENDER_PARAM_INVALID, nullptr}};
-        mpv_render_context_render(context_, params);
+        const int result=mpv_render_context_render(context_, params);
+        if(result<0)throw std::runtime_error(std::string("视频画面输出失败：")+mpv_error_string(result));
+#ifndef __SWITCH__
+        if(std::getenv("SUNNYTV_TEST_GL_TRACE")) {
+            static int samples=0;
+            if(state_.position>.5&&samples++<2) {
+                using ReadPixels=void (*)(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void*);
+                gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER,fbo_);
+                unsigned char pixel[4]{};gl<ReadPixels>("glReadPixels")(640,80,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+                std::fprintf(stderr,"Video FBO pixel: %u %u %u %u; frame %.3f\n",pixel[0],pixel[1],pixel[2],pixel[3],state_.position);
+            }
+        }
+#endif
         // Shared texture writes must finish before the UI context samples the frame.
         gl<Finish>("glFinish")();
     }
