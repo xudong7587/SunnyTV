@@ -1032,6 +1032,7 @@ class PlayerActivity: ComponentActivity() {
                             }
                             PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep",initial=returnControl=="sleep") {returnControl="sleep";panel="sleep"}
                             PlayerControl("播放信息","info",initial=returnControl=="info") {returnControl="info";panel="info"}
+                            PlayerControl("退出播放","exit") {finish()}
                         }
                     }
                 }
@@ -1137,7 +1138,8 @@ class PlayerActivity: ComponentActivity() {
         }
     }
     @Composable private fun SubtitleTimingPanel() {
-        val enabled=request.explicitSubtitle && player!=null
+        val enabled=availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT && it.isSelected} &&
+            player?.trackSelectionParameters?.disabledTrackTypes?.contains(C.TRACK_TYPE_TEXT)!=true
         SubtitleTimingOverlay(subtitleProgressMs,enabled,
             onAdjust={adjustSubtitleProgress(it)},onClose={panel=""})
     }
