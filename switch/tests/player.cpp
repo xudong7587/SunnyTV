@@ -4,7 +4,7 @@
 
 using namespace sunny;
 int main(int argc, char** argv) {
-    if (argc != 2) return 2;
+    if (argc != 3) return 2;
     curl_global_init(CURL_GLOBAL_DEFAULT);
     SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl");
     if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO) != 0) return 3;
@@ -18,16 +18,34 @@ int main(int argc, char** argv) {
         auto start=SDL_GetTicks(); bool played=false;
         while (SDL_GetTicks()-start<15000) {
             SDL_Event event; while(SDL_PollEvent(&event)) {}
-            player.poll(); SDL_SetRenderDrawColor(renderer,0,0,0,255); SDL_RenderClear(renderer); player.draw(); SDL_RenderPresent(renderer);
+            player.poll(); SDL_SetRenderDrawColor(renderer,0,0,0,255); SDL_RenderClear(renderer); player.draw();
             auto s=player.state();
             if (s.failed) throw std::runtime_error("Synthetic playback failed");
-            if (s.started&&s.position>0.5&&s.width==320&&s.height==180) { played=true; break; }
+            if (s.started&&s.position>0.5&&s.width==320&&s.height==180) {
+                std::vector<unsigned char> pixels(1280*720*4);
+                if (SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_RGBA32,pixels.data(),1280*4)!=0) throw std::runtime_error("Cannot read video pixels");
+                int colored=0;
+                for(size_t i=0;i<pixels.size();i+=400) if (pixels[i]>20||pixels[i+1]>20||pixels[i+2]>20) ++colored;
+                if (colored<100) throw std::runtime_error("Playback advanced but video frame was black");
+                played=true; break;
+            }
+            SDL_RenderPresent(renderer);
             SDL_Delay(10);
         }
         if (!played) throw std::runtime_error("Video never produced playback progress");
         player.setSubtitleDelay(0.5); if (player.subtitleDelay()!=0.5) throw std::runtime_error("Subtitle delay did not apply");
         player.pause(); player.seek(1); player.close();
-        std::cout<<"Playback initialized, decoded video, advanced, adjusted subtitle timing, paused, sought and closed\n";
+        p.url=argv[2]; player.open(p,std::string(48,'c')); start=SDL_GetTicks(); played=false;
+        while(SDL_GetTicks()-start<15000) {
+            SDL_Event event; while(SDL_PollEvent(&event)) {}
+            player.poll(); player.draw(); SDL_RenderPresent(renderer);
+            if(player.state().failed) throw std::runtime_error("HLS playback failed");
+            if(player.state().started&&player.state().position>0.5) { played=true; break; }
+            SDL_Delay(10);
+        }
+        if(!played) throw std::runtime_error("HLS playback never advanced");
+        player.close();
+        std::cout<<"MP4 and HLS playback initialized and advanced; video pixels, subtitle offset, pause, seek and close verified\n";
         result=0;
     } catch(const std::exception& e) { std::cerr<<e.what()<<'\n'; }
     if (renderer) SDL_DestroyRenderer(renderer);

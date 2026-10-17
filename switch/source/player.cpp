@@ -7,7 +7,8 @@
 namespace sunny {
 namespace {
 template <typename T> T gl(const char* name) { auto p = SDL_GL_GetProcAddress(name);
-        if (!p) throw std::runtime_error("OpenGL 功能不可用"); return reinterpret_cast<T>(p); }
+        if (!p) throw std::runtime_error("OpenGL 功能不可用");
+    return reinterpret_cast<T>(p); }
 using GenFramebuffers = void (*)(GLsizei, GLuint*);
 using DeleteFramebuffers = void (*)(GLsizei, const GLuint*);
 using BindFramebuffer = void (*)(GLenum, GLuint);
