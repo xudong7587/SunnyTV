@@ -24,11 +24,15 @@ with tempfile.TemporaryDirectory(prefix='sunny-player-') as tmp:
     env['NO_PROXY'] = env['no_proxy'] = '127.0.0.1,localhost'
     env['SUNNYTV_TEST_GL_TRACE'] = '1'
     try:
-        for driver in ['opengl', 'opengles2']:
+        failures = []
+        for driver in ['opengles2', 'opengl']:
             for no_scripts in ['', '1']:
                 env['SUNNYTV_TEST_RENDER_DRIVER'] = driver
                 env['SUNNYTV_TEST_NO_SCRIPTS'] = no_scripts
-                subprocess.run([str(root / 'build/host/player-tests'), f'http://127.0.0.1:{server.server_port}/synthetic.mp4', f'http://127.0.0.1:{server.server_port}/index.m3u8'], check=True, env=env, timeout=40)
+                result = subprocess.run([str(root / 'build/host/player-tests'), f'http://127.0.0.1:{server.server_port}/synthetic.mp4', f'http://127.0.0.1:{server.server_port}/index.m3u8'], env=env, timeout=40)
+                if result.returncode:
+                    failures.append((driver, no_scripts))
+        assert not failures, f'Playback regression failed: {failures}'
     finally:
         server.shutdown()
         server.server_close()

@@ -56,6 +56,9 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         if (!mpv_) throw std::runtime_error("播放器创建失败");
     try {
         option("config", "no"); option("terminal", "no"); option("msg-level", "all=no");
+#ifndef __SWITCH__
+        if(std::getenv("SUNNYTV_TEST_GL_TRACE")){option("terminal","yes");option("msg-level","all=warn,libmpv_render=debug");}
+#endif
         option("vo", "libmpv"); option("ao", "hos,sdl"); option("hwdec", "auto-copy");
         option("idle", "yes"); option("keep-open", "no"); option("input-default-bindings", "no");
         option("input-vo-keyboard", "no"); option("load-scripts", "no", true);
