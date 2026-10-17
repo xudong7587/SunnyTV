@@ -62,8 +62,12 @@
             return;
         }
         if(view_.screen==Screen::Settings) {
-            if(down&HidNpadButton_Up){if(!view_.selected){view_.section=-1;navigationIndex_=3;return;}--view_.selected;}
-            if(down&HidNpadButton_Down)view_.selected=std::min(5,view_.selected+1);
+            if(settingsSidebar_){if(down&HidNpadButton_Up){if(settingsCategory_==0){view_.section=-1;navigationIndex_=3;return;}--settingsCategory_;}if(down&HidNpadButton_Down)settingsCategory_=std::min(2,settingsCategory_+1);if(down&(HidNpadButton_A|HidNpadButton_Right))settingsSidebar_=false;view_.selected=settingsRows().front();return;}
+            if(down&HidNpadButton_Left){settingsSidebar_=true;return;}
+            auto rows=settingsRows();auto it=std::find(rows.begin(),rows.end(),view_.selected);int index=it==rows.end()?0:int(it-rows.begin());
+            if(down&HidNpadButton_Up){if(index==0){view_.section=-1;navigationIndex_=3;return;}--index;}
+            if(down&HidNpadButton_Down)index=std::min(int(rows.size())-1,index+1);
+            view_.selected=rows[size_t(index)];
             if(down&HidNpadButton_A)switch(view_.selected){case 0:{View v;v.screen=Screen::Connect;show(v);break;}case 1:direct();break;case 2:dark_=!dark_;save();break;case 3:accent_=(accent_+1)%10;save();break;case 4:remember_=false;account_.token.clear();account_.userId.clear();save();clearImages();history_.clear();view_={};view_.screen=Screen::Connect;break;case 5:nav(Screen::Home);break;}
             return;
         }

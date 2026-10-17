@@ -185,12 +185,15 @@
         canvas_->wrap(detail_.overview.empty()?"暂无简介":detail_.overview,40,y+310,1080,20,7,p.text);
         contentHeight_=std::max(720.f,y+view_.scroll+590);
     }
+    std::vector<int> settingsRows() const { return settingsCategory_==0?std::vector<int>{0,1,4}:settingsCategory_==1?std::vector<int>{2,3}:std::vector<int>{5}; }
     void drawSettings() {
         auto p=palette();canvas_->text("设置",48,135,32,p.text);
         const char* categories[]={"连接与播放","外观","关于"};
-        for(int i=0;i<3;++i){canvas_->round({48,218.f+i*76,244,58},29,i==0?p.ink:p.surface);canvas_->text(categories[i],76,232.f+i*76,22,i==0?p.accent:p.secondary);}
+        for(int i=0;i<3;++i){Bounds b{48,218.f+i*76,244,58};canvas_->round(b,29,i==settingsCategory_?p.ink:p.surface);if(settingsSidebar_&&i==settingsCategory_)canvas_->outline(b,29,p.accent);canvas_->text(categories[i],76,232.f+i*76,22,i==settingsCategory_?p.accent:p.secondary);hit(b,[this,i](Point){settingsCategory_=i;settingsSidebar_=false;view_.selected=settingsRows().front();});}
         std::vector<std::string> rows={"媒体服务    连接 / 切换账号","HTTP / STRM 直接播放",std::string("外观    ")+(dark_?"深色":"浅色"),"重点色    "+std::to_string(accent_+1)+" / 10","清除本机保存的登录信息","返回首页"};
-        for(size_t i=0;i<rows.size();++i){int y=218+int(i)*66;button(rows[i],int(i),view_.section==-1?-1:view_.selected,332,y,874);hit({332,float(y),874,52},[this,i](Point){view_.selected=int(i);input(HidNpadButton_A);});}
+        auto visible=settingsRows();
+        for(size_t index=0;index<visible.size();++index){int i=visible[index],y=218+int(index)*66;button(rows[size_t(i)],i,view_.section==-1||settingsSidebar_?-1:view_.selected,332,y,874);hit({332,float(y),874,52},[this,i](Point){view_.selected=i;settingsSidebar_=false;input(HidNpadButton_A);});}
+        if(settingsCategory_==2){canvas_->icon(Icon::Sun,340,352,54,{255,211,117,255});canvas_->text("SunnyTV",416,358,32,p.text);canvas_->text("让自己的媒体库，回到大屏。",340,438,22,p.text);canvas_->text("MediaIndex · STRM 与云端播放支持",340,490,18,p.secondary);}
         canvas_->text("SunnyTV Switch 0.2.9 · 基于 Android 0.2.8",336,644,16,p.secondary);contentHeight_=720;
     }
     void drawPlayer() {

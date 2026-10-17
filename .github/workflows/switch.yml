@@ -53,3 +53,23 @@ jobs:
         env:
           SDL_AUDIODRIVER: dummy
           LIBGL_ALWAYS_SOFTWARE: '1'
+  ui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libcurl4-openssl-dev libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libmpv-dev fonts-noto-cjk python3-pil xvfb
+      - name: Build native screens with the desktop platform adapter
+        run: |
+          mkdir -p switch/build/host
+          g++ -std=c++20 -O1 -g -Wall -Wextra -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 SDL2_ttf SDL2_image mpv libcurl) switch/source/*.cpp -pthread $(pkg-config --libs sdl2 SDL2_ttf SDL2_image mpv) -lcurl -o switch/build/host/ui-tests
+      - name: Render screens and exercise SDL touch navigation
+        run: xvfb-run -a python3 switch/tests/ui.py
+        env:
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: SunnyTV-Switch-UI-previews
+          path: switch/build/ui-screens/
+          if-no-files-found: ignore

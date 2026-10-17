@@ -3,7 +3,7 @@
 #include "sunny/worker.hpp"
 #include "sunny/navigation.hpp"
 #include "sunny/ui.hpp"
-#include <switch.h>
+#include "sunny/platform.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <optional>
@@ -91,6 +92,8 @@ class App {
     std::vector<Hit> hits_;
     bool dark_ = true;
     int accent_ = 2, navigationIndex_ = 0;
+    int settingsCategory_ = 0;
+    bool settingsSidebar_ = false;
     float contentHeight_ = 720;
     std::vector<CloudVariant> variants_;
     std::optional<CloudSession> cloud_;
@@ -227,6 +230,7 @@ class App {
         if (screen == Screen::Settings) { View v; v.screen=screen; show(v,false); } else loadScreen(screen,"",{},0,"",false); }
 #include "input.inc"
 
+#include "preview.inc"
 public:
     explicit App(SDL_Renderer* renderer) : renderer_(renderer) {
         mkdir(Root,0777); mkdir((std::string(Root)+"/fonts").c_str(),0777);
@@ -292,6 +296,9 @@ public:
             }
             if(busy_) { rect(850,650,380,50,{23,32,28,230}); text("正在加载… B 取消",870,662,20); }
             if(!status_.empty()) { rect(40,642,1200,40,{23,32,28,240}); text(status_,56,650,20,{214,230,165,255},1160); }
+#ifndef __SWITCH__
+            previewFrame();
+#endif
             SDL_RenderPresent(renderer_);
         if(playing_) SDL_Delay(1); else SDL_Delay(16);
         }

@@ -5,3 +5,4 @@ dist/
 *.nro
 *.map
 config.json
+__pycache__/
