@@ -57,7 +57,7 @@ GPL-3.0-only，沿用根目录 LICENSE。依赖说明见 `THIRD_PARTY.md`。
 
 ## 0.2.10 修订
 
-修复 Switch SDL 后端名为 `opengles2` 时被桌面 `opengl` 名称检查错误拒绝的问题。显式选择 Switch 的 GLES 后端，隔离 mpv 与 SDL 的 GL 状态，使用共享纹理输出并同步 GPU，增加颜色、朝向、界面叠加与上下文恢复检查。
+修复 Switch SDL 后端名为 `opengles2` 时被桌面 `opengl` 名称检查错误拒绝的问题。显式选择 Switch 的 GLES 后端，隔离 mpv 与 SDL 的 GL 状态，使用共享纹理输出、重新绑定和 GPU 同步，避免重复初始化音频。采用低开销双线性缩放，关闭持久着色器缓存；增加颜色、朝向、界面叠加与上下文恢复检查。
 
 对照 Android 0.2.8 的 `RotatingHeroCards` 修正固定大方卡、循环轮播、向下进入媒体区、Logo 左对齐及媒体库卡片尺寸；不宣称完整功能或所有页面已与 Android 一致。
 

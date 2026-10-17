@@ -11,4 +11,4 @@
 - libnx：ISC；curl：curl license；SDL2 系列：以对应包源代码的实际许可证为准。
 - UI 使用设备系统共享字体；不将其放入仓库或 NRO 重新分发。
 
-本轮新增代码未复制 Moonfin、NXMP 或 pPlay 源码。仅阅读公开构建配方用于确定可用依赖。
+本轮新增代码未复制 Moonfin、NXMP 或 pPlay 源码。阅读公开构建配方用于确定可用依赖；另参考 Switchfin（Apache-2.0）的 libmpv 图形接入设计，未复制其代码、界面或二进制，参考路径及链接见 README。
