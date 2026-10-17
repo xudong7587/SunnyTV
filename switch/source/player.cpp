@@ -60,6 +60,10 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         if(std::getenv("SUNNYTV_TEST_GL_TRACE")){option("terminal","yes");option("msg-level","all=warn");}
 #endif
         option("vo", "libmpv"); option("ao", "hos,sdl"); option("hwdec", "auto-copy");
+        // Use the low-overhead renderer on the handheld GPU. Avoid persistent program
+        // binaries across shared SDL contexts, and keep scaling to a single bilinear pass.
+        option("gpu-shader-cache", "no"); option("gpu-dumb-mode", "yes");
+        option("scale", "bilinear"); option("cscale", "bilinear"); option("dscale", "bilinear");
         option("idle", "yes"); option("keep-open", "no"); option("input-default-bindings", "no");
         option("input-vo-keyboard", "no"); option("load-scripts", "no", true);
         option("audio-channels", "stereo"); option("cache", "yes"); option("cache-secs", "20");
