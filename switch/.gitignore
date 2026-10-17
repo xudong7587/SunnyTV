@@ -1,0 +1,8 @@
+build/
+dist/
+*.elf
+*.nacp
+*.nro
+*.map
+config.json
+__pycache__/
