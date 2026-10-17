@@ -12,6 +12,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -117,15 +122,19 @@ internal fun playerClock(ms:Long):String {
     }
 }
 
-@Composable internal fun PlayerSheet(title:String,onClose:()->Unit,content:@Composable ColumnScope.()->Unit) {
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(.76f)),contentAlignment=Alignment.Center) {
-        Column(Modifier.padding(16.dp).widthIn(max=680.dp).fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState())
-            .background(Color(0xF21A1B1E),RoundedCornerShape(22.dp))
-            .border(1.dp,Color.White.copy(.14f),RoundedCornerShape(22.dp)).padding(26.dp),
-            verticalArrangement=Arrangement.spacedBy(14.dp)) {
+@Composable internal fun PlayerSheet(title:String,onClose:()->Unit,
+    headerAction:(@Composable ()->Unit)?=null,content:@Composable ColumnScope.()->Unit) {
+    val focus=remember {FocusRequester()}
+    Popup(alignment=Alignment.Center,onDismissRequest=onClose,properties=PopupProperties(focusable=true)) {
+        LaunchedEffect(Unit) {withFrameNanos {};focus.requestFocus()}
+        Column(Modifier.padding(16.dp).widthIn(max=680.dp).fillMaxWidth().heightIn(max=620.dp)
+            .focusRequester(focus).focusGroup().verticalScroll(rememberScrollState())
+            .background(Color.Black.copy(alpha=.5f),RoundedCornerShape(22.dp))
+            .border(1.dp,Color.White.copy(.14f),RoundedCornerShape(22.dp)).padding(20.dp)
+            .testTag("player:sheet"),verticalArrangement=Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Text(title,color=Color.White,fontSize=25.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                PlayerControl("关闭","close",initial=true,showFocusLabel=false,onClick=onClose)
+                headerAction?.invoke()
             }
             content()
         }

@@ -141,7 +141,6 @@ class PlayerActivity: ComponentActivity() {
     private var originalSubtitleUrl:String?=null
     private var subtitleProgressMs by mutableLongStateOf(0L)
     private var subtitleAdjustmentJob:Job?=null
-    private var subtitleToolbarHeightPx by mutableIntStateOf(0)
     private var subtitleManuallySelected=false
     private var audioOutputMaximum by mutableIntStateOf(0)
     private var audioManuallySelected=false
@@ -550,7 +549,7 @@ class PlayerActivity: ComponentActivity() {
             var video:androidx.media3.exoplayer.source.MediaSource=if(isCloudQuality)
                 androidx.media3.exoplayer.source.CloudHlsSourceFactory.create(videoItem,dataSource,pceExtractors,errorPolicy)
             else sourceFactory.createMediaSource(videoItem)
-            if(embeddedSelected && (isCloudQuality || subtitleProgressMs!=0L)) {
+            if(embeddedSelected && !isCloudQuality && subtitleProgressMs!=0L) {
                 // The original media has its own scoped transport. Never send Emby credentials
                 // through the cloud CDN client, nor use the cloud URL as the subtitle source.
                 val originalData=OkHttpDataSource.Factory(app.http.scopedClient(request.scope,playback=true))
@@ -870,7 +869,7 @@ class PlayerActivity: ComponentActivity() {
                 isFocusable=false
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
             }},update={view->
-                view.player=player;view.resizeMode=if(panel=="subtitle-timing") AspectRatioFrameLayout.RESIZE_MODE_FIT else resizeMode
+                view.player=player;view.resizeMode=resizeMode
                 // 裁切 is Media3's own ZOOM: the aspect ratio is kept and the picture is grown until
                 // the screen is filled, so a 18:9 file loses its sides and a 16:10 file its top and
                 // bottom — and nothing more. The old extra 1.12 upscale cut a further 12% of the
@@ -883,9 +882,7 @@ class PlayerActivity: ComponentActivity() {
                     appliedSubtitle[0]=key
                     applySubtitleAppearance(view,settings,subtitleInk,subtitleAccent,resolvedSubtitleFont)
                 }
-            },modifier=Modifier.fillMaxSize().padding(top=if(panel=="subtitle-timing") {
-                if(subtitleToolbarHeightPx>0) with(androidx.compose.ui.platform.LocalDensity.current) {subtitleToolbarHeightPx.toDp()} else 180.dp
-            } else 0.dp).testTag("player:video"))
+            },modifier=Modifier.fillMaxSize().testTag("player:video"))
 
             if(panel.isBlank()) PlayerTouchSurface(
                 onTap={controls=!controls},
@@ -1028,7 +1025,6 @@ class PlayerActivity: ComponentActivity() {
                             PlayerControl("清晰度："+qualityLabel(),"quality",badge=qualityBadge(),initial=returnControl=="quality") {openQualityPanel()}
                             if(context?.item?.chapters?.isNotEmpty()==true) PlayerControl("章节","chapters",initial=returnControl=="chapters") {returnControl="chapters";panel="chapters"}
                             if((quality=="original" || isCloudQuality) && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
-                            if((quality=="original" || isCloudQuality) && availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT}) PlayerControl("字幕微调","subtitle-timing",initial=returnControl=="subtitle-timing") {returnControl="subtitle-timing";openSubtitleTiming()}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
                             PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
@@ -1036,7 +1032,6 @@ class PlayerActivity: ComponentActivity() {
                             }
                             PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep",initial=returnControl=="sleep") {returnControl="sleep";panel="sleep"}
                             PlayerControl("播放信息","info",initial=returnControl=="info") {returnControl="info";panel="info"}
-                            PlayerControl("退出播放","exit") {finish()}
                         }
                     }
                 }
@@ -1144,8 +1139,7 @@ class PlayerActivity: ComponentActivity() {
     @Composable private fun SubtitleTimingPanel() {
         val enabled=request.explicitSubtitle && player!=null
         SubtitleTimingOverlay(subtitleProgressMs,enabled,
-            onAdjust={adjustSubtitleProgress(it)},onReset={adjustSubtitleProgress(-subtitleProgressMs)},
-            onClose={panel=""},onHeight={subtitleToolbarHeightPx=it})
+            onAdjust={adjustSubtitleProgress(it)},onClose={panel=""})
     }
     @Composable private fun TrackPanel() {
         val type=if(panel=="audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
@@ -1153,9 +1147,10 @@ class PlayerActivity: ComponentActivity() {
         val source by produceState<SourceConfig?>(null,request.sourceId) {
             value=withContext(Dispatchers.IO) {runCatching {app.store.sources().firstOrNull {it.id==request.sourceId}}.getOrNull()}
         }
-        PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""}) {
+        PlayerSheet(if(type==C.TRACK_TYPE_AUDIO) "音轨" else "字幕",{panel=""},headerAction=if(type==C.TRACK_TYPE_TEXT) {
+            {Text("⚙ 字幕调整",color=Color.White,modifier=Modifier.clickable {openSubtitleTiming()}.padding(10.dp))}
+        } else null) {
             if(source?.isUgreen==false && (quality=="original" || isCloudQuality) && type==C.TRACK_TYPE_TEXT && request.embyItemId.isNotBlank()) PlayerOption("查找并下载字幕") {panel="subtitle-search"}
-            if(type==C.TRACK_TYPE_TEXT) PlayerOption("字幕微调") {openSubtitleTiming()}
             if(type==C.TRACK_TYPE_TEXT) PlayerOption("关闭字幕",selected=player?.trackSelectionParameters?.disabledTrackTypes?.contains(type)==true) {
                 subtitleManuallySelected=true
                 player?.let {it.trackSelectionParameters=it.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,true).build()}
@@ -1163,8 +1158,12 @@ class PlayerActivity: ComponentActivity() {
             }
             if(groups.isEmpty()) Text("此媒体没有可选择的轨道",color=Color.White.copy(.7f),fontSize=14.sp)
             LazyColumn(Modifier.heightIn(max=500.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                groups.forEach {group->
-                    for(i in 0 until group.length) {
+                val options=groups.flatMap {g->(0 until g.length).map {g to it}}.let {entries->
+                    if(type==C.TRACK_TYPE_TEXT) entries.sortedBy {(g,i)->val f=g.getTrackFormat(i)
+                        SubtitleLanguageOrder.priority(f.language.orEmpty(),f.label.orEmpty())} else entries
+                }
+                options.forEach { (group,i)->
+                    run {
                         val format=group.getTrackFormat(i)
                         item {
                             val supported=group.isTrackSupported(i)

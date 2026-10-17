@@ -11,7 +11,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.core.network.safeError
@@ -30,7 +33,7 @@ import kotlinx.coroutines.*
     LaunchedEffect(item.key,sourceId,language) {
         if(language.isBlank()) return@LaunchedEffect
         busy=true;notice=""
-        try {results=withContext(Dispatchers.IO) {api.searchSubtitles(item.id,sourceId,language)}
+        try {results=withContext(Dispatchers.IO) {api.searchSubtitles(item.id,sourceId,language).sortedBy {SubtitleLanguageOrder.priority(it.language,it.name)}}
             if(results.isEmpty()) notice="未找到字幕，请确认 Emby 已安装并配置字幕插件，或更换语言。"
         } catch(e:CancellationException) {throw e}
         catch(e:Exception) {notice="字幕搜索失败：${safeError(e)}"}
@@ -66,14 +69,13 @@ import kotlinx.coroutines.*
 
 /** Standalone native dialog: also works in PlayerActivity without an AppModel composition local. */
 @Composable private fun SubtitleChoices(title:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,onChoose:(String)->Unit) {
-    Dialog(onDismissRequest=onDismiss) {
-        Column(Modifier.width(520.dp).heightIn(max=520.dp).background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(22.dp),
+    Popup(alignment=Alignment.Center,onDismissRequest=onDismiss,properties=PopupProperties(focusable=true)) {
+        Column(Modifier.widthIn(max=520.dp).fillMaxWidth().padding(16.dp).heightIn(max=520.dp).background(Color.Black.copy(alpha=.5f),RoundedCornerShape(18.dp)).padding(22.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(title,color=SunnyColors.Text,fontSize=18.sp)
             LazyColumn(Modifier.weight(1f,false),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 items(choices,key={it.first}) {(id,label)->SubtitleChoiceRow(label,id==choices.firstOrNull()?.first) {onChoose(id)}}
             }
-            SubtitleChoiceRow("关闭",choices.isEmpty(),onDismiss)
         }
     }
 }
@@ -82,6 +84,6 @@ import kotlinx.coroutines.*
     var focused by remember {mutableStateOf(false)}
     LaunchedEffect(Unit) {if(initial) {withFrameNanos {};focus.requestFocus()}}
     Text(label,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.fillMaxWidth().focusRequester(focus)
-        .onFocusChanged {focused=it.isFocused}.background(if(focused) SunnyColors.SurfaceRaised else SunnyColors.Surface,RoundedCornerShape(10.dp))
+        .onFocusChanged {focused=it.isFocused}.background(if(focused) Color.White.copy(alpha=.14f) else Color.Transparent,RoundedCornerShape(10.dp))
         .border(1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(10.dp)).clickable(onClick=onClick).padding(12.dp))
 }

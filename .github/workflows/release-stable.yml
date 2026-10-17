@@ -1,10 +1,10 @@
 name: Publish verified SunnyTV stable
 on:
   workflow_dispatch:
-  # One-off publication requested for 0.2.7; main-only and immutable-release checks remain.
+  # One-off publication requested for 0.2.8; main-only and immutable-release checks remain.
   push:
     branches: [main]
-    paths: ['docs/RELEASE-0.2.7.md']
+    paths: ['docs/RELEASE-0.2.8.md']
 permissions:
   contents: write
 concurrency:

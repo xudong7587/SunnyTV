@@ -81,9 +81,35 @@ class CloudSubtitleContinuityTest {
         override fun close() {server.close();thread.join(1000)}
     }
 
-    @Test fun embeddedSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(true)
+    @Test fun cloudDoesNotReopenOriginalForEmbeddedSubtitles() = verifyContinuity(true)
     @Test fun externalSubtitleSurvivesAutomaticDiscoveryAndQualitySwitch() = verifyContinuity(false)
-    @Test fun embeddedSubtitleSurvivesCloudWithoutAnExtractionEndpoint() = verifyContinuity(true,false)
+    @Test fun cloudDoesNotRequireAnEmbeddedSubtitleExtractionEndpoint() = verifyContinuity(true,false)
+
+    @Test fun popupKeepsVideoPlayingAndOutsideTapDismissesWithoutResizing() {
+        Fixture().use {f->
+            val instrumentation=InstrumentationRegistry.getInstrumentation()
+            val context=instrumentation.targetContext
+            ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,
+                PlaybackRequest("",f.root+"/api/play/fixture","菜单播放连续性"))).use {scenario->
+                rule.waitUntil(15000) {var playing=false;scenario.onActivity {playing=player(it).isPlaying};playing}
+                val before=rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot
+                var p:ExoPlayer?=null;var position=0L
+                scenario.onActivity {p=player(it);position=p!!.currentPosition}
+                rule.onNodeWithTag("player:speed").performClick()
+                rule.onNodeWithTag("player:close").assertDoesNotExist()
+                rule.waitUntil(5000) {var advanced=false;scenario.onActivity {assertSame(p,player(it));advanced=player(it).currentPosition>position+1000};advanced}
+                assertEquals(before,rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot)
+                val size=context.resources.displayMetrics
+                val time=android.os.SystemClock.uptimeMillis()
+                for(action in listOf(android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP)) {
+                    val event=android.view.MotionEvent.obtain(time,time+20,action,size.widthPixels/2f,size.heightPixels-4f,0)
+                    instrumentation.uiAutomation.injectInputEvent(event,true);event.recycle()
+                }
+                rule.waitUntil(5000) {rule.onAllNodesWithTag("player:sheet").fetchSemanticsNodes().isEmpty()}
+                scenario.onActivity {assertTrue(player(it).playWhenReady)}
+            }
+        }
+    }
 
     @Test fun cloudRecoversFromInterruptedLaterSegmentWithoutRecreatingPlayer() {
         Fixture(pceAudio=true,dropSegments=true).use {f->
@@ -193,6 +219,7 @@ class CloudSubtitleContinuityTest {
                     val text=old!!.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}
                     assertTrue(text.any {g->(0 until g.length).any {i->g.isTrackSelected(i) && (SubtitleSelection.stableId(g.getTrackFormat(i).id.orEmpty()).startsWith("emby-sub:") != embedded)}})
                 }
+                val originalReads=f.paths.count {it=="/api/play/fixture"}
                 rule.onNodeWithTag("player:quality").performClick()
                 rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
                 var diagnostic=""
@@ -200,7 +227,7 @@ class CloudSubtitleContinuityTest {
                     var ready=false
                     scenario.onActivity {a->
                         val p=player(a)
-                        ready=p!==old && p.currentCues.cues.map {it.text.toString()}==expectedCues
+                        ready=p!==old && p.playbackState==androidx.media3.common.Player.STATE_READY && (embedded || p.currentCues.cues.map {it.text.toString()}==expectedCues)
                         val req=PlayerActivity::class.java.getDeclaredField("request").apply {isAccessible=true}.get(a) as PlaybackRequest
                         diagnostic="state=${p.playbackState}; id=${req.subtitleTrackId}; title=${req.subtitleTitle}; ordinal=${req.subtitleOrdinal}; tracks="+
                             p.currentTracks.groups.filter {it.type==C.TRACK_TYPE_TEXT}.flatMap {g->(0 until g.length).map {i->"${g.getTrackFormat(i).id}:${g.isTrackSelected(i)}"}}+
@@ -212,10 +239,15 @@ class CloudSubtitleContinuityTest {
                     val p=player(a)
                     assertFalse(p.playWhenReady)
                     assertTrue("Paused quality switch: expected $pausedPosition, got ${p.currentPosition}",kotlin.math.abs(pausedPosition-p.currentPosition)<=1000L)
-                    assertTrue(p.currentTracks.groups.any {it.type==C.TRACK_TYPE_TEXT && it.isSelected})
+                    if(!embedded) assertTrue(p.currentTracks.groups.any {it.type==C.TRACK_TYPE_TEXT && it.isSelected})
                 }
                 assertEquals(1,f.paths.count {it=="/api/cloud-video/discover"})
-                if(embedded) assertFalse("Must not rely on server-side embedded extraction",f.paths.contains("/subtitle.vtt"))
+                if(embedded) {
+                    assertEquals("Cloud must not open the original media for subtitles",originalReads,f.paths.count {it=="/api/play/fixture"})
+                    scenario.onActivity {player(it).play()}
+                    rule.waitUntil(10000) {var advanced=false;scenario.onActivity {advanced=player(it).currentPosition>pausedPosition+1500};advanced}
+                    return
+                }
                 rule.onNodeWithTag("player:subtitle").performClick()
                 rule.onNodeWithText("关闭字幕").performClick()
                 rule.onNodeWithTag("player:quality").performClick()
@@ -255,11 +287,13 @@ class CloudSubtitleContinuityTest {
                 scenario.onActivity {player(it).pause();player(it).seekTo(12_000);frozen=12_000}
                 awaitCue("MIDDLE")
                 rule.waitUntil(15000) {f.paths.contains("/api/cloud-video/discover")}
-                rule.onNodeWithTag("player:subtitle-timing").performClick()
+                rule.onNodeWithTag("player:subtitle").performClick()
+                rule.onNodeWithText("⚙ 字幕调整").performClick()
                 rule.onNodeWithTag("player:subtitle").assertDoesNotExist()
                 val toolbar=rule.onNodeWithTag("subtitle-timing:overlay").fetchSemanticsNode().boundsInRoot
                 val video=rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot
-                assertTrue("Toolbar must reserve space above the complete video and subtitles",video.top>=toolbar.height)
+                assertEquals("Opening timing must not move the video",0f,video.top,1f)
+                assertTrue(toolbar.top>=video.top)
                 for((step,cue) in listOf(-3000L to "EARLY",-500L to "EARLY",10_000L to "MIDDLE",
                     3000L to "LATE",500L to "LATE",-10_000L to "MIDDLE")) {
                     var old:ExoPlayer?=null
@@ -272,7 +306,7 @@ class CloudSubtitleContinuityTest {
                 }
                 rule.onNodeWithTag("subtitle-timing:-3000").performClick()
                 awaitCue("EARLY")
-                rule.onNodeWithTag("subtitle-timing:close").performClick()
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
                 rule.onNodeWithTag("player:quality").performClick()
                 rule.onNodeWithText("115 云端 · 4K · 7.5 Mbps").performClick()
                 var cloudDiagnostic=""
@@ -285,8 +319,9 @@ class CloudSubtitleContinuityTest {
                 awaitCue("LATE")
                 scenario.onActivity {player(it).seekTo(12_000)}
                 awaitCue("EARLY")
-                rule.onNodeWithTag("player:subtitle-timing").performClick()
-                rule.onNodeWithTag("subtitle-timing:reset").performClick()
+                rule.onNodeWithTag("player:subtitle").performClick()
+                rule.onNodeWithText("⚙ 字幕调整").performClick()
+                rule.onNodeWithTag("subtitle-timing:3000").performClick()
                 awaitCue("MIDDLE")
                 rule.onNodeWithTag("subtitle-timing:offset").assertTextContains("+0.0 秒",substring=true)
             }
