@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     const char* driver=std::getenv("SUNNYTV_TEST_RENDER_DRIVER");
     if(!driver)driver="opengl";
     SDL_SetHint(SDL_HINT_RENDER_DRIVER,driver);
-    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO) != 0) return 3;
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) return 3;
     auto* window=SDL_CreateWindow("SunnyTV playback test",0,0,1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_HIDDEN);
     auto* renderer=window?SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED):nullptr;
     int result=1;

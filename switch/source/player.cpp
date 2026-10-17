@@ -57,7 +57,7 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
     try {
         option("config", "no"); option("terminal", "no"); option("msg-level", "all=no");
 #ifndef __SWITCH__
-        if(std::getenv("SUNNYTV_TEST_GL_TRACE")){option("terminal","yes");option("msg-level","all=warn,libmpv_render=debug");}
+        if(std::getenv("SUNNYTV_TEST_GL_TRACE")){option("terminal","yes");option("msg-level","all=warn");}
 #endif
         option("vo", "libmpv"); option("ao", "hos,sdl"); option("hwdec", "auto-copy");
         option("idle", "yes"); option("keep-open", "no"); option("input-default-bindings", "no");
@@ -76,6 +76,7 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         // RGBA bytes on little endian machines; GLES2 supports this format natively.
         video_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 1280, 720);
         if (!video_) throw std::runtime_error("无法创建视频画面");
+        SDL_SetTextureBlendMode(video_,SDL_BLENDMODE_NONE);
         SDL_RenderFlush(renderer_);
         if (SDL_GL_BindTexture(video_, nullptr, nullptr) != 0) throw std::runtime_error("无法绑定视频画面");
         GLint texture = 0;
@@ -176,21 +177,14 @@ void Player::draw() {
         mpv_render_param params[] = {{MPV_RENDER_PARAM_OPENGL_FBO, &fbo}, {MPV_RENDER_PARAM_FLIP_Y, &flip}, {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block}, {MPV_RENDER_PARAM_INVALID, nullptr}};
         const int result=mpv_render_context_render(context_, params);
         if(result<0)throw std::runtime_error(std::string("视频画面输出失败：")+mpv_error_string(result));
-#ifndef __SWITCH__
-        if(std::getenv("SUNNYTV_TEST_GL_TRACE")) {
-            static int samples=0;
-            if(state_.position>.5&&samples++<2) {
-                using ReadPixels=void (*)(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void*);
-                gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER,fbo_);
-                unsigned char pixel[4]{};gl<ReadPixels>("glReadPixels")(640,80,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
-                std::fprintf(stderr,"Video FBO pixel: %u %u %u %u; frame %.3f\n",pixel[0],pixel[1],pixel[2],pixel[3],state_.position);
-                gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER,0);
-            }
-        }
-#endif
+
         // Shared texture writes must finish before the UI context samples the frame.
         gl<Finish>("glFinish")();
     }
+    // Rebind after cross-context writes: shared texture changes become visible to the
+    // consuming context, and SDL invalidates its cached binding before the copy.
+    if(SDL_GL_BindTexture(video_,nullptr,nullptr)!=0)throw std::runtime_error("无法读取视频画面");
+    SDL_GL_UnbindTexture(video_);
     SDL_RenderCopy(renderer_, video_, nullptr, nullptr);
 }
 void Player::presented() {

@@ -328,7 +328,7 @@ int main(int, char**) {
     SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl");
 #endif
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");
-    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMECONTROLLER)<0) return 1;
+    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)<0) return 1;
     TTF_Init(); IMG_Init(IMG_INIT_JPG|IMG_INIT_PNG);
     SDL_Window* window=SDL_CreateWindow("SunnyTV",0,0,1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
     SDL_Renderer* renderer=window?SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC):nullptr;
