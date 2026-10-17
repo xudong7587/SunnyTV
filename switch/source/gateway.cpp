@@ -72,7 +72,7 @@ void Gateway::handle(int client) {
         if (!decided) { pending.append(bytes, n); if (!hls && pending.size() < 10) return true; hls = hls || pending.rfind("#EXTM3U", 0) == 0; decided = true; if (!hls) { if (!startBody()) return false; if (method != "HEAD" && !sendAll(client, pending)) return false; pending.clear(); } }
         else if (hls) pending.append(bytes, n);
         else if (method != "HEAD" && !sendAll(client, bytes, n)) return false;
-        return (!hls || pending.size() <= 2 * 1024 * 1024) && method != "HEAD";
+        return (!hls || pending.size() <= 2 * 1024 * 1024) && (hls || method != "HEAD");
     };
     try {
         http_.stream(req, sink, &stopping_);

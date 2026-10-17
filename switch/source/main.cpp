@@ -41,7 +41,7 @@ bool safeImage(const std::string& s) {
 }
 std::string clockTime(double value) { int t = int(std::max(0.0, value)); char s[32]; std::snprintf(s, sizeof s, "%02d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); return s; }
 enum class Screen { Connect, Home, Libraries, Grid, Detail, Settings };
-struct View { Screen screen = Screen::Home; std::string title, parent; Media container; Page page; int selected = 0, offset = 0; };
+struct View { Screen screen = Screen::Home; std::string title, parent, search; Media container; Page page; int selected = 0, offset = 0; };
 class App {
     SDL_Renderer* renderer_;
     TTF_Font* normal_ = nullptr;
@@ -90,7 +90,7 @@ class App {
         for (size_t p = 0; p < s.size() && lines < maxLines;) { size_t n = 1; auto c = static_cast<unsigned char>(s[p]); if (c >= 0xf0) n = 4; else if (c >= 0xe0) n = 3; else if (c >= 0xc0) n = 2; auto next = s.substr(p, n); p += n; int w = 0; TTF_SizeUTF8(normal_, (line + next).c_str(), &w, nullptr); if (next == "\n" || w > width) { text(line, x, y + lines * 34, 24, {171,183,173,255}, width); ++lines; line = next == "\n" ? "" : next; } else line += next; }
         if (lines < maxLines) text(line, x, y + lines * 34, 24, {171,183,173,255}, width);
     }
-    template <typename F> void task(F f) { if (busy_) return; api_.cancel = false; busy_ = true; pending_ = api_.submit(std::move(f)); }
+    template <typename F> void task(F f) { if (busy_) return; api_.cancel = false; busy_ = true; pending_ = api_.submit([f=std::move(f)]() mutable -> std::function<void()> { return f(); }); }
     void save() {
         config_["base"] = base_; config_["username"] = username_; config_["device"] = device_; config_["ugreen"] = ugreen_; config_["remember"] = remember_;
         config_["userId"] = remember_ ? account_.userId : ""; config_["token"] = remember_ ? account_.token : ""; writeConfig(config_);
@@ -103,12 +103,12 @@ class App {
             if (screen == Screen::Home) { auto resume = source.resume(); auto latest = source.latest(); page = resume; std::set<std::string> seen; for (const auto& m : resume.items) seen.insert(m.id); for (auto& m : latest.items) if (seen.insert(m.id).second) page.items.push_back(std::move(m)); page.total = int64_t(page.items.size()); title = "继续观看 · 最新入库"; }
             else if (screen == Screen::Libraries) { page = source.views(); title = "我的媒体库"; }
             else { page = container.id.empty() ? source.list(parent, offset, search) : source.children(container, offset); title = search.empty() ? container.title : "搜索：" + search; }
-            return [=, this]() mutable { View next; next.screen = screen; next.title = title; next.parent = parent; next.container = container; next.offset = offset; next.page = std::move(page); show(std::move(next), push); };
+            return [=, this]() mutable { View next; next.screen = screen; next.title = title; next.parent = parent; next.search = search; next.container = container; next.offset = offset; next.page = std::move(page); show(std::move(next), push); };
         });
     }
     void login() {
         auto base = base_, name = username_, password = password_; bool ugreen = ugreen_;
-        task([=, this] { auto account = Emby::login(http_, base, name, password, device_, ugreen, &api_.cancel); return [this, account]() { account_ = account; base_ = account.base; password_.assign(password_.size(), '\0'); password_.clear(); save(); history_.clear(); loadScreen(Screen::Home, "", {}, 0, "", false); }; });
+        task([=, this] { auto account = Emby::login(http_, base, name, password, device_, ugreen, &api_.cancel); return [this, account]() { clearImages(); account_ = account; base_ = account.base; password_.assign(password_.size(), '\0'); password_.clear(); save(); history_.clear(); loadScreen(Screen::Home, "", {}, 0, "", false); }; });
     }
     void selectMedia(const Media& m) {
         if (m.folder) { loadScreen(Screen::Grid, m.id, m); return; }
@@ -192,7 +192,7 @@ class App {
         if (osd) { rect(40,582,1200,108,{0,0,0,140}); text(player_->playback().title,60,594,24,{243,245,239,255},1140); text(clockTime(s.position) + " / " + clockTime(s.duration),60,630,20); text("X 暂停 · L/R ±10秒 · ＋ 菜单 · B 返回",550,630,20); if (s.duration > 0) rect(60,676,int(1140 * std::clamp(s.position / s.duration,0.0,1.0)),4,{214,230,165,255}); }
         if (menu_) {
             rect(340,80,620,480,{0,0,0,128});
-            if (!variants_.empty()) { text("云端清晰度",370,98,32); for (size_t i=0;i<variants_.size() && i<6;++i) button(variants_[i].label(),int(i),menuIndex_,370,150+int(i)*60,560); }
+            if (!variants_.empty()) { text("云端清晰度",370,98,32); for (size_t i=size_t(menuIndex_/6)*6;i<variants_.size() && i<size_t(menuIndex_/6)*6+6;++i) button(variants_[i].label(),int(i),menuIndex_,370,150+int(i%6)*60,560); }
             else { std::vector<std::string> labels = {"切换音轨", "切换字幕 / 关闭字幕", "字幕调整：−10  −3  −0.5  归零  +0.5  +3  +10", "115 云端清晰度", std::string("播放信息：") + (showInfo_ ? "开" : "关")}; text("播放菜单",370,98,32); for (size_t i=0;i<labels.size();++i) button(labels[i],int(i),menuIndex_,370,150+int(i)*68,560); if(menuIndex_==2) text("左右选择，A 应用：" + std::to_string(std::array<double,7>{-10,-3,-0.5,0,0.5,3,10}[subtitleStep_]) + " 秒 · 当前 " + std::to_string(player_->subtitleDelay()) + " 秒",370,504,20,{214,230,165,255},560); }
         }
     }
@@ -203,7 +203,7 @@ class App {
         if (playing_) {
             if (menu_) {
                 if (down & HidNpadButton_B) { if (!variants_.empty()) variants_.clear(); else menu_=false; return; }
-                int count=variants_.empty()?5:int(std::min<size_t>(6,variants_.size()));
+                int count=variants_.empty()?5:int(variants_.size());
                 if (down & HidNpadButton_Up) menuIndex_=std::max(0,menuIndex_-1); if(down & HidNpadButton_Down) menuIndex_=std::min(count-1,menuIndex_+1);
                 if (variants_.empty() && menuIndex_==2) { if(down & HidNpadButton_Left) subtitleStep_=std::max(0,subtitleStep_-1); if(down & HidNpadButton_Right) subtitleStep_=std::min(6,subtitleStep_+1); }
                 if(down & HidNpadButton_A) { if(!variants_.empty()) chooseCloud(variants_[menuIndex_]); else switch(menuIndex_) { case 0: player_->cycleAudio(); break; case 1: player_->cycleSubtitle(); break; case 2: if(subtitleStep_==3) player_->setSubtitleDelay(0); else player_->subtitleDelay(std::array<double,7>{-10,-3,-0.5,0,0.5,3,10}[subtitleStep_]); break; case 3: cloudMenu(); break; case 4: showInfo_=!showInfo_; break; } }
@@ -228,8 +228,8 @@ class App {
         int count=int(view_.page.items.size()); if(!count) return;
         if(down & HidNpadButton_Left) view_.selected=std::max(0,view_.selected-1); if(down & HidNpadButton_Right) view_.selected=std::min(count-1,view_.selected+1); if(down & HidNpadButton_Up) view_.selected=std::max(0,view_.selected-6); if(down & HidNpadButton_Down) view_.selected=std::min(count-1,view_.selected+6);
         if(down & HidNpadButton_A) selectMedia(view_.page.items[view_.selected]);
-        if(down & HidNpadButton_ZR) { if(view_.screen==Screen::Grid && view_.offset+count<view_.page.total) loadScreen(Screen::Grid,view_.parent,view_.container,view_.offset+count,"",false); }
-        if(down & HidNpadButton_ZL) { if(view_.screen==Screen::Grid && view_.offset>0) loadScreen(Screen::Grid,view_.parent,view_.container,std::max(0,view_.offset-60),"",false); }
+        if(down & HidNpadButton_ZR) { if(view_.screen==Screen::Grid && view_.offset+count<view_.page.total) loadScreen(Screen::Grid,view_.parent,view_.container,view_.offset+count,view_.search,false); }
+        if(down & HidNpadButton_ZL) { if(view_.screen==Screen::Grid && view_.offset>0) loadScreen(Screen::Grid,view_.parent,view_.container,std::max(0,view_.offset-60),view_.search,false); }
     }
 public:
     explicit App(SDL_Renderer* renderer) : renderer_(renderer) {
