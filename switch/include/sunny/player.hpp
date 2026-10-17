@@ -15,6 +15,8 @@ struct PlayerState {
 };
 class Player {
     SDL_Renderer* renderer_;
+    SDL_Window* window_ = nullptr;
+    SDL_GLContext videoContext_ = nullptr;
     SDL_Texture* video_ = nullptr;
     mpv_handle* mpv_ = nullptr;
     mpv_render_context* context_ = nullptr;
@@ -32,6 +34,7 @@ public:
     void close();
     void poll();
     void draw();
+    void presented();
     void pause();
     void seek(double seconds);
     void cycleAudio();

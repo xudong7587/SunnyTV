@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Render the actual SDL app with synthetic Emby data and exercise its finger event handlers."""
+import base64
+import io
 import functools
 import http.server
 import json
@@ -116,11 +118,22 @@ if __name__ == '__main__':
         env['SUNNYTV_UI_PREVIEW'] = str(output)
         try:
             subprocess.run([str(ROOT / 'build/host/ui-tests')], cwd=tmp, env=env, check=True, timeout=45)
-            for name in ['home', 'libraries', 'library', 'grid', 'detail', 'settings', 'appearance', 'light']:
+            for name in ['home', 'home-rotated', 'libraries', 'library', 'grid', 'detail', 'settings', 'appearance', 'light']:
                 with Image.open(output / f'{name}.png') as image:
                     assert image.size == (1280, 720)
                     assert len(image.resize((128, 72)).getcolors(10000)) > 100, f'Blank screen: {name}'
-            print('8 rendered screens verified; actual SDL finger events completed navigation and theme changes')
+            # A real finger swipe must replace the artwork inside the same featured square.
+            before = Image.open(output / 'home.png').convert('RGB')
+            after = Image.open(output / 'home-rotated.png').convert('RGB')
+            assert before.crop((560, 355, 860, 650)).tobytes() != after.crop((560, 355, 860, 650)).tobytes(), 'Hero swipe did not change fixed-slot artwork'
+            print('9 rendered screens verified; real finger swipe rotated the fixed hero, navigation and theme changes passed')
+            review = Image.new('RGB', (960, 810))
+            for index, name in enumerate(['home', 'home-rotated', 'library', 'grid', 'detail', 'light']):
+                with Image.open(output / f'{name}.png') as screen:
+                    review.paste(screen.convert('RGB').resize((480, 270)), ((index % 2) * 480, (index // 2) * 270))
+            stream = io.BytesIO()
+            review.save(stream, format='JPEG', quality=85)
+            print('UI_REVIEW_JPEG_BASE64=' + base64.b64encode(stream.getvalue()).decode())
         finally:
             server.shutdown()
             server.server_close()

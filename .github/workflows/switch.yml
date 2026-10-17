@@ -36,7 +36,7 @@ jobs:
           dkp-pacman -Q > switch/dist/TOOLCHAIN_PACKAGES.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: SunnyTV-Switch-0.2.9
+          name: SunnyTV-Switch-0.2.10
           path: switch/dist/
           if-no-files-found: error
   player-smoke:

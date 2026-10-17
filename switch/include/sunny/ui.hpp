@@ -25,7 +25,7 @@ public:
     void round(Bounds, float radius, SDL_Color);
     void outline(Bounds, float radius, SDL_Color, int thickness = 2);
     void gradient(Bounds, SDL_Color a, SDL_Color b, bool horizontal = false);
-    void image(SDL_Texture*, Bounds, float radius = 0, bool cover = true, SDL_Color tint = {255,255,255,255});
+    void image(SDL_Texture*, Bounds, float radius = 0, bool cover = true, SDL_Color tint = {255,255,255,255}, bool alignStart = false);
     void text(const std::string&, float x, float y, int size, SDL_Color, float maxWidth = 1240);
     void wrap(const std::string&, float x, float y, float width, int size, int lines, SDL_Color);
     void icon(Icon, float x, float y, float size, SDL_Color);

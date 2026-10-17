@@ -92,6 +92,7 @@ class App {
     std::vector<Hit> hits_;
     bool dark_ = true;
     int accent_ = 2, navigationIndex_ = 0;
+    int heroLeftTravel_ = 0;
     int settingsCategory_ = 0;
     bool settingsSidebar_ = false;
     float contentHeight_ = 720;
@@ -127,7 +128,13 @@ class App {
         config_["userId"] = remember_ ? account_.userId : ""; config_["token"] = remember_ ? account_.token : ""; writeConfig(config_);
     }
     void clearImages() { for (auto& [key, image] : imageCache_) if (image.texture) SDL_DestroyTexture(image.texture); imageCache_.clear(); }
-    void show(View next, bool push = true) { if (push) history_.push_back(view_); view_ = std::move(next); }
+    void show(View next, bool push = true) { if (push) history_.push_back(view_); view_ = std::move(next); heroLeftTravel_=0; }
+    int heroCount() const { return std::min(view_.screen==Screen::Home?7:8,int(view_.page.items.size())); }
+    void rotateHero(int direction) {
+        int count=heroCount();if(!count)return;
+        view_.heroIndex=(view_.heroIndex+direction+count)%count;
+        heroLeftTravel_=direction<0?heroLeftTravel_+1:0;
+    }
     void loadScreen(Screen screen, std::string parent = "", Media container = {}, int offset = 0, std::string search = "", bool push = true) {
         auto a = account_; task([=, this] {
             Emby source(http_, a, &api_.cancel); Page page, libraries, resume; std::string title;
@@ -303,6 +310,7 @@ public:
             previewFrame();
 #endif
             SDL_RenderPresent(renderer_);
+            if(playing_)player_->presented();
         if(playing_) SDL_Delay(1); else SDL_Delay(16);
         }
         stopPlayer();
@@ -314,7 +322,12 @@ int main(int, char**) {
     if(R_FAILED(plInitialize(PlServiceType_User))) { socketExit(); return 1; }
     curl_global_init(CURL_GLOBAL_DEFAULT);
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS,"0");
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl"); SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");
+#ifdef __SWITCH__
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengles2");
+#else
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl");
+#endif
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMECONTROLLER)<0) return 1;
     TTF_Init(); IMG_Init(IMG_INIT_JPG|IMG_INIT_PNG);
     SDL_Window* window=SDL_CreateWindow("SunnyTV",0,0,1280,720,SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);

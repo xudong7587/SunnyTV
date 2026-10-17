@@ -77,11 +77,11 @@
         float titleY=(home?386.f:432.f)-scroll;
         if(!home) canvas_->text("媒体库 / "+view_.container.title,40,390-scroll,16,p.accent,470);
         auto* logo=imageFor(*item,"Logo",640);
-        if(logo&&dark_) canvas_->image(logo,{40,titleY-12,450,92},0,false);
-        else canvas_->text(item->title,40,titleY,48,p.text,468);
+        if(logo&&dark_) canvas_->image(logo,{40,titleY-12,450,92},0,false,{255,255,255,255},true);
+        else canvas_->text(item->title,40,titleY,52,p.text,468);
         std::string metadata=item->year?std::to_string(item->year):item->type;
         if(!item->subtitle.empty()) metadata+="  ·  "+item->subtitle;
-        if(item->rating>0) {char score[24];std::snprintf(score,sizeof score,"    ★ %.1f",item->rating);metadata+=score;}
+        if(!home&&item->rating>0) {char score[24];std::snprintf(score,sizeof score,"    ★ %.1f",item->rating);metadata+=score;}
         canvas_->text(metadata,40,(home?470.f:515.f)-scroll,18,p.secondary,470);
         canvas_->wrap(item->overview.empty()?"来自你的媒体库":item->overview,40,(home?510.f:556.f)-scroll,465,18,home?2:1,p.text);
         if(home) {
@@ -109,12 +109,14 @@
             canvas_->text("向下查看更多媒体 ↓",40,678-scroll,16,p.secondary);
             hit({40,671-scroll,430,36},[this](Point){view_.section=3;view_.selected=0;scrollTo(640);});
         }
-        int count=int(view_.page.items.size()), first=std::max(0,view_.heroIndex-3);
-        first=std::min(first,std::max(0,count-7)); float x=home?540.f:564.f, y=(home?336.f:350.f)-scroll;
-        int visible=std::min(7,count-first); float big=home?346.f:346.f, gap=10;
+        // Match RotatingHeroCards: the featured square never moves; only its content and
+        // the following, wrapping strips rotate. The strips do not receive D-pad focus.
+        int count=heroCount(); float x=home?540.f:564.f, y=(home?336.f:350.f)-scroll;
+        int visible=count; float big=346.f, gap=10;
         float narrow=visible>1?std::max(34.f,(1240-x-big-gap*(visible-1))/(visible-1)):48;
-        for(int index=first;index<first+visible;++index) {
-            const auto& candidate=view_.page.items[size_t(index)]; bool active=index==view_.heroIndex; float width=active?big:narrow;
+        for(int slot=0;slot<visible;++slot) {
+            int index=(view_.heroIndex+slot)%count;
+            const auto& candidate=view_.page.items[size_t(index)]; bool active=slot==0; float width=active?big:narrow;
             Bounds bounds{x,y,width,346};
             canvas_->round(bounds,22,p.surface); canvas_->image(imageFor(candidate,"Primary",480),bounds,22,true);
             if(active) {
@@ -122,11 +124,11 @@
                 canvas_->text(candidate.title,x+18,y+294,25,{245,245,242,255},width-36);
                 if(view_.section==0) canvas_->outline(bounds,22,p.accent,2);
             }
-            hit(bounds,[this,index,active](Point){if(active)selectMedia(view_.page.items[size_t(index)]);else{view_.heroIndex=index;view_.section=0;}});
+            hit(bounds,[this,index,active](Point){if(active)selectMedia(view_.page.items[size_t(index)]);else{view_.heroIndex=index;view_.section=0;heroLeftTravel_=0;}});
             x+=width+gap;
         }
     }
-    float postersTop() const { return view_.screen==Screen::Home?892.f+float(std::max<size_t>(1,(view_.libraries.items.size()+4)/5))*190.f:view_.hero?870.f:244.f; }
+    float postersTop() const { return view_.screen==Screen::Home?1120.f:view_.hero?870.f:244.f; }
     void drawGrid() {
         auto p=palette(); bool home=view_.screen==Screen::Home, libraries=view_.screen==Screen::Libraries;
         if(hasHero()) drawHero();
@@ -134,16 +136,18 @@
             float y=758-view_.scroll;
             canvas_->text("我的媒体库",40,y,27,p.text);
             for(size_t i=0;i<view_.libraries.items.size();++i) {
-                const auto media=view_.libraries.items[i]; float x=40+float(i%5)*242, top=y+54+float(i/5)*190;
+                int first=std::max(0,view_.section==2?view_.selected-2:0);
+                const auto media=view_.libraries.items[i]; float x=40+float(int(i)-first)*344, top=y+54;
+                if(int(i)<first||x>1280)continue;
                 if(top+176<100||top>720) continue;
-                Bounds bounds{x,top,222,125}; artwork(media,bounds,16,false);
+                Bounds bounds{x,top,320,180}; artwork(media,bounds,16,false);
                 if(view_.section==2&&view_.selected==int(i))canvas_->outline(bounds,16,p.accent);
-                canvas_->text(media.title,x,top+136,18,p.text,222);
-                hit({x,top,222,164},[this,media](Point){selectMedia(media);});
+                canvas_->text(media.title,x,top+190,20,p.text,320);
+                hit({x,top,320,224},[this,media](Point){selectMedia(media);});
             }
         }
         float header=(home?postersTop()-56:view_.hero?770.f:142.f)-view_.scroll;
-        canvas_->text(home?"最新入库":libraries?"我的媒体库":view_.title+" · 全部内容",40,header,27,p.text,800);
+        canvas_->text(home?"最新入库":libraries?"我的媒体库":view_.title+" · 全部内容",40,header,27,p.text,740);
         canvas_->text(std::to_string(view_.page.total)+" 个条目",home?210:900,header+6,16,p.secondary,300);
         float top=postersTop(); int columns=libraries?3:6;
         float tileWidth=libraries?376.f:181.f, tileHeight=libraries?212.f:272.f, stride=libraries?406.f:206.f, rowHeight=libraries?275.f:346.f;
@@ -168,9 +172,9 @@
         }
     }
     void drawDetail() {
-        auto p=palette(); float y=250-view_.scroll;
-        if(auto* logo=dark_?imageFor(detail_,"Logo",800):nullptr)canvas_->image(logo,{40,y-65,680,100},0,false);
-        else canvas_->text(detail_.title,40,y,44,p.text,1000);
+        auto p=palette(); float y=340-view_.scroll;
+        if(auto* logo=dark_?imageFor(detail_,"Logo",800):nullptr)canvas_->image(logo,{40,y-65,680,100},0,false,{255,255,255,255},true);
+        else canvas_->text(detail_.title,40,y,51,p.text,1000);
         std::string metadata=detail_.year?std::to_string(detail_.year):detail_.type;
         if(detail_.rating>0){char score[24];std::snprintf(score,sizeof score,"  ·  ★ %.1f",detail_.rating);metadata+=score;}
         if(detail_.durationMs>0)metadata+="  ·  "+std::to_string(detail_.durationMs/60000)+" 分钟";
@@ -183,8 +187,7 @@
             canvas_->text(i?"从头播放":detail_.positionMs>0?"继续播放":"播放",b.x+60,b.y+17,20,focus?p.accent:p.text,140);
             hit(b,[this,i](Point){startMedia(i==1);});
         }
-        canvas_->text("剧情简介",40,y+260,25,p.text);
-        canvas_->wrap(detail_.overview.empty()?"暂无简介":detail_.overview,40,y+310,1080,20,7,p.text);
+        canvas_->wrap(detail_.overview.empty()?"暂无简介":detail_.overview,40,y+245,1080,19,8,p.text);
         contentHeight_=std::max(720.f,y+view_.scroll+590);
     }
     std::vector<int> settingsRows() const { return settingsCategory_==0?std::vector<int>{0,1,4}:settingsCategory_==1?std::vector<int>{2,3}:std::vector<int>{5}; }
@@ -196,7 +199,7 @@
         auto visible=settingsRows();
         for(size_t index=0;index<visible.size();++index){int i=visible[index],y=218+int(index)*66;button(rows[size_t(i)],i,view_.section==-1||settingsSidebar_?-1:view_.selected,332,y,874);hit({332,float(y),874,52},[this,i](Point){view_.selected=i;settingsSidebar_=false;input(HidNpadButton_A);});}
         if(settingsCategory_==2){canvas_->icon(Icon::Sun,340,352,54,{255,211,117,255});canvas_->text("SunnyTV",416,358,32,p.text);canvas_->text("让自己的媒体库，回到大屏。",340,438,22,p.text);canvas_->text("MediaIndex · STRM 与云端播放支持",340,490,18,p.secondary);}
-        canvas_->text("SunnyTV Switch 0.2.9 · 基于 Android 0.2.8",336,644,16,p.secondary);contentHeight_=720;
+        canvas_->text("SunnyTV Switch 0.2.10 · 基于 Android 0.2.8",336,644,16,p.secondary);contentHeight_=720;
     }
     void drawPlayer() {
         auto p=palette();auto& s=player_->state();player_->draw();

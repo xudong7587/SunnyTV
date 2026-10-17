@@ -80,17 +80,17 @@
             return;
         }
         if(hasHero()&&view_.section==0) {
-            if(down&HidNpadButton_Left){if(view_.heroIndex>0)--view_.heroIndex;else if(view_.hero){view_.section=1;view_.selected=0;}}
-            if(down&HidNpadButton_Right)view_.heroIndex=std::min(int(view_.page.items.size())-1,view_.heroIndex+1);
+            if(down&HidNpadButton_Left){if(heroLeftTravel_>=heroCount()&&(view_.hero||!view_.resume.items.empty())){view_.section=1;view_.selected=0;heroLeftTravel_=0;}else rotateHero(-1);}
+            if(down&HidNpadButton_Right)rotateHero(1);
             if(down&HidNpadButton_Up){view_.section=-1;navigationIndex_=view_.screen==Screen::Home?0:1;}
-            if(down&HidNpadButton_Down){view_.selected=0;if(view_.screen==Screen::Home&&!view_.resume.items.empty())view_.section=1;else{view_.section=view_.screen==Screen::Home&&!view_.libraries.items.empty()?2:3;scrollTo(640);}}
+            if(down&HidNpadButton_Down){view_.selected=0;view_.section=view_.screen==Screen::Home&&!view_.libraries.items.empty()?2:3;scrollTo(640);heroLeftTravel_=0;}
             if((down&HidNpadButton_A)&&heroItem())selectMedia(*heroItem());
             return;
         }
         if(hasHero()&&view_.section==1) {
             int count=view_.screen==Screen::Home?int(std::min<size_t>(2,view_.resume.items.size())):2;
             if(down&HidNpadButton_Left)view_.selected=std::max(0,view_.selected-1);
-            if(down&HidNpadButton_Right){if(view_.hero&&view_.selected==1)view_.section=0;else view_.selected=std::min(count-1,view_.selected+1);}
+            if(down&HidNpadButton_Right){if(view_.selected==count-1)view_.section=0;else view_.selected=std::min(count-1,view_.selected+1);}
             if(down&HidNpadButton_Up){view_.section=0;view_.selected=0;}
             if(down&HidNpadButton_Down){view_.section=view_.screen==Screen::Home&&!view_.libraries.items.empty()?2:3;view_.selected=0;scrollTo(640);}
             if(down&HidNpadButton_A){if(view_.screen==Screen::Home&&count)playItem(view_.resume.items[size_t(view_.selected)]);else if(heroItem()){if(view_.selected)selectMedia(*heroItem());else playItem(*heroItem());}}
@@ -117,7 +117,7 @@
             if(busy_)return;
             int direction=result.gesture==Gesture::SwipeLeft?1:-1;
             if(playing_&&!menu_)player_->seek(-direction*10);
-            else if(hasHero()&&view_.targetScroll<200&&!view_.page.items.empty()){view_.heroIndex=std::clamp(view_.heroIndex+direction,0,int(view_.page.items.size())-1);view_.section=0;}
+            else if(hasHero()&&view_.targetScroll<200&&!view_.page.items.empty()){rotateHero(direction);view_.section=0;}
             lastInput_=SDL_GetTicks();return;
         }
         if(result.gesture==Gesture::Tap) {

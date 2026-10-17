@@ -1,4 +1,4 @@
-# SunnyTV Switch 0.2.8
+# SunnyTV Switch 0.2.10
 
 基于 SunnyTV Android `v0.2.8`（`dcc09409c98f0819b63f763913e57cc822fdaec6`）新增的独立原生客户端。目标为支持自制程序的 Nintendo Switch，交付 `SunnyTV.nro`，自用侧载。
 
@@ -12,7 +12,9 @@
 
 ## 操作
 
-方向键选择，A 确认，B 返回；L/R 切换首页、媒体库和设置；Y 搜索；ZL/ZR 翻页；− 退出。
+左摇杆或方向键选择，A 确认，B 返回；L/R 切换首页、媒体库和设置；Y 搜索；ZL/ZR 翻页；− 退出。
+
+支持触摸点击、纵向滑动、首页横划轮播和进度条点击跳转。
 
 播放中 X/A 暂停，L/R 或左右快退/快进 10 秒，＋ 打开菜单，B 关闭菜单或退出播放。菜单提供音轨、字幕、字幕偏移、MediaIndex 115 云端清晰度和解码信息。字幕偏移正值表示延后，负值表示提前。
 
@@ -21,7 +23,7 @@
 - Emby 登录、媒体库、续播/最新列表、分页、搜索、剧集/季、详情和原生图片。
 - 绿联兼容接口的基础路径和 HTTPS 限制；尚未真实联调。
 - 直放/直流选择、HTTP STRM、单次服务端后备、Emby 播放会话回报。
-- libmpv + SDL/OpenGL 播放、立体声输出、音轨/字幕切换及微调。
+- libmpv + SDL/OpenGL ES 播放（视频与 UI 使用共享纹理、独立 GL 上下文）、立体声输出、音轨/字幕切换及微调。
 - MediaIndex cloud-video-v1 查询/创建/停止；默认 direct，不修改 MediaIndex。
 - 本机播放网关逐跳执行 TLS、凭据作用域与取消检查；HLS 清单、密钥、分片统一改写至回环地址。远程地址不交给 mpv 日志。
 
@@ -52,3 +54,11 @@ make -C switch -j2 package
 7. 当前没有持续运行的 Switch 模拟器或真机，不把宿主机测试计为真机通过。
 
 GPL-3.0-only，沿用根目录 LICENSE。依赖说明见 `THIRD_PARTY.md`。
+
+## 0.2.10 修订
+
+修复 Switch SDL 后端名为 `opengles2` 时被桌面 `opengl` 名称检查错误拒绝的问题。显式选择 Switch 的 GLES 后端，隔离 mpv 与 SDL 的 GL 状态，使用共享纹理输出并同步 GPU，增加颜色、朝向、界面叠加与上下文恢复检查。
+
+对照 Android 0.2.8 的 `RotatingHeroCards` 修正固定大方卡、循环轮播、向下进入媒体区、Logo 左对齐及媒体库卡片尺寸；不宣称完整功能或所有页面已与 Android 一致。
+
+播放方案参考 [Switchfin 播放核心](https://github.com/dragonflylee/switchfin/blob/1cb439ac51d0a228061b95e2a40e4ce9a01cce1e/app/src/view/mpv_core.cpp) 及 [mpv 的 GL 互操作说明](https://github.com/mpv-player/mpv/blob/v0.36.0/libmpv/render_gl.h)。未复制 Switchfin UI、源码或其打包二进制；本版仍使用 devkitPro 官方 portlibs。Switchfin 的 deko3d、定制 FFmpeg 和直接硬解路径尚未移植，不能据此宣称相同硬解能力。

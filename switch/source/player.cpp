@@ -15,6 +15,19 @@ using BindFramebuffer = void (*)(GLenum, GLuint);
 using FramebufferTexture2D = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
 using CheckFramebufferStatus = GLenum (*)(GLenum);
 using GetIntegerv = void (*)(GLenum, GLint*);
+using Finish = void (*)();
+// mpv resets GL state to defaults, whereas SDL caches its own shaders, buffers, blend and
+// clip state. Keep the decoder renderer in a shared context so SDL's state stays intact.
+class CurrentContext {
+    SDL_Window* window_ = SDL_GL_GetCurrentWindow();
+    SDL_GLContext context_ = SDL_GL_GetCurrentContext();
+public:
+    CurrentContext(SDL_Window* window, SDL_GLContext context) {
+        if (SDL_GL_MakeCurrent(window, context) != 0)
+            throw std::runtime_error("无法切换播放器图形上下文");
+    }
+    ~CurrentContext() { SDL_GL_MakeCurrent(window_, context_); }
+};
 void* getProc(void*, const char* name) { return SDL_GL_GetProcAddress(name); }
 void command(mpv_handle* h, const char* a, const char* b = nullptr, const char* c = nullptr, const char* d = nullptr) { const char* args[] = {a, b, c, d, nullptr};
         if (mpv_command(h, args) < 0) throw std::runtime_error("播放器操作失败"); }
@@ -32,6 +45,12 @@ void Player::option(const char* key, const char* value, bool allowMissing) {
     if (result < 0) throw std::runtime_error(std::string("播放器参数不可用：") + key + "（" + mpv_error_string(result) + "）");
 }
 Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
+    SDL_RendererInfo info{};
+    if (SDL_GetRendererInfo(renderer_, &info) != 0 || !info.name ||
+        (std::string(info.name) != "opengl" && std::string(info.name) != "opengles2") ||
+        !(info.flags & SDL_RENDERER_TARGETTEXTURE) || !SDL_GL_GetCurrentContext())
+        throw std::runtime_error("当前图形后端不支持视频输出");
+    window_ = SDL_GL_GetCurrentWindow();
     mpv_ = mpv_create();
         if (!mpv_) throw std::runtime_error("播放器创建失败");
     try {
@@ -45,24 +64,45 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         option("sub-fonts-dir", "sdmc:/switch/SunnyTV/fonts");
         option("sub-font", "sans-serif"); option("sub-font-size", "42");
         option("network-timeout", "60");
+#ifdef __SWITCH__
+        // Switchfin also synchronizes Mesa GL before handing frames back to its UI.
+        option("vd-lavc-threads", "3"); option("opengl-glfinish", "yes");
+#endif
         if (mpv_initialize(mpv_) < 0) throw std::runtime_error("播放器初始化失败");
-        mpv_opengl_init_params init{getProc, nullptr};
-        mpv_render_param params[] = {{MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_OPENGL)}, {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &init}, {MPV_RENDER_PARAM_INVALID, nullptr}};
-        if (mpv_render_context_create(&context_, mpv_, params) < 0) throw std::runtime_error("播放器图形初始化失败");
-        SDL_RendererInfo info{}; SDL_GetRendererInfo(renderer_, &info);
-        if (!info.name || std::string(info.name) != "opengl") throw std::runtime_error("需要 SDL OpenGL 渲染器");
-        video_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 1280, 720);
+        // RGBA bytes on little endian machines; GLES2 supports this format natively.
+        video_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, 1280, 720);
         if (!video_) throw std::runtime_error("无法创建视频画面");
         SDL_RenderFlush(renderer_);
         if (SDL_GL_BindTexture(video_, nullptr, nullptr) != 0) throw std::runtime_error("无法绑定视频画面");
-        GLint texture = 0, old = 0; gl<GetIntegerv>("glGetIntegerv")(GL_TEXTURE_BINDING_2D, &texture); gl<GetIntegerv>("glGetIntegerv")(GL_FRAMEBUFFER_BINDING, &old);
-        gl<GenFramebuffers>("glGenFramebuffers")(1, &fbo_); gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER, fbo_);
-        gl<FramebufferTexture2D>("glFramebufferTexture2D")(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GLuint(texture), 0);
-        bool complete = gl<CheckFramebufferStatus>("glCheckFramebufferStatus")(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-        gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER, GLuint(old)); SDL_GL_UnbindTexture(video_);
-        if (!complete) throw std::runtime_error("视频画面缓冲初始化失败");
+        GLint texture = 0;
+        gl<GetIntegerv>("glGetIntegerv")(GL_TEXTURE_BINDING_2D, &texture);
+        SDL_GL_UnbindTexture(video_);
+        gl<Finish>("glFinish")();
+        auto uiContext = SDL_GL_GetCurrentContext();
+        int share = 0; SDL_GL_GetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, &share);
+        SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
+        videoContext_ = SDL_GL_CreateContext(window_);
+        SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, share);
+        SDL_GL_MakeCurrent(window_, uiContext);
+        if (!videoContext_) throw std::runtime_error("无法创建共享视频图形上下文");
+        {
+            CurrentContext current(window_, videoContext_);
+            mpv_opengl_init_params init{getProc, nullptr};
+            mpv_render_param params[] = {{MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_OPENGL)}, {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &init}, {MPV_RENDER_PARAM_INVALID, nullptr}};
+            if (mpv_render_context_create(&context_, mpv_, params) < 0) throw std::runtime_error("播放器图形初始化失败");
+            gl<GenFramebuffers>("glGenFramebuffers")(1, &fbo_);
+            gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER, fbo_);
+            gl<FramebufferTexture2D>("glFramebufferTexture2D")(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GLuint(texture), 0);
+            if (gl<CheckFramebufferStatus>("glCheckFramebufferStatus")(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                throw std::runtime_error("视频画面缓冲初始化失败");
+        }
     } catch (...) {
-        if (context_) mpv_render_context_free(context_);
+        if (videoContext_) {
+            { CurrentContext current(window_, videoContext_);
+              if (context_) mpv_render_context_free(context_);
+              if (fbo_) gl<DeleteFramebuffers>("glDeleteFramebuffers")(1, &fbo_); }
+            SDL_GL_DeleteContext(videoContext_);
+        }
         context_ = nullptr;
         if (mpv_) mpv_terminate_destroy(mpv_);
         mpv_ = nullptr;
@@ -73,9 +113,14 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
 }
 Player::~Player() {
     close();
-        if (context_) mpv_render_context_free(context_);
-        if (mpv_) mpv_terminate_destroy(mpv_);
-    if (fbo_) gl<DeleteFramebuffers>("glDeleteFramebuffers")(1, &fbo_);
+    if (videoContext_) {
+        { CurrentContext current(window_, videoContext_);
+          if (context_) mpv_render_context_free(context_);
+          if (fbo_) gl<DeleteFramebuffers>("glDeleteFramebuffers")(1, &fbo_);
+          gl<Finish>("glFinish")(); }
+        SDL_GL_DeleteContext(videoContext_);
+    }
+    if (mpv_) mpv_terminate_destroy(mpv_);
     if (video_) SDL_DestroyTexture(video_);
 }
 void Player::open(const Playback& playback, const std::string& secret) {
@@ -118,12 +163,19 @@ void Player::poll() {
 void Player::draw() {
     if (!state_.loaded) return;
     SDL_RenderFlush(renderer_);
-    GLint old = 0; gl<GetIntegerv>("glGetIntegerv")(GL_FRAMEBUFFER_BINDING, &old);
-    mpv_opengl_fbo fbo{int(fbo_), 1280, 720, 0}; int flip = 0, block = 0;
-    mpv_render_param params[] = {{MPV_RENDER_PARAM_OPENGL_FBO, &fbo}, {MPV_RENDER_PARAM_FLIP_Y, &flip}, {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block}, {MPV_RENDER_PARAM_INVALID, nullptr}};
-    mpv_render_context_render(context_, params);
-    gl<BindFramebuffer>("glBindFramebuffer")(GL_FRAMEBUFFER, GLuint(old));
+    gl<Finish>("glFinish")();
+    {
+        CurrentContext current(window_, videoContext_);
+        mpv_opengl_fbo fbo{int(fbo_), 1280, 720, 0}; int flip = 1, block = 0;
+        mpv_render_param params[] = {{MPV_RENDER_PARAM_OPENGL_FBO, &fbo}, {MPV_RENDER_PARAM_FLIP_Y, &flip}, {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block}, {MPV_RENDER_PARAM_INVALID, nullptr}};
+        mpv_render_context_render(context_, params);
+        // Shared texture writes must finish before the UI context samples the frame.
+        gl<Finish>("glFinish")();
+    }
     SDL_RenderCopy(renderer_, video_, nullptr, nullptr);
+}
+void Player::presented() {
+    if (context_) { CurrentContext current(window_, videoContext_); mpv_render_context_report_swap(context_); }
 }
 void Player::pause() { command(mpv_, "cycle", "pause"); }
 void Player::seek(double seconds) { command(mpv_, "seek", std::to_string(seconds).c_str(), "relative+exact"); }

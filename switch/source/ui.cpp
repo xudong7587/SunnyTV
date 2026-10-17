@@ -48,13 +48,13 @@ void Canvas::gradient(Bounds b,SDL_Color a,SDL_Color z,bool horizontal) {
     SDL_Vertex v[4]={{{b.x,b.y},a,{0,0}},{{b.x+b.w,b.y},horizontal?z:a,{0,0}},{{b.x+b.w,b.y+b.h},z,{0,0}},{{b.x,b.y+b.h},horizontal?a:z,{0,0}}};
     int indices[]={0,1,2,0,2,3}; SDL_RenderGeometry(renderer_,nullptr,v,4,indices,6);
 }
-void Canvas::image(SDL_Texture* texture,Bounds b,float radius,bool cover,SDL_Color tint) {
+void Canvas::image(SDL_Texture* texture,Bounds b,float radius,bool cover,SDL_Color tint,bool alignStart) {
     if(!texture) return;
     int w=0,h=0; SDL_QueryTexture(texture,nullptr,nullptr,&w,&h); if(!w||!h) return;
     SDL_FRect uv{0,0,1,1};
     float scale=cover?std::max(b.w/w,b.h/h):std::min(b.w/w,b.h/h);
     if(cover) { uv.w=b.w/(w*scale); uv.h=b.h/(h*scale); uv.x=(1-uv.w)/2; uv.y=(1-uv.h)/2; }
-    else { float actualW=w*scale,actualH=h*scale; b.x+=(b.w-actualW)/2; b.y+=(b.h-actualH)/2; b.w=actualW; b.h=actualH; }
+    else { float actualW=w*scale,actualH=h*scale; if(!alignStart)b.x+=(b.w-actualW)/2; b.y+=(b.h-actualH)/2; b.w=actualW; b.h=actualH; }
     mesh(renderer_,texture,b,radius,tint,uv);
 }
 void Canvas::text(const std::string& s,float x,float y,int size,SDL_Color c,float maxWidth) {
