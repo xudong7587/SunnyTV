@@ -99,11 +99,19 @@ class CloudSubtitleContinuityTest {
                 rule.onNodeWithTag("player:close").assertDoesNotExist()
                 rule.waitUntil(5000) {var advanced=false;scenario.onActivity {assertSame(p,player(it));advanced=player(it).currentPosition>position+1000};advanced}
                 assertEquals(before,rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot)
-                val size=context.resources.displayMetrics
+                // Use the landscape activity's actual screen coordinates, not application
+                // display metrics (which can still describe the pre-rotation display).
+                var tapX=0f;var tapY=0f
+                scenario.onActivity {a->
+                    val view=a.window.decorView;val location=IntArray(2)
+                    view.getLocationOnScreen(location)
+                    tapX=location[0]+view.width-24f;tapY=location[1]+view.height/2f
+                }
                 val time=android.os.SystemClock.uptimeMillis()
                 for(action in listOf(android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP)) {
-                    val event=android.view.MotionEvent.obtain(time,time+20,action,size.widthPixels/2f,size.heightPixels-4f,0)
-                    instrumentation.uiAutomation.injectInputEvent(event,true);event.recycle()
+                    val event=android.view.MotionEvent.obtain(time,time+20,action,tapX,tapY,0)
+                    event.source=android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    assertTrue(instrumentation.uiAutomation.injectInputEvent(event,true));event.recycle()
                 }
                 rule.waitUntil(5000) {rule.onAllNodesWithTag("player:sheet").fetchSemanticsNodes().isEmpty()}
                 scenario.onActivity {assertTrue(player(it).playWhenReady)}
@@ -323,7 +331,7 @@ class CloudSubtitleContinuityTest {
                 rule.onNodeWithText("⚙ 字幕调整").performClick()
                 rule.onNodeWithTag("subtitle-timing:3000").performClick()
                 awaitCue("MIDDLE")
-                rule.onNodeWithTag("subtitle-timing:offset").assertTextContains("+0.0 秒",substring=true)
+                rule.onNodeWithTag("subtitle-timing:overlay").assertContentDescriptionEquals("字幕偏移 0.0 秒")
             }
         }
     }
