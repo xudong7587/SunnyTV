@@ -63,7 +63,7 @@ jobs:
           mkdir -p switch/build/host
           g++ -std=c++20 -O1 -g -Wall -Wextra -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 SDL2_ttf SDL2_image mpv libcurl) switch/source/*.cpp -pthread $(pkg-config --libs sdl2 SDL2_ttf SDL2_image mpv) -lcurl -o switch/build/host/ui-tests
       - name: Render screens and exercise SDL touch navigation
-        run: xvfb-run -a python3 switch/tests/ui.py
+        run: xvfb-run -a -s '-screen 0 1280x720x24' python3 switch/tests/ui.py
         env:
           SDL_AUDIODRIVER: dummy
           LIBGL_ALWAYS_SOFTWARE: '1'

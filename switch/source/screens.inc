@@ -14,6 +14,7 @@
         canvas_->gradient({0,0,1280,112},dark_?SDL_Color{8,9,11,105}:SDL_Color{255,255,255,80},{0,0,0,0});
         canvas_->icon(Icon::Sun,48,24,44,{255,211,117,255});
         canvas_->text("SunnyTV",112,30,28,p.text);
+        hit({40,20,255,64},[this](Point){activateNavigation(0);},true);
         int active=view_.screen==Screen::Home?0:view_.screen==Screen::Settings||view_.screen==Screen::Connect?3:view_.search.empty()?1:2;
         bool focused=view_.section==-1;
         float total=focused?316.f:264.f, left=670-total/2;
@@ -32,9 +33,10 @@
             if(focus) canvas_->outline({x,17,width,58},29,p.accent,2);
             canvas_->icon(icons[i],x+17,32,28,i==active||focus?p.accent:p.secondary);
             if(focus) canvas_->text(names[i],x+51,34,18,p.accent,width-54);
-            hit({x,17,width,58},[this,i](Point){activateNavigation(i);});
+            hit({x,17,width,58},[this,i](Point){activateNavigation(i);},true);
             x+=width+2;
         }
+        if(!history_.empty()){canvas_->round({1178,23,54,54},27,p.surface);canvas_->icon(Icon::Back,1193,38,24,p.text);hit({1178,23,54,54},[this](Point){input(HidNpadButton_B);},true);}
     }
     const Media* heroItem() const {
         if(view_.page.items.empty()) return nullptr;
@@ -75,7 +77,7 @@
         float titleY=(home?386.f:432.f)-scroll;
         if(!home) canvas_->text("媒体库 / "+view_.container.title,40,390-scroll,16,p.accent,470);
         auto* logo=imageFor(*item,"Logo",640);
-        if(logo) canvas_->image(logo,{40,titleY-12,450,92},0,false);
+        if(logo&&dark_) canvas_->image(logo,{40,titleY-12,450,92},0,false);
         else canvas_->text(item->title,40,titleY,48,p.text,468);
         std::string metadata=item->year?std::to_string(item->year):item->type;
         if(!item->subtitle.empty()) metadata+="  ·  "+item->subtitle;
@@ -167,7 +169,7 @@
     }
     void drawDetail() {
         auto p=palette(); float y=250-view_.scroll;
-        if(auto* logo=imageFor(detail_,"Logo",800))canvas_->image(logo,{40,y-65,680,100},0,false);
+        if(auto* logo=dark_?imageFor(detail_,"Logo",800):nullptr)canvas_->image(logo,{40,y-65,680,100},0,false);
         else canvas_->text(detail_.title,40,y,44,p.text,1000);
         std::string metadata=detail_.year?std::to_string(detail_.year):detail_.type;
         if(detail_.rating>0){char score[24];std::snprintf(score,sizeof score,"  ·  ★ %.1f",detail_.rating);metadata+=score;}

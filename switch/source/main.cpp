@@ -107,8 +107,11 @@ class App {
         if (c.r == 243 && c.g == 245 && c.b == 239) c = palette().text;
         canvas_->text(value, float(x), float(y), size, c, float(maxWidth));
     }
-    void hit(Bounds bounds, std::function<void(Point)> action) {
-        if (bounds.y + bounds.h > 0 && bounds.y < 720) hits_.push_back({bounds, std::move(action)});
+    void hit(Bounds bounds, std::function<void(Point)> action, bool overlay = false) {
+        float top=overlay||playing_?0.f:100.f;
+        float bottom=std::min(720.f,bounds.y+bounds.h);
+        bounds.y=std::max(top,bounds.y);bounds.h=bottom-bounds.y;
+        if(bounds.h>0)hits_.push_back({bounds,std::move(action)});
     }
     bool hasHero() const { return view_.screen == Screen::Home || view_.hero; }
     void scrollTo(float value) { view_.targetScroll = std::clamp(value, 0.f, std::max(0.f, contentHeight_ - 720)); }
@@ -227,7 +230,7 @@ class App {
     }
 #include "screens.inc"
     void nav(Screen screen) { history_.clear();
-        if (screen == Screen::Settings) { View v; v.screen=screen; show(v,false); } else loadScreen(screen,"",{},0,"",false); }
+        if (screen == Screen::Settings) { settingsCategory_=0;settingsSidebar_=false;View v; v.screen=screen; show(v,false); } else loadScreen(screen,"",{},0,"",false); }
 #include "input.inc"
 
 #include "preview.inc"

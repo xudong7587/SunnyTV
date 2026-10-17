@@ -5,7 +5,8 @@
         if(busy_||SDL_GetTicks()-changedAt<950)return;
         auto shot=[&](const char* name){
             auto* surface=SDL_CreateRGBSurfaceWithFormat(0,1280,720,32,SDL_PIXELFORMAT_RGBA32);
-            if(!surface||SDL_RenderReadPixels(renderer_,nullptr,SDL_PIXELFORMAT_RGBA32,surface->pixels,surface->pitch)!=0)throw std::runtime_error("UI screenshot failed");
+            SDL_Rect area{0,0,1280,720};
+            if(!surface||SDL_RenderReadPixels(renderer_,&area,SDL_PIXELFORMAT_RGBA32,surface->pixels,surface->pitch)!=0)throw std::runtime_error("UI screenshot failed");
             std::string path=std::string(directory)+"/"+name+".png";
             if(IMG_SavePNG(surface,path.c_str())!=0){SDL_FreeSurface(surface);throw std::runtime_error("UI screenshot save failed");}
             SDL_FreeSurface(surface);
@@ -20,7 +21,8 @@
         else if(stage==4&&view_.screen==Screen::Detail){shot("detail");tap(766,46);}
         else if(stage==5&&view_.screen==Screen::Settings){shot("settings");tap(160,322);}
         else if(stage==6&&view_.screen==Screen::Settings&&settingsCategory_==1){shot("appearance");tap(600,244);}
-        else if(stage==7&&view_.screen==Screen::Settings&&!dark_){shot("light");std::puts("Touch navigation, library entry, scrolling, detail entry and theme toggle passed");run_=false;}
+        else if(stage==7&&view_.screen==Screen::Settings&&!dark_){tap(574,46);}
+        else if(stage==8&&view_.screen==Screen::Home&&!dark_){shot("light");std::puts("Touch navigation, library entry, scrolling, detail entry and theme toggle passed");run_=false;}
         else return;
         ++stage;changedAt=SDL_GetTicks();
     }
