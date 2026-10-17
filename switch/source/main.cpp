@@ -1,6 +1,8 @@
 #include "sunny/media.hpp"
 #include "sunny/player.hpp"
 #include "sunny/worker.hpp"
+#include "sunny/navigation.hpp"
+#include "sunny/ui.hpp"
 #include <switch.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
@@ -51,7 +53,15 @@ bool safeImage(const std::string& s) {
 }
 std::string clockTime(double value) { int t = int(std::max(0.0, value)); char s[32]; std::snprintf(s, sizeof s, "%02d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); return s; }
 enum class Screen { Connect, Home, Libraries, Grid, Detail, Settings };
-struct View { Screen screen = Screen::Home; std::string title, parent, search; Media container; Page page; int selected = 0, offset = 0; };
+struct View {
+    Screen screen = Screen::Home;
+    std::string title, parent, search;
+    Media container;
+    Page page, libraries, resume;
+    int selected = 0, offset = 0, heroIndex = 0, section = 0;
+    float scroll = 0, targetScroll = 0;
+    bool hero = false;
+};
 class App {
     SDL_Renderer* renderer_;
     TTF_Font* normal_ = nullptr;
@@ -61,7 +71,7 @@ class App {
     Http http_;
     Worker api_, images_, reports_;
     std::future<std::function<void()>> pending_;
-    struct Image { SDL_Texture* texture = nullptr; bool requested = false; std::future<std::string> future; };
+    struct Image { SDL_Texture* texture = nullptr; uint32_t used = 0; std::future<std::shared_ptr<SDL_Surface>> future; };
     std::map<std::string, Image> imageCache_;
     std::unique_ptr<Player> player_;
     Account account_;
@@ -73,8 +83,15 @@ class App {
     bool ugreen_ = false, remember_ = false, busy_ = false, playing_ = false, reported_ = false, showInfo_ = false;
     bool menu_ = false, run_ = true;
     int menuIndex_ = 0, subtitleStep_ = 0;
-    uint32_t lastInput_ = 0, lastRepeat_ = 0, heldSince_ = 0, reportAt_ = 0;
-    u64 lastHeld_ = 0;
+    uint32_t lastInput_ = 0, reportAt_ = 0;
+    NavigationRepeat navigation_;
+    TouchTracker touch_;
+    std::unique_ptr<Canvas> canvas_;
+    struct Hit { Bounds bounds; std::function<void(Point)> action; };
+    std::vector<Hit> hits_;
+    bool dark_ = true;
+    int accent_ = 2, navigationIndex_ = 0;
+    float contentHeight_ = 720;
     std::vector<CloudVariant> variants_;
     std::optional<CloudSession> cloud_;
     std::string cloudSource_;
@@ -82,30 +99,24 @@ class App {
     std::map<std::string, SDL_Texture*> textCache_;
     void color(SDL_Color c) { SDL_SetRenderDrawColor(renderer_, c.r, c.g, c.b, c.a); }
     void rect(int x, int y, int w, int h, SDL_Color c) { color(c); SDL_Rect r{x,y,w,h}; SDL_RenderFillRect(renderer_, &r); }
-    void text(const std::string& s, int x, int y, int size = 24, SDL_Color c = {243,245,239,255}, int maxWidth = 1200) {
-        if (s.empty()) return;
-        auto key = std::to_string(size) + ':' + std::to_string(c.r) + ':' + std::to_string(c.g) + ':' + std::to_string(c.b) + ':' + s;
-        auto it = textCache_.find(key); SDL_Texture* t = it == textCache_.end() ? nullptr : it->second;
-        if (!t) {
-            if (textCache_.size() > 240) { for (auto& [k,v] : textCache_) SDL_DestroyTexture(v); textCache_.clear(); }
-            auto font = size >= 32 ? large_ : size <= 20 ? small_ : normal_;
-            SDL_Surface* surface = TTF_RenderUTF8_Blended(font, s.c_str(), c);
-        if (!surface) return;
-            t = SDL_CreateTextureFromSurface(renderer_, surface); SDL_FreeSurface(surface);
-        if (!t) return; textCache_[key] = t;
-        }
-        int w, h; SDL_QueryTexture(t, nullptr, nullptr, &w, &h); SDL_Rect src{0,0,std::min(w, maxWidth),h}; SDL_Rect dst{x,y,src.w,h}; SDL_RenderCopy(renderer_, t, &src, &dst);
+    Palette palette() const { return sunnyPalette(dark_, accent_); }
+    void text(const std::string& value, int x, int y, int size = 24, SDL_Color c = {243,245,239,255}, int maxWidth = 1200) {
+        if (c.r == 243 && c.g == 245 && c.b == 239) c = palette().text;
+        canvas_->text(value, float(x), float(y), size, c, float(maxWidth));
     }
-    void wrapped(const std::string& s, int x, int y, int width, int maxLines) {
-        // Wrap on UTF-8 codepoint boundaries, preserving CJK text and never splitting a byte sequence.
-        std::string line; int lines = 0;
-        for (size_t p = 0; p < s.size() && lines < maxLines;) { size_t n = 1; auto c = static_cast<unsigned char>(s[p]);
-        if (c >= 0xf0) n = 4; else if (c >= 0xe0) n = 3; else if (c >= 0xc0) n = 2; auto next = s.substr(p, n); p += n; int w = 0; TTF_SizeUTF8(normal_, (line + next).c_str(), &w, nullptr);
-        if (next == "\n" || w > width) { text(line, x, y + lines * 34, 24, {171,183,173,255}, width); ++lines; line = next == "\n" ? "" : next; } else line += next; }
-        if (lines < maxLines) text(line, x, y + lines * 34, 24, {171,183,173,255}, width);
+    void hit(Bounds bounds, std::function<void(Point)> action) {
+        if (bounds.y + bounds.h > 0 && bounds.y < 720) hits_.push_back({bounds, std::move(action)});
+    }
+    bool hasHero() const { return view_.screen == Screen::Home || view_.hero; }
+    void scrollTo(float value) { view_.targetScroll = std::clamp(value, 0.f, std::max(0.f, contentHeight_ - 720)); }
+    void playItem(Media item) {
+        if (item.folder) { selectMedia(item); return; }
+        auto a = account_;
+        task([=, this] { Emby source(http_, a, &api_.cancel); auto p = source.playback(item); return [this, p] { startPlayer(p); }; });
     }
     template <typename F> void task(F f) { if (busy_) return; api_.cancel = false; busy_ = true; pending_ = api_.submit([f=std::move(f)]() mutable -> std::function<void()> { return f(); }); }
     void save() {
+        config_["dark"] = dark_; config_["accent"] = accent_;
         config_["base"] = base_; config_["username"] = username_; config_["device"] = device_; config_["ugreen"] = ugreen_; config_["remember"] = remember_;
         config_["userId"] = remember_ ? account_.userId : ""; config_["token"] = remember_ ? account_.token : ""; writeConfig(config_);
     }
@@ -113,11 +124,21 @@ class App {
     void show(View next, bool push = true) { if (push) history_.push_back(view_); view_ = std::move(next); }
     void loadScreen(Screen screen, std::string parent = "", Media container = {}, int offset = 0, std::string search = "", bool push = true) {
         auto a = account_; task([=, this] {
-            Emby source(http_, a, &api_.cancel); Page page; std::string title;
-            if (screen == Screen::Home) { auto resume = source.resume(); auto latest = source.latest(); page = resume; std::set<std::string> seen; for (const auto& m : resume.items) seen.insert(m.id); for (auto& m : latest.items) if (seen.insert(m.id).second) page.items.push_back(std::move(m)); page.total = int64_t(page.items.size()); title = "继续观看 · 最新入库"; }
-            else if (screen == Screen::Libraries) { page = source.views(); title = "我的媒体库"; }
+            Emby source(http_, a, &api_.cancel); Page page, libraries, resume; std::string title;
+            if (screen == Screen::Home) {
+                libraries = source.views(); resume = source.resume(); page = source.latest();
+                if (page.items.empty()) page = resume;
+                title = "首页";
+            } else if (screen == Screen::Libraries) { page = source.views(); title = "我的媒体库"; }
             else { page = container.id.empty() ? source.list(parent, offset, search) : source.children(container, offset); title = search.empty() ? container.title : "搜索：" + search; }
-            return [=, this]() mutable { View next; next.screen = screen; next.title = title; next.parent = parent; next.search = search; next.container = container; next.offset = offset; next.page = std::move(page); show(std::move(next), push); };
+            return [=, this]() mutable {
+                View next; next.screen = screen; next.title = title; next.parent = parent; next.search = search;
+                next.container = container; next.offset = offset; next.page = std::move(page);
+                next.libraries = std::move(libraries); next.resume = std::move(resume);
+                next.hero = screen == Screen::Grid && container.type == "CollectionFolder" && offset == 0 && !next.page.items.empty();
+                next.section = (screen == Screen::Home || next.hero) ? 0 : 3;
+                show(std::move(next), push);
+            };
         });
     }
     void login() {
@@ -161,119 +182,64 @@ class App {
         auto url = cloudSource_; task([this, url, v] { auto session = CloudVideo(http_, url, &api_.cancel).create(v); return [this, session] { stopCloud(); player_->switchUrl(session.url); cloud_ = session; variants_.clear(); menu_ = false; }; });
     }
     void pollImages() {
-        for (auto& [key, image] : imageCache_) if (image.future.valid() && image.future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) { try { auto bytes = image.future.get();
-        if (!safeImage(bytes)) continue; SDL_RWops* rw = SDL_RWFromConstMem(bytes.data(), int(bytes.size())); SDL_Surface* surface = IMG_Load_RW(rw, 1);
-        if (surface) { image.texture = SDL_CreateTextureFromSurface(renderer_, surface); SDL_FreeSurface(surface); } } catch (...) {} }
-    }
-    void artwork(const Media& m, int x, int y, int w, int h) {
-        auto key = m.id + ':' + m.imageTag;
-        if (!imageCache_.count(key) && imageCache_.size() < 96 && !account_.token.empty()) {
-            Emby source(http_, account_); Request req; req.url = source.imageUrl(m, 360); req.scope = source.scope(); req.maxBytes = 4 * 1024 * 1024;
-            Image image; image.requested = true; image.future = images_.submit([this, req] { auto r = http_.fetch(req, &images_.cancel); return r.status == 200 ? r.body : ""; }); imageCache_.emplace(key, std::move(image));
+        for (auto& [key, image] : imageCache_) {
+            if (!image.future.valid() || image.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) continue;
+            try { auto surface = image.future.get(); if (surface) image.texture = SDL_CreateTextureFromSurface(renderer_, surface.get()); } catch (...) {}
         }
-        rect(x,y,w,h,{34,45,38,255}); auto it = imageCache_.find(key);
-        if (it != imageCache_.end() && it->second.texture) { int iw, ih; SDL_QueryTexture(it->second.texture, nullptr, nullptr, &iw, &ih); float scale = std::min(float(w) / iw, float(h) / ih); SDL_Rect dst{x + (w - int(iw * scale)) / 2,y + (h - int(ih * scale)) / 2,int(iw * scale),int(ih * scale)}; SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst); }
+    }
+    SDL_Texture* imageFor(const Media& media, const std::string& type = "Primary", int width = 360) {
+        if (media.id.empty() || (type == "Backdrop" && media.backdropTag.empty()) || (type == "Logo" && media.logoTag.empty())) return nullptr;
+        std::string key = account_.base + ':' + media.id + ':' + type + ':' + std::to_string(width) + ':' + media.imageTag + ':' + media.backdropTag + ':' + media.logoTag;
+        auto found = imageCache_.find(key);
+        if (found != imageCache_.end()) { found->second.used = SDL_GetTicks(); return found->second.texture; }
+        if (imageCache_.size() >= 80) {
+            auto oldest = std::min_element(imageCache_.begin(), imageCache_.end(), [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
+            if (oldest->second.texture) SDL_DestroyTexture(oldest->second.texture);
+            imageCache_.erase(oldest);
+        }
+        if (!account_.token.empty()) {
+            Emby source(http_, account_); Request req; req.url = source.imageUrl(media, width, type); req.scope = source.scope(); req.maxBytes = 4 * 1024 * 1024;
+            Image image; image.used = SDL_GetTicks();
+            try {
+                image.future = images_.submit([this, req] {
+                    auto response = http_.fetch(req, &images_.cancel);
+                    if (response.status != 200 || !safeImage(response.body)) return std::shared_ptr<SDL_Surface>{};
+                    auto* rw = SDL_RWFromConstMem(response.body.data(), int(response.body.size()));
+                    return std::shared_ptr<SDL_Surface>(rw ? IMG_Load_RW(rw, 1) : nullptr, SDL_FreeSurface);
+                });
+                imageCache_.emplace(key, std::move(image));
+            } catch (...) {}
+        }
+        return nullptr;
+    }
+    void artwork(const Media& media, Bounds bounds, float radius = 14, bool cover = false, const std::string& type = "Primary") {
+        canvas_->round(bounds, radius, palette().surface);
+        canvas_->image(imageFor(media, type, type == "Backdrop" ? 1280 : 480), bounds, radius, cover);
     }
     void button(const std::string& label, int index, int selected, int x, int y, int width = 340) {
-        bool focus = index == selected; rect(x,y,width,52,focus ? SDL_Color{214,230,165,255} : SDL_Color{23,32,28,255}); text(label,x + 16,y + 10,24,focus ? SDL_Color{9,13,13,255} : SDL_Color{243,245,239,255},width - 32);
+        auto p = palette(); bool focus = index == selected;
+        canvas_->round({float(x),float(y),float(width),52},26,focus ? p.ink : p.surface);
+        if (focus) canvas_->outline({float(x),float(y),float(width),52},26,p.accent);
+        text(label,x+20,y+10,22,focus ? p.accent : p.text,width-40);
     }
-    void drawConnect() {
-        text("连接你的媒体服务",60,116,36); text("SunnyTV Switch · 基于 Android 0.2.8",60,166,20,{171,183,173,255});
-        std::vector<std::string> rows = {"服务器：" + (base_.empty() ? "填写 HTTP(S) 地址" : base_), "用户名：" + username_, "密码：" + std::string(password_.empty() ? "未填写" : "••••••"), std::string("类型：") + (ugreen_ ? "绿联影视中心" : "Emby"), std::string(remember_ ? "☑" : "□") + " 记住登录（SD 卡保存访问令牌）", "连接", "HTTP / STRM 直接播放"};
-        for (size_t i = 0; i < rows.size(); ++i) button(rows[i], int(i), view_.selected, 60,220 + int(i) * 60,1100);
-    }
-    void drawGrid() {
-        text(view_.title,60,104,32); int startRow = std::max(0, view_.selected / 6 - 1);
-        for (int row = startRow; row < startRow + 2; ++row) for (int col = 0; col < 6; ++col) {
-            int i = row * 6 + col;
-        if (i >= int(view_.page.items.size())) continue; auto& m = view_.page.items[i]; int x = 60 + col * 194, y = 158 + (row - startRow) * 248; bool focused = i == view_.selected;
-            if (focused) rect(x-4,y-4,176,214,{214,230,165,255}); artwork(m,x,y,168,206); text(m.title,x,y+212,20,{243,245,239,255},176);
-            if (m.positionMs > 0 && m.durationMs > 0) rect(x,y+202,int(168 * std::clamp(double(m.positionMs) / m.durationMs, 0.0, 1.0)),4,{214,230,165,255});
-        }
-        if (view_.page.items.empty()) text("这里还没有可显示的媒体",60,210);
-        text(std::to_string(view_.offset + (view_.page.items.empty() ? 0 : view_.selected + 1)) + " / " + std::to_string(view_.page.total),1100,112,20);
-    }
-    void drawDetail() {
-        artwork(detail_,60,150,300,430); text(detail_.title,400,130,36,{243,245,239,255},810); text(detail_.year ? std::to_string(detail_.year) : detail_.type,400,184,20,{171,183,173,255}); wrapped(detail_.overview,400,230,780,7);
-        button(detail_.positionMs > 0 ? "继续播放 · " + clockTime(double(detail_.positionMs) / 1000) : "播放",0,view_.selected,400,518,390); button("从头播放",1,view_.selected,400,582,390);
-    }
-    void drawSettings() {
-        text("设置",60,116,36);
-        std::vector<std::string> rows = {"重新连接 / 切换服务", "HTTP / STRM 直接播放", "清除本机保存的登录信息", "返回首页"};
-        for (size_t i = 0; i < rows.size(); ++i) button(rows[i],int(i),view_.selected,60,210+int(i)*70,900);
-        text("SunnyTV Switch 0.2.8 · 初始移植版",60,550,24); text("A 确认 · B 返回 · L/R 切换栏目 · − 退出应用",60,600,20,{171,183,173,255});
-    }
-    void drawPlayer() {
-        auto& s = player_->state(); player_->draw();
-        bool osd = menu_ || SDL_GetTicks() - lastInput_ < 4000 || s.paused || !s.loaded;
-        if (!s.loaded) text("正在连接并准备播放…",60,60);
-        if (showInfo_) { rect(40,30,560,105,{0,0,0,140}); text(std::to_string(s.width) + "×" + std::to_string(s.height) + " · " + s.videoCodec + " / " + s.audioCodec,56,42,20); text("解码：" + (s.decoder.empty() ? std::string("未知") : s.decoder),56,76,20); }
-        if (osd) { rect(40,582,1200,108,{0,0,0,140}); text(player_->playback().title,60,594,24,{243,245,239,255},1140); text(clockTime(s.position) + " / " + clockTime(s.duration),60,630,20); text("X 暂停 · L/R ±10秒 · ＋ 菜单 · B 返回",550,630,20);
-        if (s.duration > 0) rect(60,676,int(1140 * std::clamp(s.position / s.duration,0.0,1.0)),4,{214,230,165,255}); }
-        if (menu_) {
-            rect(340,80,620,480,{0,0,0,128});
-            if (!variants_.empty()) { text("云端清晰度",370,98,32); for (size_t i=size_t(menuIndex_/6)*6;i<variants_.size() && i<size_t(menuIndex_/6)*6+6;++i) button(variants_[i].label(),int(i),menuIndex_,370,150+int(i%6)*60,560); }
-            else { std::vector<std::string> labels = {"切换音轨", "切换字幕 / 关闭字幕", "字幕调整：−10  −3  −0.5  归零  +0.5  +3  +10", "115 云端清晰度", std::string("播放信息：") + (showInfo_ ? "开" : "关")}; text("播放菜单",370,98,32); for (size_t i=0;i<labels.size();++i) button(labels[i],int(i),menuIndex_,370,150+int(i)*68,560);
-        if(menuIndex_==2) text("左右选择，A 应用：" + std::to_string(std::array<double,7>{-10,-3,-0.5,0,0.5,3,10}[subtitleStep_]) + " 秒 · 当前 " + std::to_string(player_->subtitleDelay()) + " 秒",370,504,20,{214,230,165,255},560); }
-        }
-    }
+#include "screens.inc"
     void nav(Screen screen) { history_.clear();
         if (screen == Screen::Settings) { View v; v.screen=screen; show(v,false); } else loadScreen(screen,"",{},0,"",false); }
-    void input(u64 down) {
-        lastInput_=SDL_GetTicks(); status_.clear();
-        if (busy_) { if (down & HidNpadButton_B) api_.cancel=true; return; }
-        if (playing_) {
-            if (menu_) {
-                if (down & HidNpadButton_B) { if (!variants_.empty()) variants_.clear(); else menu_=false; return; }
-                int count=variants_.empty()?5:int(variants_.size());
-                if (down & HidNpadButton_Up) menuIndex_=std::max(0,menuIndex_-1);
-        if(down & HidNpadButton_Down) menuIndex_=std::min(count-1,menuIndex_+1);
-                if (variants_.empty() && menuIndex_==2) { if(down & HidNpadButton_Left) subtitleStep_=std::max(0,subtitleStep_-1);
-        if(down & HidNpadButton_Right) subtitleStep_=std::min(6,subtitleStep_+1); }
-                if(down & HidNpadButton_A) { if(!variants_.empty()) chooseCloud(variants_[menuIndex_]); else switch(menuIndex_) { case 0: player_->cycleAudio(); break; case 1: player_->cycleSubtitle(); break; case 2: if(subtitleStep_==3) player_->setSubtitleDelay(0); else player_->subtitleDelay(std::array<double,7>{-10,-3,-0.5,0,0.5,3,10}[subtitleStep_]); break; case 3: cloudMenu(); break; case 4: showInfo_=!showInfo_; break; } }
-            } else { if(down & HidNpadButton_B) stopPlayer(); else if(down & HidNpadButton_Plus) { menu_=true; menuIndex_=0; } else if(down & (HidNpadButton_X|HidNpadButton_A)) player_->pause(); else if(down & (HidNpadButton_L|HidNpadButton_Left)) player_->seek(-10); else if(down & (HidNpadButton_R|HidNpadButton_Right)) player_->seek(10); }
-            return;
-        }
-        if (down & HidNpadButton_Minus) { run_=false; return; }
-        if (down & HidNpadButton_B) { if(!history_.empty()) { view_=std::move(history_.back()); history_.pop_back(); } else if(!account_.token.empty()) nav(Screen::Home); return; }
-        if (view_.screen==Screen::Connect) {
-            if(down & HidNpadButton_Up) view_.selected=std::max(0,view_.selected-1);
-        if(down & HidNpadButton_Down) view_.selected=std::min(6,view_.selected+1);
-            if(down & HidNpadButton_A) switch(view_.selected) { case 0: base_=keyboard("媒体服务器 HTTP(S) 地址",base_); break; case 1: username_=keyboard("用户名",username_); break; case 2: password_=keyboard("密码",password_,true); break; case 3: ugreen_=!ugreen_; break; case 4: remember_=!remember_; break; case 5: login(); break; case 6: direct(); break; }
-            return;
-        }
-        if(down & HidNpadButton_Y) { auto query=keyboard("搜索媒体");
-        if(!query.empty()) loadScreen(Screen::Grid,"",{},0,query); return; }
-        if(down & (HidNpadButton_L|HidNpadButton_R)) { std::array<Screen,3> tabs{Screen::Home,Screen::Libraries,Screen::Settings}; int index=view_.screen==Screen::Home?0:view_.screen==Screen::Settings?2:1; index=(index+((down & HidNpadButton_R)?1:2))%3; nav(tabs[index]); return; }
-        if(view_.screen==Screen::Detail) { if(down & (HidNpadButton_Up|HidNpadButton_Down)) view_.selected=1-view_.selected;
-        if(down & HidNpadButton_A) startMedia(view_.selected==1); return; }
-        if(view_.screen==Screen::Settings) {
-            if(down & HidNpadButton_Up) view_.selected=std::max(0,view_.selected-1);
-        if(down & HidNpadButton_Down) view_.selected=std::min(3,view_.selected+1);
-            if(down & HidNpadButton_A) switch(view_.selected) { case 0: { View v; v.screen=Screen::Connect; show(v); break; } case 1: direct(); break; case 2: remember_=false; account_.token.clear(); account_.userId.clear(); save(); clearImages(); history_.clear(); view_={}; view_.screen=Screen::Connect; break; case 3: nav(Screen::Home); break; }
-            return;
-        }
-        int count=int(view_.page.items.size());
-        if(!count) return;
-        if(down & HidNpadButton_Left) view_.selected=std::max(0,view_.selected-1);
-        if(down & HidNpadButton_Right) view_.selected=std::min(count-1,view_.selected+1);
-        if(down & HidNpadButton_Up) view_.selected=std::max(0,view_.selected-6);
-        if(down & HidNpadButton_Down) view_.selected=std::min(count-1,view_.selected+6);
-        if(down & HidNpadButton_A) selectMedia(view_.page.items[view_.selected]);
-        if(down & HidNpadButton_ZR) { if(view_.screen==Screen::Grid && view_.offset+count<view_.page.total) loadScreen(Screen::Grid,view_.parent,view_.container,view_.offset+count,view_.search,false); }
-        if(down & HidNpadButton_ZL) { if(view_.screen==Screen::Grid && view_.offset>0) loadScreen(Screen::Grid,view_.parent,view_.container,std::max(0,view_.offset-60),view_.search,false); }
-    }
+#include "input.inc"
+
 public:
     explicit App(SDL_Renderer* renderer) : renderer_(renderer) {
         mkdir(Root,0777); mkdir((std::string(Root)+"/fonts").c_str(),0777);
         if(R_FAILED(plGetSharedFontByType(&fontData_,PlSharedFontType_ChineseSimplified))) throw std::runtime_error("无法读取系统中文字体");
         auto openFont=[&](int size) { return TTF_OpenFontRW(SDL_RWFromConstMem(fontData_.address,int(fontData_.size)),1,size); };
+        canvas_=std::make_unique<Canvas>(renderer_,fontData_.address,fontData_.size);
         normal_=openFont(24); small_=openFont(20); large_=openFont(36);
         if(!normal_||!small_||!large_) throw std::runtime_error("字体初始化失败");
         // A device-local copy lets libass discover the system font. It is never part of the NRO.
         auto fontPath=std::string(Root)+"/fonts/system-cjk.ttf"; std::ifstream existing(fontPath,std::ios::binary);
         if(!existing) { std::ofstream out(fontPath,std::ios::binary); out.write(static_cast<const char*>(fontData_.address),fontData_.size); }
         try { config_=readConfig(); } catch(const std::exception& e) { status_=e.what(); }
+        dark_=config_["dark"].boolean(true); accent_=int(config_["accent"].integer(2));
         base_=config_["base"].text(); username_=config_["username"].text(); ugreen_=config_["ugreen"].boolean(); remember_=config_["remember"].boolean(); device_=config_["device"].text();
         if(device_.empty()) device_=randomHex();
         if(remember_) account_={base_,config_["userId"].text(),config_["token"].text(),device_,ugreen_};
@@ -282,16 +248,30 @@ public:
     }
     ~App() {
         stopPlayer(); api_.shutdown(); images_.shutdown(); reports_.shutdown();
-        player_.reset(); clearImages(); for(auto& [k,v]:textCache_) SDL_DestroyTexture(v);
+        player_.reset(); canvas_.reset(); clearImages(); for(auto& [k,v]:textCache_) SDL_DestroyTexture(v);
         if(normal_) TTF_CloseFont(normal_);
         if(small_) TTF_CloseFont(small_);
         if(large_) TTF_CloseFont(large_);
     }
     void run() {
         while(run_ && appletMainLoop()) {
-            SDL_Event event; while(SDL_PollEvent(&event)) if(event.type==SDL_QUIT) run_=false;
-            padUpdate(&pad_); auto down=padGetButtonsDown(&pad_), held=padGetButtons(&pad_); u64 directions=held & (HidNpadButton_Up|HidNpadButton_Down|HidNpadButton_Left|HidNpadButton_Right); uint32_t now=SDL_GetTicks();
-            if(directions!=lastHeld_) { heldSince_=now; lastRepeat_=now; lastHeld_=directions; } else if(directions && now-heldSince_>350 && now-lastRepeat_>120) { down|=directions; lastRepeat_=now; }
+            SDL_Event nextEvent; while(SDL_PollEvent(&nextEvent)) { try { event(nextEvent); } catch(const std::exception& error) { status_=error.what(); } }
+            padUpdate(&pad_);
+            auto down = padGetButtonsDown(&pad_);
+            const auto held = padGetButtons(&pad_);
+            const auto stick = padGetStickPos(&pad_, 0);
+            const uint32_t now = SDL_GetTicks();
+            uint8_t digital = 0;
+            if (held & HidNpadButton_Left) digital |= NavLeft;
+            if (held & HidNpadButton_Right) digital |= NavRight;
+            if (held & HidNpadButton_Up) digital |= NavUp;
+            if (held & HidNpadButton_Down) digital |= NavDown;
+            const auto navigation = navigation_.update(digital, stick.x, stick.y, now);
+            down &= ~(HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_Up | HidNpadButton_Down);
+            if (navigation & NavLeft) down |= HidNpadButton_Left;
+            if (navigation & NavRight) down |= HidNpadButton_Right;
+            if (navigation & NavUp) down |= HidNpadButton_Up;
+            if (navigation & NavDown) down |= HidNpadButton_Down;
             try {
                 if(pending_.valid() && pending_.wait_for(std::chrono::seconds(0))==std::future_status::ready) { busy_=false; auto apply=pending_.get(); apply(); }
                 pollImages();
@@ -300,8 +280,16 @@ public:
         if(s.started&&!reported_) { report("Playing"); reported_=true; reportAt_=now; } if(reported_&&now-reportAt_>10000) { report("Playing/Progress"); reportAt_=now; } if(s.ended) { bool failed=s.failed; stopPlayer();
         if(failed) status_="播放失败：请检查格式、网络或选择较低的云端清晰度"; } }
             } catch(const std::exception& e) { busy_=false; status_=e.what(); }
-            rect(0,0,1280,720,{9,13,13,255});
-            if(playing_) drawPlayer(); else { text("SunnyTV",60,28,36,{214,230,165,255}); text("L/R 首页 · 媒体库 · 设置       Y 搜索",650,42,20,{171,183,173,255}); switch(view_.screen) { case Screen::Connect: drawConnect(); break; case Screen::Detail: drawDetail(); break; case Screen::Settings: drawSettings(); break; default: drawGrid(); break; } text("A 确认 · B 返回 · ZL/ZR 翻页 · − 退出",60,680,20,{171,183,173,255}); }
+            view_.scroll += (view_.targetScroll-view_.scroll)*.24f;
+            if(std::abs(view_.targetScroll-view_.scroll)<.4f)view_.scroll=view_.targetScroll;
+            hits_.clear();
+            if(playing_) { rect(0,0,1280,720,{0,0,0,255}); drawPlayer(); }
+            else {
+                drawBackdrop();
+                SDL_Rect clip{0,100,1280,620}; SDL_RenderSetClipRect(renderer_,&clip);
+                switch(view_.screen) { case Screen::Connect:drawConnect();break;case Screen::Detail:drawDetail();break;case Screen::Settings:drawSettings();break;default:drawGrid();break; }
+                SDL_RenderSetClipRect(renderer_,nullptr); drawHeader();
+            }
             if(busy_) { rect(850,650,380,50,{23,32,28,230}); text("正在加载… B 取消",870,662,20); }
             if(!status_.empty()) { rect(40,642,1200,40,{23,32,28,240}); text(status_,56,650,20,{214,230,165,255},1160); }
             SDL_RenderPresent(renderer_);
@@ -315,6 +303,7 @@ int main(int, char**) {
     if(R_FAILED(socketInitializeDefault())) return 1;
     if(R_FAILED(plInitialize(PlServiceType_User))) { socketExit(); return 1; }
     curl_global_init(CURL_GLOBAL_DEFAULT);
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS,"0");
     SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl"); SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMECONTROLLER)<0) return 1;
     TTF_Init(); IMG_Init(IMG_INIT_JPG|IMG_INIT_PNG);

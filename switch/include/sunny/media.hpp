@@ -10,6 +10,8 @@ struct Account {
 };
 struct Media {
     std::string id, title, type, overview, seriesId, imageTag, parentImageId;
+    std::string backdropTag, backdropId, logoTag, subtitle;
+    double rating = 0;
     int year = 0;
     int64_t positionMs = 0, durationMs = 0;
     bool folder = false, favorite = false;
@@ -44,7 +46,7 @@ public:
     Page children(const Media& item, int start = 0);
     Media item(const std::string& id);
     Playback playback(const Media& item, bool fromStart = false);
-    std::string imageUrl(const Media&, int width = 240) const;
+    std::string imageUrl(const Media&, int width = 240, const std::string& type = "Primary") const;
     void report(const Playback&, const std::string& event, int64_t positionMs, bool paused);
 };
 struct CloudVariant { std::string id; int width = 0, height = 0; int64_t bandwidth = 0; std::string label() const; };

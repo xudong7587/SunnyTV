@@ -23,7 +23,14 @@ std::string text(mpv_handle* h, const char* name) { char* p = mpv_get_property_s
         if (!p) return "";
     std::string s = p; mpv_free(p); return s; }
 }
-void Player::option(const char* key, const char* value) { if (mpv_set_option_string(mpv_, key, value) < 0) throw std::runtime_error(std::string("播放器参数不可用：") + key); }
+void Player::option(const char* key, const char* value, bool allowMissing) {
+    const int result = mpv_set_option_string(mpv_, key, value);
+    // Horizon's libmpv has no scripting backends. In that build load-scripts does not exist;
+    // there is consequently no script loader to disable. Invalid values and required options
+    // must still fail visibly, rather than hiding an unrelated initialization failure.
+    if (allowMissing && result == MPV_ERROR_OPTION_NOT_FOUND) return;
+    if (result < 0) throw std::runtime_error(std::string("播放器参数不可用：") + key + "（" + mpv_error_string(result) + "）");
+}
 Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
     mpv_ = mpv_create();
         if (!mpv_) throw std::runtime_error("播放器创建失败");
@@ -31,7 +38,7 @@ Player::Player(SDL_Renderer* renderer) : renderer_(renderer) {
         option("config", "no"); option("terminal", "no"); option("msg-level", "all=no");
         option("vo", "libmpv"); option("ao", "hos,sdl"); option("hwdec", "auto-copy");
         option("idle", "yes"); option("keep-open", "no"); option("input-default-bindings", "no");
-        option("input-vo-keyboard", "no"); option("load-scripts", "no");
+        option("input-vo-keyboard", "no"); option("load-scripts", "no", true);
         option("audio-channels", "stereo"); option("cache", "yes"); option("cache-secs", "20");
         option("demuxer-max-bytes", "67108864"); option("demuxer-max-back-bytes", "8388608");
         option("user-agent", UserAgent); option("sub-auto", "no");

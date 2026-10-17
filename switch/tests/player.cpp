@@ -1,8 +1,21 @@
 #include "sunny/player.hpp"
 #include <curl/curl.h>
 #include <iostream>
+#include <cstdlib>
+#include <cstring>
 
 using namespace sunny;
+// Reproduce the real Horizon build's compiled-out scripting option while still exercising the
+// complete renderer, gateway and decoder. Link wrapping affects only this regression harness.
+extern "C" int __real_mpv_set_option_string(mpv_handle*, const char*, const char*);
+static int missingScriptOptions = 0;
+extern "C" int __wrap_mpv_set_option_string(mpv_handle* handle, const char* name, const char* value) {
+    if (std::getenv("SUNNYTV_TEST_NO_SCRIPTS") && std::strcmp(name, "load-scripts") == 0) {
+        ++missingScriptOptions;
+        return MPV_ERROR_OPTION_NOT_FOUND;
+    }
+    return __real_mpv_set_option_string(handle, name, value);
+}
 int main(int argc, char** argv) {
     if (argc != 3) return 2;
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -14,6 +27,8 @@ int main(int argc, char** argv) {
     try {
         if (!renderer) throw std::runtime_error("SDL OpenGL renderer unavailable");
         Player player(renderer); Playback p; p.url=argv[1]; p.title="Synthetic media";
+        if (std::getenv("SUNNYTV_TEST_NO_SCRIPTS") && missingScriptOptions != 1)
+            throw std::runtime_error("Compiled-out scripting regression was not exercised");
         player.open(p,std::string(48,'b'));
         auto start=SDL_GetTicks(); bool played=false;
         while (SDL_GetTicks()-start<15000) {

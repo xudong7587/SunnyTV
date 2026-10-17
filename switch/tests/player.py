@@ -24,6 +24,8 @@ with tempfile.TemporaryDirectory(prefix='sunny-player-') as tmp:
     env['NO_PROXY'] = env['no_proxy'] = '127.0.0.1,localhost'
     try:
         subprocess.run([str(root / 'build/host/player-tests'), f'http://127.0.0.1:{server.server_port}/synthetic.mp4', f'http://127.0.0.1:{server.server_port}/index.m3u8'], check=True, env=env, timeout=40)
+        env['SUNNYTV_TEST_NO_SCRIPTS'] = '1'
+        subprocess.run([str(root / 'build/host/player-tests'), f'http://127.0.0.1:{server.server_port}/synthetic.mp4', f'http://127.0.0.1:{server.server_port}/index.m3u8'], check=True, env=env, timeout=40)
     finally:
         server.shutdown()
         server.server_close()

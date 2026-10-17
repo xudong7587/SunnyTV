@@ -55,6 +55,12 @@ Media Emby::parseItem(const Json& j) const {
     m.favorite = j["UserData"]["IsFavorite"].boolean();
     m.folder = j["IsFolder"].boolean() || m.type == "Series" || m.type == "Season" || m.type == "CollectionFolder" || m.type == "BoxSet";
     m.imageTag = j["ImageTags"]["Primary"].text(); m.parentImageId = j["SeriesId"].text();
+    const auto& backdrops = j["BackdropImageTags"].array();
+    const auto& parentBackdrops = j["ParentBackdropImageTags"].array();
+    if (!backdrops.empty()) { m.backdropTag = backdrops.front().text(); m.backdropId = m.id; }
+    else if (!parentBackdrops.empty()) { m.backdropTag = parentBackdrops.front().text(); m.backdropId = j["ParentBackdropItemId"].text(m.seriesId); }
+    m.logoTag = j["ImageTags"]["Logo"].text(); m.rating = j["CommunityRating"].number();
+    for (const auto& genre : j["Genres"].array()) { if (!m.subtitle.empty()) m.subtitle += " · "; m.subtitle += genre.text(); if (m.subtitle.size() > 96) break; }
     return m;
 }
 Page Emby::parsePage(const Json& j) const {
@@ -79,7 +85,14 @@ Page Emby::children(const Media& item, int start) {
     return list(item.id, start);
 }
 Media Emby::item(const std::string& id) { return parseItem(api("Users/" + encode(account_.userId) + "/Items/" + encode(id), {{"Fields", "Overview,MediaSources,MediaStreams"}})); }
-std::string Emby::imageUrl(const Media& m, int width) const { auto id = m.imageTag.empty() && !m.parentImageId.empty() ? m.parentImageId : m.id; Headers q{{"MaxWidth", std::to_string(std::clamp(width, 64, 1920))}, {"Quality", "80"}}; if (!m.imageTag.empty()) q["tag"] = m.imageTag; return endpoint("Items/" + encode(id) + "/Images/Primary", q); }
+std::string Emby::imageUrl(const Media& m, int width, const std::string& type) const {
+    if (type != "Primary" && type != "Backdrop" && type != "Logo") throw std::runtime_error("图片类型无效");
+    auto id = type == "Backdrop" && !m.backdropId.empty() ? m.backdropId : type == "Primary" && m.imageTag.empty() && !m.parentImageId.empty() ? m.parentImageId : m.id;
+    auto tag = type == "Backdrop" ? m.backdropTag : type == "Logo" ? m.logoTag : m.imageTag;
+    Headers q{{"MaxWidth", std::to_string(std::clamp(width, 64, 1920))}, {"Quality", "85"}};
+    if (!tag.empty()) q["tag"] = tag;
+    return endpoint("Items/" + encode(id) + "/Images/" + type + (type == "Backdrop" ? "/0" : ""), q);
+}
 Playback Emby::playback(const Media& item, bool fromStart) {
     Json body = Json::Object{{"UserId", account_.userId}, {"StartTimeTicks", fromStart ? int64_t(0) : item.positionMs * 10000}, {"IsPlayback", true}, {"AutoOpenLiveStream", false}, {"EnableDirectPlay", true}, {"EnableDirectStream", true}, {"EnableTranscoding", false}};
     auto info = api("Items/" + encode(item.id) + "/PlaybackInfo", {}, &body);

@@ -24,7 +24,7 @@ class Player {
     PlayerState state_;
     bool triedFallback_ = false;
     double subDelay_ = 0;
-    void option(const char*, const char*);
+    void option(const char*, const char*, bool allowMissing = false);
 public:
     explicit Player(SDL_Renderer* renderer);
     ~Player();

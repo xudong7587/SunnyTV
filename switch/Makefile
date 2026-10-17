@@ -25,7 +25,7 @@ build/%.o: source/%.cpp | build
 $(TARGET).elf: $(OBJECTS)
 	$(CXX) $(LDFLAGS) $(OBJECTS) $(LIBS) -o $@
 $(TARGET).nacp:
-	nacptool --create "SunnyTV" "SunnyTV contributors" "0.2.8" $@
+	nacptool --create "SunnyTV" "SunnyTV contributors" "0.2.9" $@
 $(TARGET).nro: $(TARGET).elf $(TARGET).nacp
 	elf2nro $< $@ --nacp=$(TARGET).nacp --icon=$(DEVKITPRO)/libnx/default_icon.jpg
 package: all

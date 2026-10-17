@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: switch-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   core:
     runs-on: ubuntu-latest
@@ -33,7 +36,7 @@ jobs:
           dkp-pacman -Q > switch/dist/TOOLCHAIN_PACKAGES.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: SunnyTV-Switch-0.2.8
+          name: SunnyTV-Switch-0.2.9
           path: switch/dist/
           if-no-files-found: error
   player-smoke:
@@ -44,7 +47,7 @@ jobs:
       - name: Build playback integration harness
         run: |
           mkdir -p switch/build/host
-          g++ -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 mpv libcurl) switch/source/json.cpp switch/source/network.cpp switch/source/gateway.cpp switch/source/player.cpp switch/tests/player.cpp -pthread $(pkg-config --libs sdl2 mpv) -lcurl -o switch/build/host/player-tests
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 mpv libcurl) switch/source/json.cpp switch/source/network.cpp switch/source/gateway.cpp switch/source/player.cpp switch/tests/player.cpp -pthread -Wl,--wrap=mpv_set_option_string $(pkg-config --libs sdl2 mpv) -lcurl -o switch/build/host/player-tests
       - name: Play synthetic video through the streaming gateway
         run: xvfb-run -a python3 switch/tests/player.py
         env:

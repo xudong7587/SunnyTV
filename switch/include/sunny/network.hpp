@@ -7,7 +7,7 @@
 
 namespace sunny {
 using Headers = std::map<std::string, std::string>;
-constexpr const char* UserAgent = "SunnyTV/0.2.8 (Nintendo Switch; libmpv)";
+constexpr const char* UserAgent = "SunnyTV/0.2.9 (Nintendo Switch; libmpv)";
 std::string lower(std::string s);
 std::string trim(std::string s);
 std::string encode(const std::string& s);

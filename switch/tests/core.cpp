@@ -1,5 +1,7 @@
 #include "sunny/json.hpp"
 #include "sunny/media.hpp"
+#include "sunny/navigation.hpp"
+#include "sunny/touch.hpp"
 #include <curl/curl.h>
 #include <functional>
 #include <iostream>
@@ -19,6 +21,41 @@ public:
 int main() {
     curl_global_init(CURL_GLOBAL_DEFAULT);
     try {
+        TouchTracker touch;
+        touch.begin(1,{40,80});
+        check(touch.end(1,{44,83}).gesture==Gesture::Tap,"finger tap activates");
+        touch.begin(2,{400,500});
+        auto drag=touch.move(2,{402,450});
+        check(drag.gesture==Gesture::Scroll&&drag.dy==-50,"finger vertical drag scrolls");
+        check(touch.end(2,{402,450}).gesture==Gesture::None,"drag release does not tap media");
+        touch.begin(3,{800,400});touch.move(3,{680,403});
+        check(touch.end(3,{680,403}).gesture==Gesture::SwipeLeft,"horizontal finger swipe");
+        touch.begin(4,{500,300});touch.begin(5,{900,300});
+        check(touch.end(5,{900,300}).gesture==Gesture::None&&touch.active(),"second finger cannot trigger first finger action");
+        check(touch.end(4,{500,300}).gesture==Gesture::Tap,"original finger remains tracked");
+        touch.begin(6,{50,50});touch.cancel();
+        check(touch.end(6,{50,50}).gesture==Gesture::None,"cancelled gesture ignored");
+        check(Bounds{10,20,100,50}.contains({10,20})&&!Bounds{10,20,100,50}.contains({110,70}),"touch hit bounds are precise");
+        NavigationRepeat nav;
+        check(nav.update(0, 8000, -8000, 0) == 0, "left stick drift ignored");
+        check(nav.update(0, 20000, 0, 10) == NavRight, "left stick right initial press");
+        check(nav.update(0, 14000, 0, 100) == 0, "stick boundary hysteresis");
+        check(nav.update(0, 20000, 0, 359) == 0, "no repeat before delay");
+        check(nav.update(0, 20000, 0, 360) == NavRight, "held stick repeats after delay");
+        check(nav.update(0, 20000, 0, 400) == 0, "repeat interval limited");
+        check(nav.update(0, 20000, 0, 480) == NavRight, "held stick second repeat");
+        check(nav.update(0, 0, 0, 500) == 0, "stick release");
+        check(nav.update(0, -25000, 0, 510) == NavLeft, "left stick left press");
+        nav.update(0, 0, 0, 520);
+        check(nav.update(0, 0, 25000, 530) == NavUp, "positive Switch stick Y moves up");
+        check(nav.update(0, 0, -25000, 540) == NavDown, "negative Switch stick Y moves down");
+        nav.update(0, 0, 0, 550);
+        check(nav.update(NavRight, 25000, 0, 560) == NavRight, "D-pad and stick do not double navigate");
+        nav.update(0, 0, 0, 570);
+        check(nav.update(0, 22000, 18000, 580) == NavRight, "diagonal stick selects dominant axis");
+        NavigationRepeat wrap;
+        wrap.update(NavDown, 0, 0, UINT32_MAX - 100);
+        check(wrap.update(NavDown, 0, 0, 300) == NavDown, "repeat handles timer wraparound");
         auto j = Json::parse("{\"name\":\"\\u4e2d\\u6587\\ud83c\\udf1e\",\"a\":[null,true,-1.5e2]}");
         check(j["name"].text() == "中文🌞", "unicode and surrogate pair");
         check(j["a"].array()[2].integer() == -150, "number parser");
