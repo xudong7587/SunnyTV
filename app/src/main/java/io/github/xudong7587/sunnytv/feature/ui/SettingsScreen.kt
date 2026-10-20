@@ -325,6 +325,7 @@ import kotlinx.coroutines.*
                     item {Action("快进步长：${model.settings.seekStepSeconds} 秒") {model.saveSettings(model.settings.copy(seekStepSeconds=if(model.settings.seekStepSeconds==10) 30 else 10))}}
                     item {Text("HDR、杜比视界、音频直通、字幕延迟和自动跨季续播需要后续真机验证；未提供假开关。",color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=22.sp)}
                 }
+                "灯带设置" -> {item {AmbilightSettings()}}
                 "设备与诊断" -> {
                     item {DisplayDiagnostics()}
                     item {ToggleRow("显示播放诊断","首帧耗时以真实渲染事件记录；不是 prepare() 耗时",model.settings.diagnostics) {model.saveSettings(model.settings.copy(diagnostics=!model.settings.diagnostics))}}
@@ -424,7 +425,7 @@ import kotlinx.coroutines.*
 
 @Composable private fun SettingsCategories(category:String,onSelect:(String)->Unit) {
     // 字体 merged into 外观; the data-source page sits below 性能.
-    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","设备与诊断","关于")
+    val categories=listOf("主题","外观","首页","性能","媒体来源","播放","灯带设置","设备与诊断","关于")
     @Composable fun Category(cat:String) {
         FocusTile("settings:$cat",if(LocalCompact.current) Modifier.widthIn(min=64.dp) else Modifier.width(165.dp),active=category==cat,onClick={onSelect(cat)}) {focused->
             Text(cat,color=if(focused || category==cat) SunnyColors.Accent else SunnyColors.Secondary,fontSize=14.sp,modifier=Modifier.padding(14.dp))

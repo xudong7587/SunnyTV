@@ -14,6 +14,7 @@ import io.github.xudong7587.sunnytv.source.clouddrive.WebDavSource
 import java.io.File
 
 class SunnyApp : Application() {
+    val ambilight by lazy {io.github.xudong7587.sunnytv.feature.ambilight.AmbilightController(this)}
     val http by lazy { SafeHttp() }
     val store by lazy { ConfigStore(this) }
     val startup by lazy {StartupCache(this)}

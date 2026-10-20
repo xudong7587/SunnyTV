@@ -65,6 +65,8 @@ import io.github.xudong7587.sunnytv.source.transcode.CloudVideoSource
 @androidx.annotation.OptIn(UnstableApi::class)
 class PlayerActivity: ComponentActivity() {
     private val app get() = application as SunnyApp
+    private var lightPlayerView:PlayerView?=null
+    private var lightSampler:io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler?=null
     private lateinit var request: PlaybackRequest
     private var player by mutableStateOf<ExoPlayer?>(null)
     private var controls by mutableStateOf(true)
@@ -220,7 +222,13 @@ class PlayerActivity: ComponentActivity() {
 
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) {
         if(quality=="original") createPlayer() else changeQuality(quality,lastPosition,resumePlayWhenReady)
-    }}
+    }
+        if(::request.isInitialized) {
+            lightSampler=io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler(app.ambilight,
+                surface={lightPlayerView?.let {v->(v.videoSurfaceView as? android.view.SurfaceView)?.let {it to v}}},
+                playing={rendered && player?.isPlaying==true && error.isBlank()}).also {it.start()}
+        }
+    }
     override fun onResume() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
@@ -228,6 +236,7 @@ class PlayerActivity: ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
 
     override fun onStop() {
+        lightSampler?.stop();lightSampler=null
         subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
         routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
@@ -865,6 +874,7 @@ class PlayerActivity: ComponentActivity() {
         BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
             val titleWidth=if(tvPlayback) 300.dp else (maxWidth-120.dp).coerceIn(70.dp,300.dp)
             AndroidView(factory={androidContext->PlayerView(androidContext).apply {
+                lightPlayerView=this
                 useController=false;keepScreenOn=true
                 isFocusable=false
                 descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
