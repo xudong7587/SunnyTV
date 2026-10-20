@@ -134,7 +134,8 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
     val hsv=remember(initial) {FloatArray(3).also {android.graphics.Color.colorToHSV(initial or 0xff000000.toInt(),it)}}
     var hue by remember {mutableFloatStateOf(hsv[0])}
     var saturation by remember {mutableFloatStateOf(hsv[1])}
-    val rgb=android.graphics.Color.HSVToColor(floatArrayOf(hue,saturation,1f)) and 0xffffff
+    fun selectedColor()=android.graphics.Color.HSVToColor(floatArrayOf(hue,saturation,1f)) and 0xffffff
+    val rgb=selectedColor()
     val requester=remember {FocusRequester()}
     LaunchedEffect(rgb) {onPreview(rgb)}
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
@@ -146,7 +147,7 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
                     Key.DirectionRight->{hue=(hue+3f)%360f;true}
                     Key.DirectionUp->{saturation=(saturation-0.04f).coerceAtLeast(0f);true}
                     Key.DirectionDown->{saturation=(saturation+0.04f).coerceAtMost(1f);true}
-                    Key.DirectionCenter,Key.Enter,Key.NumPadEnter->{onSave(rgb);true}
+                    Key.DirectionCenter,Key.Enter,Key.NumPadEnter->{onSave(selectedColor());true}
                     else->false
                 }
             }.focusRequester(requester).focusable(),verticalArrangement=Arrangement.spacedBy(18.dp)) {
