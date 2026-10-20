@@ -23,7 +23,7 @@ data class LightLayout(val count:Int=96,val topLeft:Int=49,val topRight:Int=18,
 }
 
 data class LightConfig(val enabled:Boolean=false,val sync:Boolean=true,val fixedColor:Int=0xff4d05,
-    val brightness:Int=128,val fps:Int=10,val layout:LightLayout=LightLayout(),val deviceAddress:String="")
+    val brightness:Int=255,val fps:Int=10,val layout:LightLayout=LightLayout(),val deviceAddress:String="")
 
 object Sp658eProtocol {
     val query=byteArrayOf(0x53,2,0x5b,1,0,1,0xdd.toByte())

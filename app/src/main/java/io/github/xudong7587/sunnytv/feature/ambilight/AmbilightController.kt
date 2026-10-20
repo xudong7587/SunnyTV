@@ -36,7 +36,7 @@ class AmbilightController(context:Context) {
     private var totalSendMs=0L
     private var captureMs=0L
     private fun readConfig()=LightConfig(prefs.getBoolean("enabled",false),prefs.getBoolean("sync",true),
-        prefs.getInt("fixed",0xff4d05) and 0xffffff,prefs.getInt("brightness",128).coerceIn(1,255),
+        prefs.getInt("fixed",0xff4d05) and 0xffffff,prefs.getInt("brightness",255).coerceIn(1,255),
         prefs.getInt("fps",10).takeIf {it in listOf(5,10,15)}?:10,
         LightLayout(prefs.getInt("count",96),prefs.getInt("tl",49),prefs.getInt("tr",18),prefs.getInt("br",3),prefs.getInt("bl",65))
             .takeIf {it.direction()!=null}?:LightLayout(),prefs.getString("device","").orEmpty())

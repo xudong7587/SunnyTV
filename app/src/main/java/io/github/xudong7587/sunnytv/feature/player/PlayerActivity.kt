@@ -223,7 +223,7 @@ class PlayerActivity: ComponentActivity() {
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) {
         if(quality=="original") createPlayer() else changeQuality(quality,lastPosition,resumePlayWhenReady)
     }
-        if(::request.isInitialized) {
+        if(::request.isInitialized && app.ambilight.config.value.enabled) {
             lightSampler=io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler(app.ambilight,
                 surface={lightPlayerView?.let {v->(v.videoSurfaceView as? android.view.SurfaceView)?.let {it to v}}},
                 playing={rendered && player?.isPlaying==true && error.isBlank()}).also {it.start()}

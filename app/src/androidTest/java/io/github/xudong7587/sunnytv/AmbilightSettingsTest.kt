@@ -18,7 +18,7 @@ class AmbilightSettingsTest {
     @Test fun remotePalettePreviewsAndConfirmsColorWithoutLeakingFocus() {
         var selected:Int?=null
         var previews=0
-        rule.activity.setContent {SunnyTheme(AppSettings()) {
+        rule.setContent {SunnyTheme(AppSettings()) {
             LightPalette(0xff4d05,onPreview={previews++},onClose={},onSave={selected=it})
         }}
         rule.waitForIdle()
@@ -30,7 +30,7 @@ class AmbilightSettingsTest {
         assertNotNull(selected);assertNotEquals(0xff4d05,selected);assertTrue(previews>=2)
     }
     @Test fun settingsExposeConnectionCalibrationFixedColorAndSavedLayout() {
-        rule.activity.setContent {
+        rule.setContent {
             val model=remember {AppModel(rule.activity.application,false,emptyList())}
             CompositionLocalProvider(LocalAppModel provides model) {SunnyTheme(model.settings) {
                 androidx.compose.foundation.layout.Column {AmbilightSettings()}
