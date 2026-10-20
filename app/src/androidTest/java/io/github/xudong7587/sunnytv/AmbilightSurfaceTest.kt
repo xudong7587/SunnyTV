@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv
 
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.PixelCopy
@@ -11,6 +12,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.xudong7587.sunnytv.core.model.PlaybackRequest
 import io.github.xudong7587.sunnytv.feature.ambilight.EdgeColors
+import io.github.xudong7587.sunnytv.feature.ambilight.copyVideoPixels
 import io.github.xudong7587.sunnytv.feature.player.PlayerActivity
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -61,7 +63,8 @@ class AmbilightSurfaceTest {
                 scenario.onActivity {activity->
                     val view=PlayerActivity::class.java.getDeclaredField("lightPlayerView").apply {isAccessible=true}.get(activity) as PlayerView
                     val surface=view.videoSurfaceView as SurfaceView
-                    PixelCopy.request(surface,bitmap,{result->copyResult=result;ready.countDown()},Handler(thread.looper))
+                    copyVideoPixels(surface.holder.surface,Rect(surface.holder.surfaceFrame),bitmap,
+                        Handler(thread.looper),{result->copyResult=result;ready.countDown()})
                 }
                 assertTrue("PixelCopy timed out",ready.await(5,TimeUnit.SECONDS))
                 assertEquals(PixelCopy.SUCCESS,copyResult)

@@ -5,6 +5,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AmbilightTest {
+    @Test fun visibleCropUsesVideoBufferCoordinates() {
+        assertArrayEquals(intArrayOf(0,0,3840,2160),VideoCrop.bufferRect(1920,1080,0,0,1920,1080,3840,2160))
+        assertArrayEquals(intArrayOf(384,0,3456,2160),VideoCrop.bufferRect(2400,1350,240,0,2160,1350,3840,2160))
+    }
     private fun hex(s:String)=s.chunked(2).map {it.toInt(16).toByte()}.toByteArray()
     @Test fun capturedStaticColorCommand() {
         assertArrayEquals(hex("535234010004f4460ef4"),Sp658eProtocol.fixed(0xff4d05,255).last())

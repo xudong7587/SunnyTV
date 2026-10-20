@@ -52,9 +52,25 @@ object Sp658eProtocol {
     }
     fun edges(layout:LightLayout,colors:IntArray):ByteArray {
         require(colors.size==4 && layout.direction()!=null)
-        return runs(IntArray(layout.count) {colors[layout.side(it)]})
+        val pixels=IntArray(layout.count);val direction=requireNotNull(layout.direction())
+        val lengths=layout.lengths()
+        layout.corners.forEachIndexed {side,start->repeat(lengths[side]) {offset->
+            pixels[Math.floorMod(start+direction*offset,layout.count)]=colors[side]
+        }}
+        return runs(pixels)
     }
     fun marker(count:Int,address:Int)=runs(IntArray(count) {if(it==address) 0xffffff else 0})
+}
+
+object VideoCrop {
+    /** PixelCopy uses buffer pixels, which need not equal SurfaceView layout pixels. */
+    fun bufferRect(viewWidth:Int,viewHeight:Int,left:Int,top:Int,right:Int,bottom:Int,bufferWidth:Int,bufferHeight:Int):IntArray {
+        require(viewWidth>0 && viewHeight>0 && bufferWidth>0 && bufferHeight>0)
+        fun floor(v:Int,b:Int,view:Int)=(v.toLong()*b/view).toInt().coerceIn(0,b)
+        fun ceil(v:Int,b:Int,view:Int)=((v.toLong()*b+view-1)/view).toInt().coerceIn(0,b)
+        return intArrayOf(floor(left,bufferWidth,viewWidth),floor(top,bufferHeight,viewHeight),
+            ceil(right,bufferWidth,viewWidth),ceil(bottom,bufferHeight,viewHeight))
+    }
 }
 
 /** Notification fragments can arrive separately, duplicated, or with an expired predecessor. */

@@ -42,8 +42,10 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
         if(lights.hasPermissions())lights.connect() else message="需要蓝牙权限才能连接灯带；Android 11 还需允许定位并开启系统定位。"
     }
     fun connect() {
-        lights.save(config.copy(enabled=true))
-        if(lights.hasPermissions())lights.connect() else permissions.launch(lights.permissions())
+        val alreadyEnabled=config.enabled
+        if(!alreadyEnabled)lights.save(config.copy(enabled=true))
+        if(!lights.hasPermissions())permissions.launch(lights.permissions())
+        else if(alreadyEnabled)lights.connect()
     }
     DisposableEffect(lights) {lights.enterSettings();onDispose {lights.leaveSettings()}}
     Column(Modifier.fillMaxWidth().testTag("settings:ambilight"),verticalArrangement=Arrangement.spacedBy(16.dp)) {

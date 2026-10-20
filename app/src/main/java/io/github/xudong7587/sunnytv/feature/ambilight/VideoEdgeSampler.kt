@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.PixelCopy
 import android.view.SurfaceView
+import android.view.Surface
 import android.view.View
 
 /** Samples the app's own video surface; no MediaProjection and no full-screen recording. */
@@ -42,6 +43,10 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
             val a=IntArray(2);val b=IntArray(2);video.getLocationInWindow(a);container.getLocationInWindow(b)
             val rect=Rect(0,0,video.width,video.height)
             if(!rect.intersect(b[0]-a[0],b[1]-a[1],b[0]-a[0]+container.width,b[1]-a[1]+container.height))return
+            val buffer=video.holder.surfaceFrame
+            if(buffer.width()<=0 || buffer.height()<=0)return
+            val bounds=VideoCrop.bufferRect(video.width,video.height,rect.left,rect.top,rect.right,rect.bottom,buffer.width(),buffer.height())
+            val source=video.holder.surface
             val began=SystemClock.elapsedRealtime();inFlight=true
             val callback=PixelCopy.OnPixelCopyFinishedListener {result->
                 if(!closed) {
@@ -53,10 +58,7 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                 }
                 main.post {inFlight=false;if(closed)dispose()}
             }
-            try {
-                if(Build.VERSION.SDK_INT>=26)PixelCopy.request(video,rect,bitmap,callback,worker)
-                else PixelCopy.request(video,bitmap,callback,worker)
-            } catch(_:IllegalArgumentException) {inFlight=false;lights.idle(owner)}
+            copyVideoPixels(source,Rect(bounds[0],bounds[1],bounds[2],bounds[3]),bitmap,worker,callback)
         }
     }
     fun start() {lights.startPlayback(owner);main.post(tick)}
@@ -65,4 +67,14 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
         if(!inFlight)dispose()
     }
     private fun dispose() {if(!bitmap.isRecycled)bitmap.recycle();thread.quitSafely()}
+}
+
+/** Android 11 performs the native copy synchronously before posting its callback. */
+internal fun copyVideoPixels(surface:Surface,rect:Rect,bitmap:Bitmap,worker:Handler,callback:PixelCopy.OnPixelCopyFinishedListener) {
+    worker.post {
+        try {
+            if(Build.VERSION.SDK_INT>=26)PixelCopy.request(surface,rect,bitmap,callback,worker)
+            else PixelCopy.request(surface,bitmap,callback,worker)
+        } catch(_:IllegalArgumentException) {callback.onPixelCopyFinished(PixelCopy.ERROR_SOURCE_INVALID)}
+    }
 }
