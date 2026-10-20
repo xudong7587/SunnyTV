@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.xudong7587.sunnytv.SunnyApp
 import io.github.xudong7587.sunnytv.feature.ambilight.*
 
@@ -41,13 +44,22 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
     val permissions=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         if(lights.hasPermissions())lights.connect() else message="需要蓝牙权限才能连接灯带；Android 11 还需允许定位并开启系统定位。"
     }
+    val lifecycle=LocalLifecycleOwner.current.lifecycle
     fun connect() {
         val alreadyEnabled=config.enabled
         if(!alreadyEnabled)lights.save(config.copy(enabled=true))
         if(!lights.hasPermissions())permissions.launch(lights.permissions())
         else if(alreadyEnabled)lights.connect()
     }
-    DisposableEffect(lights) {lights.enterSettings();onDispose {lights.leaveSettings()}}
+    DisposableEffect(lights,lifecycle) {
+        val observer=LifecycleEventObserver {_,event->
+            if(event==Lifecycle.Event.ON_START)lights.enterSettings()
+            if(event==Lifecycle.Event.ON_STOP) {palette=false;calibration=false;lights.leaveSettings()}
+        }
+        lifecycle.addObserver(observer)
+        if(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))lights.enterSettings()
+        onDispose {lifecycle.removeObserver(observer);lights.leaveSettings()}
+    }
     Column(Modifier.fillMaxWidth().testTag("settings:ambilight"),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Text("SP658E · 播放时同步视频四边，退出或暂停后显示固定色。",color=SunnyColors.Secondary,fontSize=14.sp)
         Text(status,color=SunnyColors.Accent,fontSize=17.sp)
