@@ -37,6 +37,16 @@
 
 ## 验证与交付
 
-执行记录完成后补充。本版使用 0.3.9 / versionCode 71，包名 `io.github.xudong7587.sunnytv.debug`，release 不可调试；沿用仓库现有签名身份。
+已完成以下验证（构建提交 `12bf926a6a57af46034b9a999edf13a18863bf73`）：
+
+- JVM 单元测试 192 项通过，零失败、零跳过；其中契约测试执行 172 条核心检查。
+- Android 11 / API 30 TV 模拟器 10 项通过，零失败、零跳过：真实 Media3 视频四边取色、应用生命周期、遥控器色板和设置入口、原有播放面板焦点、首页导航及画面缩放/重建。
+- 完整 lintDebug / lintRelease、release 四 ABI 构建通过。新工作区本地 lint 首次因未生成 FFmpeg 静态库未完成；CI 按锁定版本生成全部库后完成上述检查，未跳过或关闭检查。
+- 发行包非 debuggable / testOnly，无私钥或不允许的字体；签名有效且与现有 0.3.8 APK 证书一致。
+- CI 记录：[39630377218](https://github.com/xudong7587/SunnyTV/actions/runs/39630377218)。
+- 已复制 `SunnyTV-灯带版-v0.3.9.apk` 到原安装目录，29,232,746 字节；源文件、CI 清单与 NAS 回读 SHA256 一致：`48e9589f41bc68afbd3649350d5896f1ed49438af6dc3773acd1046725e43d23`。
+- 本次没有连接到实体电视 ADB；上述通过不等于此次增强色彩与退出熄灯已获实体灯带确认，需覆盖安装后验收。
+
+本版使用 0.3.9 / versionCode 71，包名 `io.github.xudong7587.sunnytv.debug`，release 不可调试；沿用仓库现有签名身份。
 仅把签名及发行检查通过的 APK 放入 `Z:\V3 Download\tv apk`，不写 JSON、不写旧升级目录、不发布新的 GitHub latest。
 电视实体灯光效果需安装后确认，不能把模拟器和蓝牙提交时间当成实测发光延迟。
