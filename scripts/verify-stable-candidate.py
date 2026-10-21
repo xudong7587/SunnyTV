@@ -24,11 +24,12 @@ def validate_draft(release, version, commit, digest):
 
 def compare_application(candidate, rebuilt):
     # Signing/ZIP metadata and unchanged native decoders are checked separately.
-    # DEX, manifest, all compiled resources and third-party shader/color licenses
-    # must match the fresh release build byte for byte.
+    # DEX, manifest and compiled resources must match the fresh release build
+    # byte for byte. License text permits only Git's Windows/Linux newline change.
     def contents(path):
         with zipfile.ZipFile(path) as apk:
-            return {name: hashlib.sha256(apk.read(name)).hexdigest()
+            return {name: hashlib.sha256(apk.read(name).replace(b'\r\n', b'\n')
+                    if name.startswith('assets/licenses/') else apk.read(name)).hexdigest()
                     for name in apk.namelist()
                     if re.fullmatch(r'classes\d*\.dex', name)
                     or name in ('AndroidManifest.xml', 'resources.arsc')

@@ -46,6 +46,11 @@ class StableCandidateTest(unittest.TestCase):
             write(first, entries)
             write(second, entries | {'META-INF/CERT.RSA': b'signature'})
             self.assertEqual(candidate.compare_application(first, second), len(entries))
+            license_name = 'assets/licenses/material-color-utilities.txt'
+            write(first, entries | {license_name: b'license\r\ntext\r\n'})
+            write(second, entries | {license_name: b'license\ntext\n'})
+            self.assertEqual(candidate.compare_application(first, second), len(entries))
+            write(first, entries)
             for name in entries:
                 with self.subTest(name=name):
                     write(second, entries | {name: b'changed'})
