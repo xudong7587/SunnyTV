@@ -14,6 +14,7 @@ import io.github.xudong7587.sunnytv.source.clouddrive.WebDavSource
 import java.io.File
 
 class SunnyApp : Application() {
+    val ambilight by lazy { io.github.xudong7587.sunnytv.feature.ambilight.AmbilightController(this) }
     val http by lazy { SafeHttp() }
     val store by lazy { ConfigStore(this) }
     val startup by lazy {StartupCache(this)}
@@ -30,6 +31,7 @@ class SunnyApp : Application() {
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(io.github.xudong7587.sunnytv.feature.ambilight.LightActivityObserver {ambilight})
         // Do not let engine exception logs expose signed media URLs. Our diagnostic panel
         // reports numeric error codes and elapsed times instead of exception.toString().
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF)

@@ -1,0 +1,90 @@
+name: SunnyTV ambilight candidate
+on:
+  push:
+    branches: [codex/sunnytv-038-ambilight]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sunnytv-ambilight-candidate
+  cancel-in-progress: true
+jobs:
+  candidate:
+    if: github.repository == 'xudong7587/SunnyTV'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Build pinned audio decoders and synthetic video
+        run: |
+          set -euo pipefail
+          sdkmanager 'ndk;26.1.10909125' 'cmake;3.22.1' 'platforms;android-35' 'build-tools;35.0.0'
+          bash scripts/build-audio-decoders.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          mkdir -p app/src/androidTest/assets
+          ffmpeg -v error -f lavfi -i 'color=c=gray:s=320x180:r=24:d=12' -vf 'drawbox=x=0:y=0:w=iw:h=18:c=red:t=fill,drawbox=x=0:y=162:w=iw:h=18:c=blue:t=fill,drawbox=x=0:y=18:w=32:h=144:c=yellow:t=fill,drawbox=x=288:y=18:w=32:h=144:c=green:t=fill' -c:v libx264 -threads 1 -preset ultrafast -pix_fmt yuv420p -movflags +faststart app/src/androidTest/assets/ambilight.mp4
+      - name: Select existing signing identity
+        env:
+          KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$KEY_B64"
+          mkdir -p "$HOME/.android" build-logs dist
+          printf '%s' "$KEY_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          test "$certificate" = '5e8dcd5e1eee828e064682ba6f8dc7d54dfcf59d3182dd6b427a23d1214d6b00'
+          echo "SUNNYTV_SIGNING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+      - name: Unit tests, lint, signed APK and package verification
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          python3 scripts/test-release-package.py
+          ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug lintRelease assembleRelease assembleDebugAndroidTest 2>&1 | tee build-logs/build.log
+          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code 71 --version-name 0.3.9
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 '5e8dcd5e1eee828e064682ba6f8dc7d54dfcf59d3182dd6b427a23d1214d6b00' --candidate app/build/outputs/apk/release/app-release.apk --out build-logs/signing-validation.json
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: tv_1080p
+          disable-animations: true
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.AmbilightLifecycleTest,io.github.xudong7587.sunnytv.AmbilightSurfaceTest,io.github.xudong7587.sunnytv.AmbilightSettingsTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.PlayerResizeTest
+      - name: Prepare private test build
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v0.3.9.apk
+          cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
+          printf 'version=0.3.9\nversionCode=71\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\ndebuggable=false\nchannel=ambilight-candidate\n' "$GITHUB_SHA" > dist/BUILD_INFO.txt
+          (cd dist && sha256sum *.apk *.json *.txt > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SunnyTV-ambilight-candidate
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SunnyTV-ambilight-validation
+          path: |
+            build-logs/
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
+      - name: Remove ephemeral key
+        if: always()
+        run: rm -f "$HOME/.android/debug.keystore"

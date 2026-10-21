@@ -90,6 +90,8 @@ class PlayerActivity: ComponentActivity() {
     private var resizeMode by mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT)
     // TV's SurfaceView is hosted directly by the window. OSD recomposition never owns its geometry.
     private var tvPlayerView:PlayerView?=null
+    private var lightPlayerView:PlayerView?=null
+    private var edgeSampler:io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler?=null
     private var retryUsed=false
     private var mp4EditListFallbackUsed=false
     private var autoRetryAttempts=0
@@ -220,6 +222,7 @@ class PlayerActivity: ComponentActivity() {
     }
 
     private fun createVideoView(context:Context)=PlayerView(context).apply {
+        lightPlayerView=this
         useController=false;keepScreenOn=true
         isFocusable=false;isFocusableInTouchMode=false
         descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -245,7 +248,13 @@ class PlayerActivity: ComponentActivity() {
 
     override fun onStart() {super.onStart();if(::request.isInitialized && player==null) {
         if(quality=="original") createPlayer() else changeQuality(quality,lastPosition,resumePlayWhenReady)
-    }}
+    }
+        if(app.ambilight.config.value.enabled && edgeSampler==null) {
+            edgeSampler=io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler(app.ambilight,{
+                lightPlayerView?.let {view->(view.videoSurfaceView as? android.view.SurfaceView)?.let {it to view}}
+            },{rendered && player?.isPlaying==true && error.isBlank()}).also {it.start()}
+        }
+    }
     override fun onResume() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
@@ -253,6 +262,7 @@ class PlayerActivity: ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {outState.putInt("resizeMode",resizeMode);outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
 
     override fun onStop() {
+        edgeSampler?.stop();edgeSampler=null
         subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
         routeSwitchJob?.cancel();routeSwitchJob=null
         player?.let {p ->
