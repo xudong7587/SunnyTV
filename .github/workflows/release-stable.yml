@@ -1,6 +1,11 @@
 name: Publish verified SunnyTV stable
 on:
   workflow_dispatch:
+    inputs:
+      candidate_apk_sha256:
+        description: 'Optional SHA256 of the already tested APK in a new exact-commit draft release'
+        required: false
+        type: string
   # One-off publication requested for 0.2.8; main-only and immutable-release checks remain.
   push:
     branches: [main]
@@ -15,6 +20,8 @@ jobs:
     if: github.repository == 'xudong7587/SunnyTV' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      CANDIDATE_APK_SHA256: ${{ inputs.candidate_apk_sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,9 +82,20 @@ jobs:
           python3 scripts/test-bootstrap.py
           python3 scripts/check-project.py
           python3 scripts/test-release-package.py
+          python3 scripts/test-stable-candidate.py
           ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug lintRelease assembleRelease assembleDebugAndroidTest 2>&1 | tee build-logs/android-build.log
           python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk app/build/outputs/apk/release/app-release.apk --version-code "$VERSION_CODE" --version-name "$VERSION"
           python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate app/build/outputs/apk/release/app-release.apk --out build-logs/signing-validation.json
+      - name: Verify the optional device-tested distribution candidate
+        if: inputs.candidate_apk_sha256 != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-stable-candidate.py --sha256 "$CANDIDATE_APK_SHA256" --version "$VERSION" --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --rebuilt app/build/outputs/apk/release/app-release.apk --native-baseline dcc09409c98f0819b63f763913e57cc822fdaec6
+          candidate="build-logs/device-tested-candidate/SunnyTV-v${VERSION}.apk"
+          python3 scripts/verify-release-package.py --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apk "$candidate" --version-code "$VERSION_CODE" --version-name "$VERSION"
+          python3 scripts/verify-release-signer.py --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --expected-certificate-sha256 "$(cut -d = -f 2 build-logs/keystore-certificate.txt)" --candidate "$candidate" --out build-logs/signing-validation.json
       - name: Enable KVM for decoder verification
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -90,7 +108,9 @@ jobs:
           arch: x86_64
           profile: tv_1080p
           disable-animations: true
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+          script: |
+            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+            if [ -n "$CANDIDATE_APK_SHA256" ]; then bash scripts/verify-stable-candidate-android.sh; fi
       - name: Publish a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,21 +118,47 @@ jobs:
           set -euo pipefail
           current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
           test "$current_sha" = "$GITHUB_SHA" || { echo 'Superseded build; refusing publication.'; exit 1; }
-          if gh release view v${VERSION} --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if [ -z "$CANDIDATE_APK_SHA256" ] && gh release view v${VERSION} --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Release exists; refusing to replace it.' >&2; exit 1
           fi
           if git ls-remote --exit-code --tags origin refs/tags/v${VERSION} >/dev/null 2>&1; then
             echo 'Tag exists; refusing to replace it.' >&2; exit 1
           fi
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v${VERSION}.apk
+          if [ -n "$CANDIDATE_APK_SHA256" ]; then
+            # Recheck draft identity immediately before adding assets or publishing it.
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/v${VERSION}" > build-logs/candidate-draft.json
+            python3 - <<'PY'
+          import importlib.util,json,os,pathlib
+          spec=importlib.util.spec_from_file_location('candidate','scripts/verify-stable-candidate.py')
+          module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+          module.validate_draft(json.loads(pathlib.Path('build-logs/candidate-draft.json').read_text()),os.environ['VERSION'],os.environ['GITHUB_SHA'],os.environ['CANDIDATE_APK_SHA256'])
+          PY
+            cp "build-logs/device-tested-candidate/SunnyTV-v${VERSION}.apk" "dist/SunnyTV-v${VERSION}.apk"
+            printf '%s  %s\n' "$CANDIDATE_APK_SHA256" "dist/SunnyTV-v${VERSION}.apk" | sha256sum --check
+          else
+            cp app/build/outputs/apk/release/app-release.apk dist/SunnyTV-v${VERSION}.apk
+          fi
           cp build-logs/signing-validation.json dist/SIGNING_VALIDATION.json
           printf 'version=%s\nversionCode=%s\ncommit=%s\napplicationId=io.github.xudong7587.sunnytv.debug\nsigner=existingRepositorySecret\ndebuggable=false\nbundledUserFonts=none\ncarlink=false\n' "$VERSION" "$VERSION_CODE" "$GITHUB_SHA" > dist/BUILD_INFO.txt
           git -C decoder-ffmpeg/src/main/jni/ffmpeg archive HEAD | gzip > dist/FFmpeg-n6.0.1-source.tar.gz
           python3 scripts/package-native-relink.py --out "dist/SunnyTV-${VERSION}-native-relink.tar.gz"
           tar -czf dist/FFmpeg-${VERSION}-static-libraries.tar.gz decoder-ffmpeg/src/main/jni/ffmpeg/android-libs
+          if [ -n "$CANDIDATE_APK_SHA256" ]; then
+            cp build-logs/candidate-validation.json dist/CANDIDATE_VALIDATION.json
+            printf 'apkProvenance=deviceTestedCandidate\napkSha256=%s\n' "$CANDIDATE_APK_SHA256" >> dist/BUILD_INFO.txt
+          fi
           (cd dist && sha256sum *.apk *.json *.txt *.tar.gz > SHA256SUMS.txt)
-          gh release create v${VERSION} dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "SunnyTV ${VERSION}" --notes-file "docs/RELEASE-${VERSION}.md" --latest
+          if [ -n "$CANDIDATE_APK_SHA256" ]; then
+            # Never overwrite the draft APK that was selected and verified above.
+            for asset in dist/*; do
+              case "$asset" in *.apk) continue;; esac
+              gh release upload "v${VERSION}" "$asset" --repo "$GITHUB_REPOSITORY"
+            done
+            gh release edit "v${VERSION}" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest --title "SunnyTV ${VERSION}" --notes-file "docs/RELEASE-${VERSION}.md"
+          else
+            gh release create v${VERSION} dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "SunnyTV ${VERSION}" --notes-file "docs/RELEASE-${VERSION}.md" --latest
+          fi
       - name: Preserve validation evidence
         if: always()
         uses: actions/upload-artifact@v4

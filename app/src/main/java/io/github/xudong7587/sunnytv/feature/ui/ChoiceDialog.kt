@@ -4,7 +4,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -31,8 +30,7 @@ import androidx.tv.material3.Text
     val grid=columns>1
     Dialog(onDismissRequest=onDismiss) {
         Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.width(if(grid) 640.dp else 420.dp).heightIn(max=if(grid) 560.dp else 440.dp)
-            .background(SunnyColors.Surface,RoundedCornerShape(22.dp))
-            .border(1.dp,SunnyColors.Border,RoundedCornerShape(22.dp)).padding(22.dp),
+            .sunnyPanel(22.dp).padding(22.dp),
             verticalArrangement=Arrangement.spacedBy(14.dp)) {
             Text(title,color=SunnyColors.Text,fontSize=23.sp)
             if(grid) {

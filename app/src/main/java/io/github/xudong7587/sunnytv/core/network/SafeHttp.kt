@@ -6,7 +6,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** One request path for API, images, STRM and video. Redirects are bounded and auth is origin/path scoped. */
-class SafeHttp {
+class SafeHttp(private val socketFactory: javax.net.SocketFactory = javax.net.SocketFactory.getDefault()) {
     /** API, image and STRM text: a LAN server that stays silent this long is treated as down. */
     val client: OkHttpClient = create(HttpPolicy.CONNECT_TIMEOUT_SECONDS, HttpPolicy.READ_TIMEOUT_SECONDS, HttpPolicy.API_CALL_TIMEOUT_SECONDS)
     /**
@@ -16,6 +16,7 @@ class SafeHttp {
      */
     val playbackClient: OkHttpClient = create(HttpPolicy.PLAYBACK_CONNECT_TIMEOUT_SECONDS, HttpPolicy.PLAYBACK_READ_TIMEOUT_SECONDS)
     private fun create(connectSeconds: Int, readSeconds: Int, callSeconds: Int = 0): OkHttpClient = OkHttpClient.Builder()
+        .socketFactory(socketFactory)
         .connectTimeout(connectSeconds.toLong(), TimeUnit.SECONDS).readTimeout(readSeconds.toLong(), TimeUnit.SECONDS)
         .callTimeout(callSeconds.toLong(), TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS).retryOnConnectionFailure(false)
@@ -62,6 +63,9 @@ class SafeHttp {
     fun scopedClient(scope: HeaderScope?, playback: Boolean = false): OkHttpClient {
         // The tag MUST be applied before the redirect interceptor executes.
         val builder = (if (playback) playbackClient else client).newBuilder()
+        if (scope != null && scope.lanTlsCertificate.isNotEmpty()) {
+            UgreenLanTls.configure(builder, scope)
+        }
         builder.interceptors().add(0, Interceptor { chain ->
             chain.proceed(chain.request().newBuilder().tag(HeaderScope::class.java, scope).build())
         })

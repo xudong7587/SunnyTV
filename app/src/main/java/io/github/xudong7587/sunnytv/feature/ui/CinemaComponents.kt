@@ -9,7 +9,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
@@ -27,14 +26,8 @@ import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.core.model.*
 import io.github.xudong7587.sunnytv.feature.Route
 
-/** Tinted, layered material. No fullscreen live blur or additional full-size image decode. */
-@Composable fun Modifier.cinemaGlass(radius:Dp=28.dp):Modifier {
-    val shape=RoundedCornerShape(radius)
-    val settings=LocalAppModel.current.settings
-    return flatShadow(shape,settings.shadowsEnabled && !settings.darkTheme).clip(shape)
-        .background(Brush.verticalGradient(listOf(SunnyColors.SurfaceRaised.copy(.84f),SunnyColors.Surface.copy(.72f))))
-        .border(.75.dp,Brush.verticalGradient(listOf(Color.White.copy(.28f),SunnyColors.Border.copy(.28f))),shape)
-}
+/** Existing panel API; a shared backdrop is available only to bounded floating chrome. */
+@Composable fun Modifier.cinemaGlass(radius:Dp=28.dp):Modifier = sunnyPanel(radius)
 
 @Composable fun CinemaBackdrop(item:MediaEntry?,modifier:Modifier=Modifier) {
     val model=LocalAppModel.current
@@ -43,7 +36,7 @@ import io.github.xudong7587.sunnytv.feature.Route
     // screen orientation rather than the logical width.
     val portrait=LocalConfiguration.current.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT
     val motion=LocalMotion.current
-    Box(modifier.fillMaxSize().background(base)) {
+    Box(modifier.fillMaxSize().captureButtonSceneBackdrop().background(base)) {
         if(item!=null && model.settings.backdropEnabled) {
             Crossfade(item,animationSpec=motion.fade(400),label="backdrop") {media->
                 ArtworkView(media,if(portrait) media.primary ?: media.backdrop else media.backdrop ?: media.thumb ?: media.primary,Modifier.fillMaxSize(),1920)
@@ -90,7 +83,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             if(next!=index) requesters[next].requestFocus()
                             true
                         } else false
-                    },active=active,focusLift=false,shape=RoundedCornerShape(if(hero) 20.dp else 15.dp),
+                    },active=active,artwork=entry!=null,focusLift=false,shape=sunnyShape(if(hero) 20.dp else 15.dp),
                     onLongPress=entry?.let {{model.showItemActions(it)}},
                     onFocus={onSelect(index)},onClick={if(entry==null) onMore?.invoke() else model.navigate(Route.Detail(entry))}) {focused ->
                     if(entry==null) {
@@ -105,13 +98,13 @@ import io.github.xudong7587.sunnytv.feature.Route
                             Modifier.fillMaxSize(),if(hero) 700 else 640)
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.05f),Color.Black.copy(.85f)))))
                         if(entry.rating>0) Text("★ %.1f".format(entry.rating),color=Color.White,fontSize=9.sp,
-                            modifier=Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(.6f)).padding(4.dp))
+                            modifier=Modifier.align(Alignment.TopStart).padding(6.dp).clip(sunnyShape(20.dp)).background(Color.Black.copy(.6f)).padding(4.dp))
                         Column(Modifier.align(Alignment.BottomStart).padding(if(active) 13.dp else 6.dp)) {
                             Text(entry.title,color=Color.White,fontSize=if(active && !LocalCompact.current) 19.sp else 11.sp,lineHeight=if(active && !LocalCompact.current) 24.sp else 15.sp,fontWeight=FontWeight.SemiBold,
                                 maxLines=if(active) 2 else 3,overflow=TextOverflow.Ellipsis)
                             if(active) Text(entry.subtitle,color=Color.White.copy(.8f),fontSize=10.sp,modifier=Modifier.padding(top=5.dp),maxLines=1)
                         }
-                        if(focused) Box(Modifier.fillMaxSize().border(2.dp,SunnyColors.Accent,RoundedCornerShape(if(hero) 20.dp else 15.dp)))
+                        if(focused) Box(Modifier.fillMaxSize().border(2.dp,SunnyColors.Accent,sunnyShape(if(hero) 20.dp else 15.dp)))
                     }
                 }
         }

@@ -18,7 +18,8 @@ import kotlinx.coroutines.sync.withPermit
 /** All Emby URL building and DTO interpretation stays out of UI. User-token access only. */
 class EmbySource(val config: SourceConfig, private val http: SafeHttp, private val deviceId: String) {
     private val base = config.baseUrl.toHttpUrl()
-    val scope = HeaderScope(config.baseUrl, headers(config.secret, deviceId))
+    val scope = HeaderScope(config.baseUrl, headers(config.secret, deviceId),
+        if(config.isUgreen) config.lanTlsCertificate else "")
     private val client = http.scopedClient(scope)
     private val fields = "Overview,Genres,PrimaryImageAspectRatio"
     fun url(path: String, query: Map<String, String> = emptyMap()): String {
@@ -486,12 +487,14 @@ class EmbySource(val config: SourceConfig, private val http: SafeHttp, private v
         suspend fun login(base: String, name: String, username: String, password: String, http: SafeHttp, deviceId: String,
                           profile:EmbyProfile=EmbyProfile.STANDARD): SourceConfig {
             val root = connectionBase(base,profile)
-            val client = http.scopedClient(HeaderScope(root,headers("",deviceId)))
+            val certificate = if(profile==EmbyProfile.UGREEN && UgreenLanTls.isLanAddress(root))
+                UgreenLanTls.inspect(root,http.client) else ""
+            val client = http.scopedClient(HeaderScope(root,headers("",deviceId),certificate))
             val request = Request.Builder().url(root.toHttpUrl().newBuilder().addPathSegments("Users/AuthenticateByName").build())
                 .post(JSONObject().put("Username",username).put("Pw",password).toString().toRequestBody(JSON)).build()
             val j = JSONObject(client.bytes(request).toString(Charsets.UTF_8))
             return SourceConfig(UUID.randomUUID().toString(),SourceKind.EMBY,name.ifBlank { "Emby" },root,
-                j.getJSONObject("User").getString("Id"),username,j.getString("AccessToken"),profile,j.text("ServerId").orEmpty())
+                j.getJSONObject("User").getString("Id"),username,j.getString("AccessToken"),profile,j.text("ServerId").orEmpty(),certificate)
         }
     }
 }

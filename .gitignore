@@ -27,6 +27,9 @@ dist/
 /.local-secrets/
 
 # Generated decoder licenses and synthetic test packets are supplied by CI.
-/app/src/main/assets/licenses/
+/app/src/main/assets/licenses/*
+!/app/src/main/assets/licenses/material-color-utilities.txt
+!/app/src/main/assets/licenses/miuix-glass.txt
+!/app/src/main/assets/licenses/miuix-glass-notice.txt
 /app/src/androidTest/assets/tone.eac3
 /app/src/androidTest/assets/tone.dts

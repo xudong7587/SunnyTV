@@ -15,7 +15,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
@@ -59,6 +58,8 @@ import kotlinx.coroutines.*
     val inputMotion=LocalTvFocusMotion.current
     val compact=LocalCompact.current
     val pageActive=LocalPageActive.current
+    val liquid=LocalNativeAppearance.current.material=="glass"
+    val fieldInk=if(liquid) {if(LocalAppModel.current.settings.darkTheme) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black} else SunnyColors.Text
     val confirm:()->Unit={
         inputMotion.horizontal=false
         keyboard?.hide()
@@ -74,7 +75,7 @@ import kotlinx.coroutines.*
                 imeAction=if(password || next==null) ImeAction.Done else ImeAction.Next),
             keyboardActions=KeyboardActions(onAny={confirm()}),
             visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
-            cursorBrush=SolidColor(SunnyColors.Accent),textStyle=TextStyle(color=SunnyColors.Text,fontSize=15.sp,fontFamily=androidx.tv.material3.LocalTextStyle.current.fontFamily),
+            cursorBrush=SolidColor(if(liquid) fieldInk else SunnyColors.Accent),textStyle=TextStyle(color=fieldInk,fontSize=15.sp,fontFamily=androidx.tv.material3.LocalTextStyle.current.fontFamily),
             modifier=Modifier.fillMaxWidth().testTag(tag).focusRequester(focusRequester)
                 .focusProperties {if(next!=null) down=confirmRequester; if(previous!=null) up=previous}
                 .onPreviewKeyEvent {event->
@@ -86,8 +87,8 @@ import kotlinx.coroutines.*
                     } else false
                 }
                 .onFocusChanged {focused=it.isFocused}
-                .background(SunnyColors.Background,RoundedCornerShape(9.dp))
-                .border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(9.dp))
+                .materialSurface(sunnyShape(9.dp),control=true,focused=focused)
+                .then(if(liquid) Modifier else Modifier.border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.ControlEdge,sunnyShape(9.dp)))
                 .padding(14.dp))
         if(next!=null) FocusTile("$tag:confirm",Modifier.focusRequester(confirmRequester).focusProperties {down=next; up=focusRequester},onClick=confirm) {
             Text(confirmText,color=SunnyColors.Accent,fontSize=13.sp,modifier=Modifier.padding(horizontal=18.dp,vertical=10.dp))
@@ -97,7 +98,7 @@ import kotlinx.coroutines.*
 
 @Composable fun MessageDialog(text:String,onClose:()->Unit) {
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.widthIn(max=620.dp).background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(28.dp),
+        Column(Modifier.widthIn(max=620.dp).sunnyPanel(18.dp).padding(28.dp),
             verticalArrangement=Arrangement.spacedBy(22.dp)) {
             Text("SunnyTV",color=SunnyColors.Accent,fontSize=21.sp,fontWeight=FontWeight.Bold)
             Text(text,color=SunnyColors.Text,fontSize=15.sp,lineHeight=24.sp)
@@ -110,9 +111,18 @@ import kotlinx.coroutines.*
     val model=LocalAppModel.current; val coroutine=rememberCoroutineScope()
     val compact=LocalCompact.current
     val context=LocalContext.current
+    val hardwareAccelerated=androidx.compose.ui.platform.LocalView.current.isHardwareAccelerated
     val motion=LocalMotion.current
     val settingsList=rememberLazyListState()
-    val accentFocus=remember {List(Presentation.accents.size) {FocusRequester()}}
+    val themeColors=AppearanceColors.all+AppearanceColors.custom(model.settings.customThemeColor)
+    val accentFocus=remember {List(AppearanceColors.all.size+1) {FocusRequester()}}
+    val availableMaterials=AppearancePolicy.catalog.filter {
+        AppearancePolicy.blockedReason(it.id,model.settings.highPerformanceThemes,model.app.lean(model.settings),
+            Build.VERSION.SDK_INT,hardwareAccelerated)==null
+    }
+    val materialFocus=remember(availableMaterials) {List(availableMaterials.size) {FocusRequester()}}
+    var customColorOpen by remember {mutableStateOf(false)}
+    val currentColor=AppearancePolicy.color(model.settings.appearanceColor,model.settings.accentIndex,model.settings.customThemeColor)
     val heroFocus=remember {FocusRequester()}
     val fontChoiceFocus=remember {FocusRequester()}
     var directUrl by remember {mutableStateOf("")}
@@ -157,7 +167,7 @@ import kotlinx.coroutines.*
                             color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
                     }
                     model.sources.filter {it.kind==SourceKind.EMBY}.forEach {source -> item {
-                        Row(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(12.dp)).padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().sunnyPanel(12.dp).padding(18.dp),verticalAlignment=Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {Text(source.name,color=SunnyColors.Text,fontSize=18.sp); Text(if(source.isUgreen) "绿联影视中心 · ${source.username}" else "Emby · ${source.username}",color=SunnyColors.Secondary,fontSize=12.sp)}
                             Action("移除此来源",id="remove:${source.id}") {removing=source}
                         }
@@ -174,32 +184,87 @@ import kotlinx.coroutines.*
                 }
                 "主题" -> {
                     item {ToggleRow("深色主题","浅色与主题色独立保存，即时应用",model.settings.darkTheme) {model.saveSettings(model.settings.copy(darkTheme=!model.settings.darkTheme))}}
-                    item {SectionTitle("主题", "十组配色 · 当前：${Presentation.accents[model.settings.accentIndex.coerceIn(0,9)].first}")}
+                    item {SectionTitle("主题", "7 种单色 + 自定义 · 当前：${currentColor.name}")}
                     val columns=if(compact) 3 else 5
-                    Presentation.accents.chunked(columns).forEachIndexed { row, pairs -> item {
+                    themeColors.chunked(columns).forEachIndexed { row, pairs -> item {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             pairs.forEachIndexed { col, pair ->
                                 val index=row*columns+col
                                 FocusTile("accent:$index",Modifier.weight(1f).focusRequester(accentFocus[index]).onPreviewKeyEvent {event->
                                     if(event.type==KeyEventType.KeyDown && (event.key==Key.DirectionDown || (event.key==Key.DirectionUp && index>=columns))) {
                                         val target=if(event.key==Key.DirectionDown) {
-                                            if(index/columns<Presentation.accents.lastIndex/columns) (index+columns).coerceAtMost(Presentation.accents.lastIndex) else Presentation.accents.size
+                                            if(index/columns<themeColors.lastIndex/columns) (index+columns).coerceAtMost(themeColors.lastIndex) else themeColors.size
                                         } else index-columns
-                                        if(target>=Presentation.accents.size) return@onPreviewKeyEvent false
+                                        if(target>=themeColors.size) return@onPreviewKeyEvent false
                                         coroutine.launch {
                                             settingsList.revealItem(3+target/columns,motion)
                                             withFrameNanos {};withFrameNanos {}
                                             accentFocus[target].requestFocus()
                                         };true
                                     } else false
-                                },active=model.settings.accentIndex==index,
-                                    onClick={model.saveSettings(model.settings.copy(accentIndex=index))}) {
+                                },active=currentColor.id==pair.id,
+                                    onClick={if(pair.id=="custom") customColorOpen=true else model.saveSettings(model.settings.copy(appearanceColor=pair.id))}) {
                                     Column(Modifier.padding(9.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                        Row { Box(Modifier.weight(1f).height(22.dp).background(androidx.compose.ui.graphics.Color(pair.second)))
-                                            Box(Modifier.weight(1f).height(22.dp).background(androidx.compose.ui.graphics.Color(pair.third))) }
-                                        Text((if(model.settings.accentIndex==index) "✓ " else "")+pair.first,color=SunnyColors.Text,fontSize=11.sp)
+                                        AppearanceSwatch(pair,model.settings.darkTheme,currentColor.id==pair.id)
+                                        Text((if(currentColor.id==pair.id) "✓ " else "")+pair.name,color=SunnyColors.Text,fontSize=11.sp)
                                     }
                                 }
+                            }
+                            repeat(columns-pairs.size) {Spacer(Modifier.weight(1f))}
+                        }
+                    } }
+                    item {ToggleRow("Monet 动态取色","让背景、文字和控件跟随同一套色阶。",model.settings.monetEnabled) {
+                        model.saveSettings(model.settings.copy(monetEnabled=!model.settings.monetEnabled))
+                    }}
+                    if(model.settings.monetEnabled) {
+                        item {SettingChoiceRow("取色来源",MonetPolicy.sources.first {it.first==MonetPolicy.source(model.settings.monetSource)}.second) {chooser="monet-source"}}
+                        item {SettingChoiceRow("色彩倾向",MonetPolicy.styles.first {it.first==MonetPolicy.style(model.settings.monetStyle)}.second) {chooser="monet-style"}}
+                        item {
+                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                val system=LocalSystemMonet.current
+                                val note=if(model.settings.monetSource=="system") {
+                                    if(system.available) "跟随设备的系统动态色；更换系统配色后自动更新。"
+                                    else "设备未提供系统动态色，使用柔和紫色回退；也可改用当前主题色。"
+                                } else "使用上方选中的单色或自定义颜色生成整套色阶。"
+                                Text(note+(if(model.settings.appearanceMaterial=="glass") " 液态玻璃按钮文字随深浅模式切换，海报聚焦沿用主题色。" else ""),
+                                    color=SunnyColors.Secondary,fontSize=12.sp)
+                                val tones=LocalSunnyPalette.current
+                                Row(Modifier.fillMaxWidth().height(28.dp).testTag("monet:tones"),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                                    listOf(tones.accent,tones.accent2,tones.accent3,tones.surface,tones.raised).forEach {tone->
+                                        Box(Modifier.weight(1f).fillMaxHeight().background(tone,sunnyShape(8.dp)))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {SettingChoiceRow("圆角",AppearancePolicy.corners.first {it.first==AppearancePolicy.corner(model.settings.appearanceCorner)}.second) {chooser="corner"}}
+                    item {ToggleRow("允许高开销主题","开启后显示设备支持的高开销材质；列表仅展示当前可用选项。",model.settings.highPerformanceThemes) {
+                        model.saveSettings(model.settings.copy(highPerformanceThemes=!model.settings.highPerformanceThemes))
+                    }}
+                    val blocked=AppearancePolicy.blockedReason(model.settings.appearanceMaterial,model.settings.highPerformanceThemes,
+                        model.app.lean(model.settings),Build.VERSION.SDK_INT,hardwareAccelerated)
+                    if(blocked!=null) item {Text("${AppearancePolicy.spec(model.settings.appearanceMaterial).name}：$blocked，当前使用清晰默认。",color=SunnyColors.Secondary,fontSize=12.sp)}
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                            SectionTitle("材质",AppearancePolicy.spec(if(blocked==null) model.settings.appearanceMaterial else "clear").name)
+                            Text(AppearancePolicy.spec(if(blocked==null) model.settings.appearanceMaterial else "clear").note,
+                                color=SunnyColors.Secondary,fontSize=12.sp)
+                        }
+                    }
+                    val materialStart=7+(themeColors.size+columns-1)/columns+(if(blocked!=null) 1 else 0)+(if(model.settings.monetEnabled) 3 else 0)
+                    availableMaterials.chunked(2).forEachIndexed {row,pairs->item(key="material-row:$row") {
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                            pairs.forEachIndexed {col,spec->
+                                val index=row*2+col
+                                MaterialPreviewCard(spec,Modifier.weight(1f).focusRequester(materialFocus[index]).onPreviewKeyEvent {event->
+                                    if(event.type==KeyEventType.KeyDown && ((event.key==Key.DirectionDown && index+2<availableMaterials.size) || (event.key==Key.DirectionUp && index>=2))) {
+                                        val next=index+if(event.key==Key.DirectionDown) 2 else -2
+                                        coroutine.launch {
+                                            settingsList.revealItem(materialStart+next/2,motion)
+                                            withFrameNanos {};withFrameNanos {};materialFocus[next].requestFocus()
+                                        };true
+                                    } else false
+                                }) {model.saveSettings(model.settings.copy(appearanceMaterial=spec.id))}
                             }
                         }
                     } }
@@ -219,7 +284,7 @@ import kotlinx.coroutines.*
                         }
                     }
                     item {ToggleRow("沉浸背景","优先使用 Emby 已刮削的 Backdrop",model.settings.backdropEnabled) {model.saveSettings(model.settings.copy(backdropEnabled=!model.settings.backdropEnabled))}}
-                    item {ToggleRow("阴影效果","浅色模式使用柔和悬浮阴影；深色模式保持扁平描边",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
+                    item {ToggleRow("阴影效果","精致描边显示面板底部薄投影；清晰默认无投影",model.settings.shadowsEnabled) {model.saveSettings(model.settings.copy(shadowsEnabled=!model.settings.shadowsEnabled))}}
                     item(key="font-size") {Column(Modifier.onPreviewKeyEvent {event->
                         if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionDown) {
                             val index=settingsList.layoutInfo.visibleItemsInfo.firstOrNull {it.key=="font-size"}?.index
@@ -245,12 +310,11 @@ import kotlinx.coroutines.*
                     item {Text("界面与字幕都可选系统默认字体，或用「用户自定义上传」导入自己的字体文件。\n支持 TTF / OTF / TTC，可从本地存储或 U 盘导入，文件只保存在本机。\n字体预览：让好内容回到大屏 · SunnyTV 0123456789",
                         color=SunnyColors.Text,fontSize=16.sp,lineHeight=25.sp)}
                     // One card: live preview on top, then the five style variables. No blind tuning.
-                    item {Column(Modifier.fillMaxWidth().background(SunnyColors.Surface,RoundedCornerShape(18.dp))
-                        .border(1.dp,SunnyColors.Border,RoundedCornerShape(18.dp)).padding(16.dp),
+                    item {Column(Modifier.fillMaxWidth().sunnyPanel(18.dp).padding(16.dp),
                         verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         SectionTitle("字幕外观","实时预览；颜色跟随主题色")
                         SubtitleStylePreview(model.settings,model.settings.darkTheme,
-                            Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)))
+                            Modifier.fillMaxWidth().height(200.dp).clip(sunnyShape(12.dp)))
                         SettingChoiceRow("字幕字体",fontChoiceLabel(model.settings.subtitleFontChoice,model.settings.customFontName)) {chooser="subtitle-font"}
                         SettingChoiceRow("字幕大小","${SubtitleAppearance.scaleNames[model.settings.subtitleScaleLevel.coerceIn(0,4)]} · ${"%.2f".format(SubtitleAppearance.scale(model.settings.subtitleScaleLevel))}x") {chooser="subtitle-scale"}
                         SettingChoiceRow("描边",SubtitleAppearance.edges.firstOrNull {it.first==model.settings.subtitleEdge}?.second ?: "描边") {chooser="subtitle-edge"}
@@ -268,8 +332,7 @@ import kotlinx.coroutines.*
                     SettingChoiceRow("参与轮播的媒体库",if(librariesExpanded) "收起  ⌃" else "展开  ⌄") {librariesExpanded=!librariesExpanded}
                         androidx.compose.animation.AnimatedVisibility(librariesExpanded,
                             enter=expandVertically(motion.spring())+fadeIn(motion.fade()),exit=shrinkVertically(motion.spring())+fadeOut(motion.fade())) {
-                            Column(Modifier.fillMaxWidth().padding(start=18.dp).background(SunnyColors.Surface,RoundedCornerShape(16.dp))
-                                .border(1.dp,SunnyColors.Border,RoundedCornerShape(16.dp)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(start=18.dp).sunnyPanel(16.dp).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Text("参与轮播的媒体库",color=SunnyColors.Accent,fontSize=14.sp)
                                 // The list follows the source being browsed: libraries of other
                                 // sources are never offered here.
@@ -348,11 +411,14 @@ import kotlinx.coroutines.*
             }
         }
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"cache"->"图片缓存上限（重启后生效）";"performance"->"性能模式";"display"->"界面分辨率";"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"界面字体"
+    if(customColorOpen) CustomColorDialog(model.settings.customThemeColor,onDismiss={customColorOpen=false}) {color->
+        model.saveSettings(model.settings.copy(appearanceColor="custom",customThemeColor=color));customColorOpen=false
+    }
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"monet-source"->"取色来源";"monet-style"->"色彩倾向";"material"->"材质";"corner"->"圆角";"cache"->"图片缓存上限（重启后生效）";"performance"->"性能模式";"display"->"界面分辨率";"motion"->"动画速度";"artwork"->"展现方式";"hero"->"首页轮播";"interval"->"轮播间隔";"font"->"界面字体"
             "subtitle-font"->"字幕字体";"subtitle-scale"->"字幕大小";"subtitle-edge"->"字幕描边"
             "subtitle-position"->"字幕位置";"subtitle-bg"->"字幕背景";"activeSource"->"选择要显示的 Emby 来源"
             else->"字幕优先级（未匹配时跟随媒体默认）"},
-        when(chooser) {"cache"->PerformancePolicy.cacheSizesMiB.map {it.toString() to "$it MiB"}
+        when(chooser) {"monet-source"->MonetPolicy.sources;"monet-style"->MonetPolicy.styles;"material"->AppearancePolicy.materials;"corner"->AppearancePolicy.corners;"cache"->PerformancePolicy.cacheSizesMiB.map {it.toString() to "$it MiB"}
             "performance"->listOf("auto" to "自动（低内存设备启用低负载）","balanced" to "标准","low" to "低负载")
             "display"->listOf(DisplayModePolicy.AUTO to "自动（由 Android / 电视选择）",DisplayModePolicy.FHD to "1080p · 优先流畅度",DisplayModePolicy.NATIVE to "原生最高 · 4K 电视优先 3840×2160")
             "artwork"->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")
@@ -368,9 +434,13 @@ import kotlinx.coroutines.*
             "subtitle-bg"->SubtitleAppearance.backgrounds
             "activeSource"->model.sources.filter {it.kind==SourceKind.EMBY}.map {it.id to it.name}
             else->listOf("default" to "跟随媒体默认")+Presentation.subtitles},
-        when(chooser) {"cache"->model.settings.artworkCacheMiB.toString();"performance"->model.settings.performanceMode;"display"->model.settings.displayModePreference;"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->model.settings.fontChoice;"subtitle-font"->model.settings.subtitleFontChoice;"subtitle-scale"->model.settings.subtitleScaleLevel.toString();"subtitle-edge"->model.settings.subtitleEdge;"subtitle-position"->model.settings.subtitlePosition;"subtitle-bg"->model.settings.subtitleBackground;"activeSource"->model.activeSourceId;else->model.settings.subtitlePreference},
-        onDismiss={chooser=""}) {value ->
+        when(chooser) {"monet-source"->MonetPolicy.source(model.settings.monetSource);"monet-style"->MonetPolicy.style(model.settings.monetStyle);"material"->AppearancePolicy.material(model.settings.appearanceMaterial);"corner"->AppearancePolicy.corner(model.settings.appearanceCorner);"cache"->model.settings.artworkCacheMiB.toString();"performance"->model.settings.performanceMode;"display"->model.settings.displayModePreference;"motion"->MotionPolicy.speed(model.settings).toString();"artwork"->model.settings.artworkMode;"hero"->model.settings.heroMode;"interval"->model.settings.heroIntervalSeconds.toString();"font"->model.settings.fontChoice;"subtitle-font"->model.settings.subtitleFontChoice;"subtitle-scale"->model.settings.subtitleScaleLevel.toString();"subtitle-edge"->model.settings.subtitleEdge;"subtitle-position"->model.settings.subtitlePosition;"subtitle-bg"->model.settings.subtitleBackground;"activeSource"->model.activeSourceId;else->model.settings.subtitlePreference},
+        onDismiss={chooser=""},columns=if(chooser=="monet-style") 2 else 1) {value ->
         when(chooser) {
+            "monet-source" -> model.saveSettings(model.settings.copy(monetSource=MonetPolicy.source(value)))
+            "monet-style" -> model.saveSettings(model.settings.copy(monetStyle=MonetPolicy.style(value)))
+            "material" -> model.saveSettings(model.settings.copy(appearanceMaterial=AppearancePolicy.material(value)))
+            "corner" -> model.saveSettings(model.settings.copy(appearanceCorner=AppearancePolicy.corner(value)))
             "activeSource" -> model.saveSettings(model.settings.copy(activeSourceId=value))
             "font","subtitle-font" -> if(value==FontCatalog.CUSTOM) {
                 fontTarget=if(chooser=="font") FontCatalog.SYSTEM else "subtitle"
@@ -388,7 +458,7 @@ import kotlinx.coroutines.*
         chooser=""
     }
     if(resetConfirm) Dialog(onDismissRequest={resetConfirm=false}) {
-        Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(16.dp)).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
+        Column(Modifier.sunnyPanel(16.dp).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             Text("清除全部本地来源配置？",color=SunnyColors.Text,fontSize=20.sp)
             Text("不会删除 NAS 文件，所有来源需要重新登录。",color=SunnyColors.Secondary,fontSize=14.sp)
             Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -400,7 +470,7 @@ import kotlinx.coroutines.*
     adding?.let {kind->AddSourceDialog(kind,onClose={adding=null},initialProfile=addingProfile)}
     removing?.let {source ->
         Dialog(onDismissRequest={removing=null}) {
-            Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(16.dp)).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
+            Column(Modifier.sunnyPanel(16.dp).padding(25.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
                 Text("移除 ${source.name}？",color=SunnyColors.Text,fontSize=21.sp)
                 Text("只删除电视上的登录配置和海报缓存，不删除服务端媒体。",color=SunnyColors.Secondary,fontSize=14.sp)
                 Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {Action("取消",id="dialog:remove-cancel",autoFocus=true) {removing=null}; Action("确认移除") {model.removeSource(source.id); removing=null}}
@@ -450,7 +520,7 @@ import kotlinx.coroutines.*
 @Composable fun FirstSourceDialog(onConnected:()->Unit) {
     var profile by remember {mutableStateOf<EmbyProfile?>(null)}
     if(profile==null) Dialog(onDismissRequest={}) {
-        Column(Modifier.background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp),
+        Column(Modifier.sunnyPanel(18.dp).padding(26.dp),
             verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text("添加媒体服务",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
             Text("选择要连接的媒体服务。",color=SunnyColors.Secondary,fontSize=14.sp)
@@ -475,7 +545,7 @@ import kotlinx.coroutines.*
     LaunchedEffect(Unit) {inputMotion.horizontal=false}
     var base by remember {mutableStateOf("")}; var user by remember {mutableStateOf("")}; var password by remember {mutableStateOf("")}
     Dialog(onDismissRequest={if(!model.busy && !firstConnection) onClose()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().background(SunnyColors.Surface,RoundedCornerShape(18.dp)).padding(26.dp)
+        Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.padding(18.dp).widthIn(max=700.dp).fillMaxWidth().imePadding().sunnyPanel(18.dp).padding(26.dp)
             .verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(13.dp)) {
             LaunchedEffect(green) {if(green) {withFrameNanos {};guideFocus.requestFocus()}}
             Text(if(green) "添加绿联影视服务" else if(firstConnection) "连接你的媒体库" else if(kind==SourceKind.EMBY) "添加 Emby 服务" else "添加 CloudDrive2",color=SunnyColors.Text,fontSize=26.sp,fontWeight=FontWeight.Bold)
@@ -492,11 +562,11 @@ import kotlinx.coroutines.*
             } else Text(if(kind==SourceKind.EMBY) "使用普通用户登录；保留反向代理路径前缀。" else "填写已开启的 WebDAV 服务地址，不是 CD2 管理页面。",color=SunnyColors.Secondary,fontSize=13.sp)
             Field("来源名称",name,{name=it},autoFocus=!green,requester=nameFocus,next=baseFocus,
                 previous=if(green) guideFocus else null,tag="source:name")
-            Field(if(green) "媒体服务器地址（https://域名:端口）" else "服务地址（完整 http:// 或 https:// 地址）",base,{base=it},requester=baseFocus,next=userFocus,previous=nameFocus,tag="source:address")
+            Field(if(green) "媒体服务器地址（https://内网IP:9443 或域名:端口）" else "服务地址（完整 http:// 或 https:// 地址）",base,{base=it},requester=baseFocus,next=userFocus,previous=nameFocus,tag="source:address")
             Field(if(green) "媒体库专用账号" else "用户名",user,{user=it},requester=userFocus,next=passwordFocus,previous=baseFocus,tag="source:username")
             Field(if(green) "媒体库密码" else "密码",password,{password=it},password=true,requester=passwordFocus,next=saveFocus,previous=userFocus,
                 confirmText="填写完成",tag="source:password")
-            Text(if(green) "需要有效且匹配地址的 HTTPS 证书；自签名证书请在 NAS 或反向代理中妥善配置。登录失败时，先检查媒体库服务开关、专用账号和 HTTPS 转发。" else "HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
+            Text(if(green) "局域网可直接填写 HTTPS 内网 IP 和媒体服务器端口。首次连接会记住 NAS 证书；证书变更后需重新添加服务。域名连接仍校验有效 HTTPS 证书。" else "HTTP 仅适合可信网络；公网连接请使用有效 HTTPS 证书。",color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=19.sp)
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 FocusTile("source:save",Modifier.focusRequester(saveFocus).focusProperties {up=passwordFocus},
                     onClick={if(!model.busy) model.addSource(kind,name,base,user,password,onConnected,profile)}) {

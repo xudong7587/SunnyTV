@@ -1,0 +1,34 @@
+{
+  "revision": "153920c7e196de1f1c8188e16162f3ce4864b016",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "example/shared/src/commonMain/kotlin/component/liquid/Lens.kt",
+      "sha256": "bdcd798fbb2d45ab7e41f86bee51251ae480701650a21dd8e5d822a7eeae8e22",
+      "review": "Pure Compose graphics/shader math inspected; only non-dispersion lens and dual-peak bloom strings extracted. No network, file, sensors, drag logic or upstream dependency copied."
+    },
+    {
+      "path": "miuix-blur/src/commonMain/kotlin/top/yukonga/miuix/kmp/blur/internal/Shaders.kt",
+      "sha256": "6270df8cbf7234975e6234b0a10ee2062c4f6e090e3ddca358dfb1fd23849eaf",
+      "review": "Pure Compose graphics/shader math inspected; only non-dispersion lens and dual-peak bloom strings extracted. No network, file, sensors, drag logic or upstream dependency copied."
+    },
+    {
+      "path": "example/shared/src/commonMain/kotlin/component/liquid/LiquidGlassNavigationBar.kt",
+      "sha256": "95dd2a3a2e0d99c7ab3f25ef41b3e86b799d12bd8f11a1c728f74aabd0c52a66",
+      "review": "Pure Compose graphics/shader math inspected; only non-dispersion lens and dual-peak bloom strings extracted. No network, file, sensors, drag logic or upstream dependency copied."
+    },
+    {
+      "path": "miuix-blur/src/commonMain/kotlin/top/yukonga/miuix/kmp/blur/highlight/HighlightStyle.kt",
+      "sha256": "5945e0634010af4519232f8588eb6a371a8d74edbe2af7c27a9fb0d4c99e939d",
+      "review": "Pure Compose graphics/shader math inspected; only non-dispersion lens and dual-peak bloom strings extracted. No network, file, sensors, drag logic or upstream dependency copied."
+    }
+  ],
+  "modifications": "Extracted AGSL strings into GlassShaders.kt; expanded Kotlin string interpolation. Existing SunnyTV GraphicsLayer pipeline, fixed light direction, native cached blur, original D-pad layout, flat child buttons. In 0.3.5, bloom output uses premultiplied coverage and SrcOver instead of opaque-alpha additive blending, preserving translucent offscreen composition. Page buttons sample per-page registered artwork; focus adjusts opacity only.",
+  "repository": "https://github.com/compose-miuix-ui/miuix",
+  "blurMapping": {
+    "miuixSigma": "4dp * 0.45",
+    "androidRadius": "(sigma - 0.5) / 0.57735",
+    "androidSource": "https://android.googlesource.com/platform/frameworks/base/+/7d59d89f035a/libs/hwui/jni/RenderEffect.cpp",
+    "note": "Platform separable blur; sampling kernel is not copied wholesale. No claim of pixel-identical rendering across GPUs."
+  }
+}

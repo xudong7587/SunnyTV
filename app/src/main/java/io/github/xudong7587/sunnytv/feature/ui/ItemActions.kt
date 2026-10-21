@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,8 +43,7 @@ import kotlinx.coroutines.delay
     DisposableEffect(Unit) {onDispose {if(prior!=null) model.focusMemory[page]=prior}}
     Dialog(onDismissRequest=onDismiss) {
         Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.width(520.dp)
-            .background(SunnyColors.Surface,RoundedCornerShape(22.dp))
-            .border(1.dp,SunnyColors.Border,RoundedCornerShape(22.dp)).padding(22.dp),
+            .sunnyPanel(22.dp).padding(22.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text("按住确定键的操作",color=SunnyColors.Accent,fontSize=12.sp)
             Text(item.title,color=SunnyColors.Text,fontSize=22.sp,maxLines=2)
@@ -71,8 +69,7 @@ import kotlinx.coroutines.delay
 @Composable fun ItemDeleteConfirm(item:MediaEntry,onConfirm:()->Unit,onDismiss:()->Unit) {
     val model=LocalAppModel.current
     Dialog(onDismissRequest=onDismiss) {
-        Column(Modifier.width(520.dp).background(SunnyColors.Surface,RoundedCornerShape(22.dp))
-            .border(1.dp,SunnyColors.Border,RoundedCornerShape(22.dp)).padding(24.dp),
+        Column(Modifier.width(520.dp).sunnyPanel(22.dp).padding(24.dp),
             verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text("从媒体库移除？",color=SunnyColors.Text,fontSize=22.sp)
             Text("将请求 Emby 移除「${item.title}」。是否同时删除服务器上的媒体文件由服务端与账号权限决定，此操作无法撤销。",

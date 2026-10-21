@@ -76,7 +76,8 @@ import kotlinx.coroutines.withContext
     val base=LocalSunnyPalette.current
     val themed=base.copy(background=tint,surface=lerp(tint,base.surface,.30f),raised=lerp(tint,base.raised,.55f))
     var panel by remember(item.key) {mutableStateOf("")}
-    val version=item.versions.firstOrNull {it.id==model.selectedVersion[item.key]} ?: item.versions.firstOrNull()
+    val versions=remember(item.versions) {item.versions.distinctBy {it.id}}
+    val version=versions.firstOrNull {it.id==model.selectedVersion[item.key]} ?: versions.firstOrNull()
     val tracks=version?.tracks ?: item.tracks
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
@@ -99,14 +100,19 @@ import kotlinx.coroutines.withContext
     var childSelected by remember(item.key) {mutableIntStateOf(0)}
     val episodeLayout=model.settings.episodeLayouts[item.key] ?: "horizontal"
     val numberColumns=if(LocalCompact.current) 4 else 10
-    val children=model.children[item.key].orEmpty()
-    val similar=model.similar[item.key].orEmpty()
+    val rawChildren=model.children[item.key].orEmpty()
+    val rawSimilar=model.similar[item.key].orEmpty()
+    // Emby-compatible servers can repeat cast/season records. Lazy layouts require unique keys;
+    // collapse identical rows for display without modifying the adapter's data or server records.
+    val children=remember(rawChildren) {rawChildren.distinctBy {it.key}}
+    val similar=remember(rawSimilar) {rawSimilar.distinctBy {it.key}}
+    val people=remember(item.people) {item.people.distinctBy {Triple(it.id,it.name,it.role)}}
     // One requester is attached to exactly one first reachable control below the action row.
     val lowerTarget=when {
-        item.versions.isNotEmpty() -> "versions"
+        versions.isNotEmpty() -> "versions"
         children.any {it.type=="Episode"} -> "episodes"
         children.isNotEmpty() -> "seasons"
-        item.people.isNotEmpty() -> "people"
+        people.isNotEmpty() -> "people"
         similar.isNotEmpty() -> "similar"
         else -> ""
     }
@@ -119,7 +125,7 @@ import kotlinx.coroutines.withContext
         "numbers" -> (children.size+numberColumns-1)/numberColumns
         else -> 1
     }
-    val similarIndex=3+(if(item.versions.isNotEmpty()) 1 else 0)+childRows+(if(item.people.isNotEmpty()) 1 else 0)
+    val similarIndex=3+(if(versions.isNotEmpty()) 1 else 0)+childRows+(if(people.isNotEmpty()) 1 else 0)
     // The first control of the page: the pinned navigation's Down lands here and "Up" from the
     // sections below always has one concrete tile to return to.
     val entryActionId=when {
@@ -211,15 +217,15 @@ import kotlinx.coroutines.withContext
                 // Acceptance round 3: plain body colour, so the description stays legible over art.
                 item {Text(item.overview.ifBlank {"暂无简介"},color=SunnyColors.Text,fontSize=14.sp,lineHeight=23.sp,
                     modifier=Modifier.padding(horizontal=pageSidePadding),maxLines=8,overflow=TextOverflow.Ellipsis)}
-                if(item.versions.isNotEmpty()) item {
+                if(versions.isNotEmpty()) item {
                     // dev22 acceptance: heading and cards share one left edge. The row keeps a small
                     // gutter inside its own bounds so the focus shadow is not clipped.
                     Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))
                         .then(if(lowerTarget=="versions") upToActions else Modifier)) {
-                        Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("播放资源", "${item.versions.size} 个版本")}
+                        Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("播放资源", "${versions.size} 个版本")}
                         StableLazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp),reserveFocusSpace=false,
                             contentPadding=PaddingValues(horizontal=detailRowGutter,vertical=18.dp)) {
-                            itemsIndexed(item.versions,key={ _,v->v.id}) {index,v->
+                            itemsIndexed(versions,key={ index,v->"$index:${v.id}"}) {index,v->
                                 FocusTile("version:${item.key}:${v.id}",Modifier.width(250.dp).then(if(lowerTarget=="versions" && index==0) Modifier.focusRequester(lowerContentFocus) else Modifier),active=v.id==version?.id,
                                     onClick={model.selectedVersion[item.key]=v.id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key)}) {
                                     Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -255,7 +261,7 @@ import kotlinx.coroutines.withContext
                         AccordionCards(children,childSelected,{childSelected=it},if(lowerTarget=="seasons") Modifier.focusRequester(lowerContentFocus) else Modifier,id="children:${item.key}",onMore={model.navigate(Route.Library(item))})
                     }}
                 }
-                if(item.people.isNotEmpty()) item {
+                if(people.isNotEmpty()) item {
                     Column(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp))
                         .then(if(lowerTarget=="people") upToActions else Modifier)) {
                         Box(Modifier.padding(start=detailRowGutter)) {SectionTitle("演员表")}
@@ -268,10 +274,10 @@ import kotlinx.coroutines.withContext
                         },horizontalArrangement=Arrangement.spacedBy(16.dp),reserveFocusSpace=false,
                             contentPadding=PaddingValues(start=detailRowGutter,end=detailRowGutter,
                                 top=FocusShadowTopGutter,bottom=FocusShadowBottomGutter)) {
-                            itemsIndexed(item.people,key={ _,person->"${person.id}:${person.name}:${person.role}"}) {index,person ->
+                            itemsIndexed(people,key={ index,person->"$index:${person.id}:${person.name}:${person.role}"}) {index,person ->
                                 Column(Modifier.width(104.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     val actor=MediaEntry(person.id.ifBlank {"person:${person.name}"},item.sourceId,person.name,"Person",primary=person.primary)
-                                    FocusTile("person:${actor.key}",Modifier.size(88.dp).then(if(index==0) Modifier.focusRequester(peopleEntryFocus) else Modifier),shape=CircleShape,onClick={model.navigate(Route.Detail(actor))}) {
+                                    FocusTile("person:${actor.key}",Modifier.size(88.dp).then(if(index==0) Modifier.focusRequester(peopleEntryFocus) else Modifier),shape=CircleShape,artwork=true,onClick={model.navigate(Route.Detail(actor))}) {
                                         ArtworkView(actor,person.primary,Modifier.fillMaxSize(),180,fit=false,fallbackText=person.name.take(1))
                                     }
                                     Text(person.name,color=SunnyColors.Text,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(top=9.dp))
@@ -282,7 +288,7 @@ import kotlinx.coroutines.withContext
                     }
                 }
                 item {Box(Modifier.padding(horizontal=(pageSidePadding-detailRowGutter).coerceAtLeast(0.dp)).onPreviewKeyEvent {event->
-                    if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && item.people.isNotEmpty()) {
+                    if(event.type==KeyEventType.KeyDown && event.key==Key.DirectionUp && people.isNotEmpty()) {
                         moveContent(similarIndex-1,peopleEntryFocus);true
                     } else false
                 }) {MediaShelf("相似推荐",similar,firstFocusRequester=similarEntryFocus,focusGutter=detailRowGutter,
@@ -320,7 +326,7 @@ import kotlinx.coroutines.withContext
                 else {model.selectedSubtitleTrack.remove(item.key);model.selectedSubtitle[item.key]=id}
                 panel=""
             }
-            "version" -> if(item.versions.isNotEmpty()) ChoiceDialog("播放版本",item.versions.map {it.id to it.name},version?.id.orEmpty(),{panel=""}) {id->
+            "version" -> if(versions.isNotEmpty()) ChoiceDialog("播放版本",versions.map {it.id to it.name},version?.id.orEmpty(),{panel=""}) {id->
                 model.selectedVersion[item.key]=id;model.selectedAudio.remove(item.key);model.selectedSubtitleTrack.remove(item.key);panel=""
             } else MessageDialog("服务端尚未提供版本信息，请等待详情加载或重试。") {panel=""}
             "info" -> MessageDialog(buildString {

@@ -874,7 +874,7 @@ import coil.request.ImageRequest
 /** Keyboard key: text only, no fill and no border; focus only changes the colour. */
 @Composable private fun SearchKey(id:String,label:String,onClick:()->Unit) {
     var focused by remember {mutableStateOf(false)}
-    Box(Modifier.testTag(id).clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}.size(38.dp),
+    Box(Modifier.testTag(id).clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}.size(38.dp).glassButtonFace(sunnyShape(9.dp)),
         contentAlignment=Alignment.Center) {
         Text(label,color=if(focused) SunnyColors.Accent else SunnyColors.Text,fontSize=17.sp,
             fontWeight=if(focused) FontWeight.Bold else FontWeight.Normal,maxLines=1)
@@ -885,7 +885,7 @@ import coil.request.ImageRequest
 @Composable private fun SearchIconKey(id:String,icon:String,label:String,onClick:()->Unit) {
     var focused by remember {mutableStateOf(false)}
     Box(Modifier.testTag(id).clickable(onClick=onClick).onFocusChanged {focused=it.isFocused}
-        .semantics {contentDescription=label}.padding(horizontal=6.dp,vertical=8.dp)) {
+        .semantics {contentDescription=label}.glassButtonFace(sunnyShape(9.dp)).padding(horizontal=6.dp,vertical=8.dp)) {
         LineIcon(icon,if(focused) SunnyColors.Accent else SunnyColors.Text,Modifier.size(22.dp))
     }
 }

@@ -5,7 +5,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
@@ -135,7 +134,7 @@ import kotlinx.coroutines.delay
                         val delta=if(event.key==Key.DirectionRight) 1 else -1
                         select(index+delta);true
                     } else false
-                },active=rowFocused && selectedIndex==index,shape=RoundedCornerShape(15.dp),focusLift=false,restoreFocus=false,onFocus={
+                },active=rowFocused && selectedIndex==index,artwork=true,shape=sunnyShape(15.dp),focusLift=false,restoreFocus=false,onFocus={
                     if(selectedIndex!=index) select(index)
                 },onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,contentKey={it.key},transitionSpec={

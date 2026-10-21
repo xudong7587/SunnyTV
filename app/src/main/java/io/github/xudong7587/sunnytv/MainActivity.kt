@@ -152,22 +152,45 @@ class MainActivity: ComponentActivity() {
     }
 }
 
-@Composable internal fun SunnyRoot(onPlay:(MediaEntry,Boolean)->Unit) {
+@Composable internal fun SunnyRoot(onExit:(()->Unit)?=null,onPlay:(MediaEntry,Boolean)->Unit) {
     val model=LocalAppModel.current; val stateHolder=rememberSaveableStateHolder()
     val route=model.route
-    BackHandler(enabled=route!=Route.Home || model.busy) { model.back() }
+    val activity=androidx.activity.compose.LocalActivity.current
+    val exitPolicy=remember {BackExitPolicy()}
+    var exitPrompt by remember {mutableStateOf(false)}
+    var promptSerial by remember {mutableIntStateOf(0)}
+    val handleBack:()->Unit={
+        when(exitPolicy.press(android.os.SystemClock.elapsedRealtime(),model.canGoBack)) {
+            BackExitPolicy.Action.BACK -> {exitPrompt=false;model.back()}
+            BackExitPolicy.Action.PROMPT -> {exitPrompt=true;promptSerial++}
+            BackExitPolicy.Action.EXIT -> {exitPrompt=false;(onExit ?: {activity?.finish()})()}
+        }
+    }
+    LaunchedEffect(promptSerial,exitPrompt) {if(exitPrompt) {kotlinx.coroutines.delay(2_000);exitPrompt=false}}
+    BackHandler {handleBack()}
     val compact=LocalConfiguration.current.screenWidthDp<600
     val bridge=remember(route) {NavigationBridge()}
     // dev22 acceptance: the library and detail pages keep the pinned navigation and brand again.
     val navVisible=true
+    val glassBackdrop=rememberGlassBackdrop(AppearancePolicy.spec(LocalNativeAppearance.current.material).glass)
+    val floatingGlassScene=remember(glassBackdrop) {glassBackdrop?.let {GlassButtonSceneState(it)}}
     val scope=rememberCoroutineScope()
     val focus=LocalFocusManager.current
     val inputMotion=remember(route) {TvFocusMotion()}
     val motion=LocalMotion.current
     CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,
-        LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion) {
+        LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion,LocalGlassButtonScene provides floatingGlassScene) {
         Box(Modifier.fillMaxSize().background(SunnyColors.Background)
-            .onPreviewKeyEvent {inputMotion.record(it);false}
+            .onPreviewKeyEvent {event->
+                inputMotion.record(event)
+                if(event.key==Key.Back || event.key==Key.Escape) {
+                    if(event.type==KeyEventType.KeyUp) handleBack()
+                    true
+                } else {
+                    if(event.type==KeyEventType.KeyDown) {exitPolicy.reset();exitPrompt=false}
+                    false
+                }
+            }
             .onKeyEvent {event->
                 // Bubble phase at the root so it also applies while the pinned navigation holds
                 // focus (that bar is a sibling of the page content, not a child of it).
@@ -184,11 +207,8 @@ class MainActivity: ComponentActivity() {
                     true
                 } else false
             }) {
-            Box(Modifier.fillMaxSize().onPreviewKeyEvent {event->
-                if(event.key==Key.Back || event.key==Key.Escape) {
-                    if(event.type==KeyEventType.KeyUp) model.back()
-                    true
-                } else if(event.key==Key.Menu && event.type==KeyEventType.KeyDown) {
+            Box(Modifier.fillMaxSize().captureGlassBackdrop(glassBackdrop).onPreviewKeyEvent {event->
+                if(event.key==Key.Menu && event.type==KeyEventType.KeyDown) {
                     // Remote MENU reaches settings directly on every page except the player.
                     model.openSettingsFromMenu()
                     true
@@ -200,6 +220,7 @@ class MainActivity: ComponentActivity() {
                     val visibleBridge=remember(visibleRoute) {if(visibleRoute==route) bridge else NavigationBridge()}
                     CompositionLocalProvider(LocalPageKey provides visibleRoute.key(),LocalPageActive provides (visibleRoute==route),
                         LocalNavigationBridge provides visibleBridge,LocalNavVisible provides true) {
+                    GlassButtonScene {
                     StableVerticalViewport {
                     stateHolder.SaveableStateProvider(visibleRoute.key()) {
                         when(visibleRoute) {
@@ -215,10 +236,12 @@ class MainActivity: ComponentActivity() {
                     }
                     }
                     }
+                    }
                 }
             }
             AnimatedVisibility(navVisible,enter=fadeIn(motion.fade(300)),exit=fadeOut(motion.fade(300))) {
-                CompositionLocalProvider(LocalPageActive provides navVisible) {TopNav(bridge)}
+                CompositionLocalProvider(LocalPageActive provides navVisible,LocalGlassBackdrop provides glassBackdrop,
+                    LocalGlassControls provides (glassBackdrop!=null)) {TopNav(bridge)}
             }
             if(model.sourcesReady && model.sources.none {it.kind==SourceKind.EMBY}) {
                 FirstSourceDialog(onConnected={model.navigate(Route.Home,root=true)})
@@ -233,11 +256,15 @@ class MainActivity: ComponentActivity() {
             model.pendingDelete?.let {target->
                 ItemDeleteConfirm(target,onConfirm={model.confirmDelete(target)},onDismiss={model.cancelDelete()})
             }
+            if(exitPrompt) Text("再按一次返回退出软件",color=androidx.compose.ui.graphics.Color.White,
+                modifier=Modifier.align(Alignment.BottomCenter).padding(bottom=36.dp)
+                    .background(androidx.compose.ui.graphics.Color.Black.copy(.88f),RoundedCornerShape(16.dp))
+                    .padding(horizontal=24.dp,vertical=14.dp))
         }
     }
 }
 
-@Composable private fun TopNav(bridge:NavigationBridge) {
+@Composable internal fun TopNav(bridge:NavigationBridge) {
     val model=LocalAppModel.current
     val activeRoot = when(model.route) {
         is Route.Library, is Route.Detail -> Route.Libraries
@@ -280,7 +307,7 @@ class MainActivity: ComponentActivity() {
             if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent(fromNavigation=true)};true} else false
         }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
-                FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=RoundedCornerShape(50.dp),button=true,
+                FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=sunnyInsetShape(28.dp,4.dp),button=true,
                     focusLift=false,onClick={model.navigate(target,root=true)}) { focused ->
                     Row(Modifier.height(44.dp).widthIn(min=44.dp).padding(horizontal=10.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
                         val ink=if(activeRoot==target || focused) SunnyColors.Accent else SunnyColors.Secondary

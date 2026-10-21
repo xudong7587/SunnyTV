@@ -162,6 +162,8 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         }
     }
 
+    val canGoBack:Boolean get()=(busy && playJob?.isActive==true) || stack.isNotEmpty() || route!=Route.Home
+
     fun back(): Boolean {
         if (busy && playJob?.isActive == true) { playJob?.cancel(); return true }
         if (stack.isNotEmpty()) { route = stack.removeAt(stack.lastIndex); return true }
