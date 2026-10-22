@@ -1,6 +1,10 @@
-# 2026-10-22 SunnyTV 1.0.0 / 73 关于页修订及正式发行
+# 2026-10-22 SunnyTV 1.0.0 / 73 已发布为 GitHub latest
 
-用户追加关于页图标、标语、项目介绍及标题旁 GitHub 链接，并要求发布 1.0.0 latest。版本名按用户要求保持 1.0.0，构建号递增至73；此前本地1.0.0 /72及其哈希仅代表历史包，不再是本次正式发行候选。正式包由完整 stable workflow 从主线源码重新构建、签名和验证，不上传旧包；NAS旧文件不覆盖，新包按构建号另存。当前发行准备中。详见 [1.0.0 发行说明](RELEASE-1.0.0.md)。
+[正式发行](https://github.com/xudong7587/SunnyTV/releases/tag/v1.0.0)已公开，非草稿、非预发行；官方 latest 下载与标签原包回读一致。标签源码 `3e622b742dbd773844b6ba6665983d36e0f4129a`，现有安装 ID 与签名保留。SunnyTV/MediaIndex 关于页已更新图标、标语、介绍及标题旁 GitHub 链接，灯带与液态玻璃仍在主项目中。
+
+[稳定发行 CI](https://github.com/xudong7587/SunnyTV/actions/runs/39714628857)全部成功：四 ABI 原生解码构建、单测、完整 lint、签名/包核验及 API30 的50项 debug Android回归（零失败/跳过）。本地另在实际签名 release 包通过4项关于页和灯带定向检查；此前字幕回归中自动更新开关位于滚动边缘，测试增加先滚动到完整可见位置，原断言保留，重跑全部通过。实体 TV 灯带效果仍待用户测试。
+
+正式 APK 为29,358,771字节，SHA256 `9e0eb07ad987b574ea36902284bdf4e646d92f7f89aa59380f5ec354383aaf05`。仅复制APK到 `Z:/V3 Download/tv apk/SunnyTV-v1.0.0-73.apk`，回读一致；历史本地1.0.0 /72原包保持不变。此前0.3.8仍为草稿，不覆盖历史标签/资产，不发布WebDAV或NAS JSON。以下为历史记录。
 
 # 2026-10-22 SunnyTV 1.0.0 GitHub latest 发行准备
 
