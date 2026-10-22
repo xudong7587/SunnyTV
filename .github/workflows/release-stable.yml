@@ -62,6 +62,7 @@ jobs:
           ffmpeg -v error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -ac 8 -c:a aac -aac_pce 1 -b:a 512k -frames:a 3 -f adts app/src/androidTest/assets/tone-pce-eight.aac
           mkdir -p app/src/androidTest/assets/quality
           ffmpeg -v error -f lavfi -i 'color=c=blue:s=320x180:r=24:d=12' -f lavfi -i 'sine=frequency=440:sample_rate=44100:duration=12' -c:v libx264 -threads 1 -preset ultrafast -g 24 -pix_fmt yuv420p -c:a aac -aac_pce 1 -ac 8 -b:a 512k -t 12 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename 'app/src/androidTest/assets/quality/pce-%d.ts' app/src/androidTest/assets/quality/pce.m3u8
+          ffmpeg -v error -f lavfi -i 'color=c=gray:s=320x180:r=24:d=12' -vf 'drawbox=x=0:y=0:w=iw:h=18:c=red:t=fill,drawbox=x=0:y=162:w=iw:h=18:c=blue:t=fill,drawbox=x=0:y=18:w=32:h=144:c=yellow:t=fill,drawbox=x=288:y=18:w=32:h=144:c=green:t=fill' -c:v libx264 -threads 1 -preset ultrafast -pix_fmt yuv420p -movflags +faststart app/src/androidTest/assets/ambilight.mp4
       - name: Select existing repository signing key
         env:
           KEY_B64: ${{ secrets.SUNNYTV_DEBUG_KEYSTORE_B64 }}
@@ -109,7 +110,7 @@ jobs:
           profile: tv_1080p
           disable-animations: true
           script: |
-            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.AboutProjectsTest,io.github.xudong7587.sunnytv.AmbilightLifecycleTest,io.github.xudong7587.sunnytv.AmbilightSettingsTest,io.github.xudong7587.sunnytv.AmbilightSurfaceTest,androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
             if [ -n "$CANDIDATE_APK_SHA256" ]; then bash scripts/verify-stable-candidate-android.sh; fi
       - name: Publish a new immutable release
         env:
