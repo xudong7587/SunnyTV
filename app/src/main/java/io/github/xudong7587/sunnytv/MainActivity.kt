@@ -306,6 +306,8 @@ class MainActivity: ComponentActivity() {
         }.onPreviewKeyEvent {
             if(it.type==KeyEventType.KeyDown && it.key==Key.DirectionDown) {scope.launch {bridge.revealTop?.invoke();withFrameNanos {};bridge.enterContent(fromNavigation=true)};true} else false
         }.focusGroup(),horizontalArrangement=Arrangement.spacedBy(if(compact) 0.dp else 4.dp)) {
+            // A single optical shell owns refraction; its navigation tiles stay flat.
+            CompositionLocalProvider(LocalGlassControls provides (LocalNativeAppearance.current.material in setOf("glass","frosted","aurora"))) {
             listOf("首页" to Route.Home,"媒体库" to Route.Libraries,"搜索" to Route.Search,"设置" to Route.Settings).forEach { (label,target) ->
                 FocusTile("nav:$label",Modifier.semantics {contentDescription=label},active=activeRoot==target,autoFocus=model.route==Route.Home && target==Route.Home,shape=sunnyInsetShape(28.dp,4.dp),button=true,
                     focusLift=false,onClick={model.navigate(target,root=true)}) { focused ->
@@ -319,6 +321,7 @@ class MainActivity: ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
         if(!compact) Spacer(Modifier.width(100.dp))

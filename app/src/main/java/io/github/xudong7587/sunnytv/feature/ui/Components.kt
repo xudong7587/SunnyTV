@@ -126,7 +126,8 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             val focusEdge=concentricInsetOutline(shape,size,stroke/2f,layoutDirection,this)
             onDrawWithContent {
                 drawOutline(edge,fill.value.copy(alpha=if(glassControls) {0f} else if(textured) {if(selected) .65f else .04f} else 1f))
-                if(liquidButton && flatGlass) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
+                // Navigation communicates focus through its expanded label, keeping one clear lens.
+                if(liquidButton && flatGlass && !id.startsWith("nav:")) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
                 else if(glassControls && !liquidButton && (selected || emphasized)) drawOutline(edge,base.accent.copy(alpha=.10f))
                 if(focusOutline && !showOutline && !liquidButton && (!glassControls || emphasized)) drawOutline(focusEdge,if(emphasized) base.accent else base.controlEdge,style=Stroke(1.dp.toPx()))
                 drawContent()

@@ -42,8 +42,8 @@ class WebsiteCaptureTest {
         val stories=listOf("一封没有地址的信，将云上邮局的送信人带往天空深处。每一次出发，都连接着一份等待。","海风吹动窗帘，落日照亮桌上的橘子。一次迟来的重逢，在海边缓缓展开。","月光照进古老森林，一头白鹿引领旅人寻找失落的归途。","海面升起一座银色巨构，潮汐开始流向天空。未知的引力，牵动一段远行。","一名目击者走上狭窄的楼梯。沉默之中，每个人都藏着另一个答案。","雪落渡口，一名行者等待最后一班船。一场无声的告别，留在山水之间。","旧墙后传来熟悉的声响。她伸出手，触到了一段不愿醒来的记忆。")
         val server=ServerSocket(0,16,java.net.InetAddress.getByName("127.0.0.1"))
         val rows=JSONArray(titles.mapIndexed {i,t->JSONObject().put("Id","$i").put("Name",t).put("Type","Movie")
-            .put("ProductionYear",2026).put("CommunityRating",8.2+i*.1).put("Overview",stories[i])
-            .put("RunTimeTicks",60000000000L).put("ImageTags",JSONObject().put("Primary","seven-v1")).put("BackdropImageTags",JSONArray(listOf("seven-v1")))})
+            .put("Genres",JSONArray(listOf(genres[i]))).put("ProductionYear",2026).put("CommunityRating",8.2+i*.1).put("Overview",stories[i])
+            .put("RunTimeTicks",60000000000L).put("ImageTags",JSONObject().put("Primary","seven-v1").put("Logo","seven-v1")).put("BackdropImageTags",JSONArray(listOf("seven-v1")))})
         thread(isDaemon=true,name="original-showcase") {
             while(!server.isClosed) try {
                 val socket=server.accept()
@@ -52,15 +52,18 @@ class WebsiteCaptureTest {
                     while(!reader.readLine().isNullOrEmpty()) { }
                     val path=request.substringAfter(" ").substringBefore(" ")
                     val match=Regex("/Items/(\\d+)/Images/(\\w+)").find(path)
-                    val bytes=if(match!=null) instrumentation.context.assets.open("showcase-seven/${match.groupValues[1].toInt()%titles.size}-${when(match.groupValues[2]) {"Primary"->"poster";"Logo"->"logo";else->"wide"}}.webp").use {it.readBytes()}
-                        else JSONObject().put("Items",rows).put("TotalRecordCount",titles.size).toString().toByteArray()
-                    val type=if(match!=null) "image/webp" else "application/json"
+                    val video=path.substringBefore("?").endsWith("/movie.mp4")
+                    val itemId=Regex("/Items/(\\d+)(?:\\?|$)").find(path)?.groupValues?.get(1)?.toIntOrNull()
+                    val bytes=if(video) instrumentation.context.assets.open("showcase-seven/story.mp4").use {it.readBytes()} else if(match!=null) instrumentation.context.assets.open("showcase-seven/${match.groupValues[1].toInt()%titles.size}-${when(match.groupValues[2]) {"Primary"->"poster";"Logo"->"logo";else->"wide"}}.webp").use {it.readBytes()}
+                        else if(itemId!=null && itemId<titles.size) rows.getJSONObject(itemId).toString().toByteArray() else JSONObject().put("Items",rows).put("TotalRecordCount",titles.size).toString().toByteArray()
+                    val type=if(video) "video/mp4" else if(match!=null) "image/webp" else "application/json"
                     s.getOutputStream().apply {write("HTTP/1.1 200 OK\r\nContent-Type: $type\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray());write(bytes);flush()}
                 }}
             } catch(_:Exception) { }
         }
         lateinit var model:AppModel
         lateinit var library:MediaEntry
+        var closeupScale by mutableStateOf(1f)
         rule.activityRule.scenario.onActivity {activity->
             activity.window.decorView.systemUiVisibility=5894
             val source=SourceConfig("showcase",SourceKind.EMBY,"我的私人影院","http://127.0.0.1:${server.localPort}/emby/","demo",embyProfile=EmbyProfile.STANDARD)
@@ -99,19 +102,40 @@ class WebsiteCaptureTest {
         shot("glass-scroll")
         rule.onNodeWithTag("library:grid").performTouchInput {swipeUp()}
         shot("glass-posters")
+        rule.runOnIdle {model.saveSettings(model.settings.copy(appearanceMaterial="soft"));model.navigate(Route.Detail(model.feeds.values.first().latest.first()))}
+        shot("detail")
+        rule.runOnIdle {model.navigate(Route.Settings,root=true)}
+        shot("sources")
+        rule.onNodeWithTag("settings:外观").performClick()
+        shot("appearance")
+        rule.onNodeWithTag("settings:viewport").performScrollToNode(hasTestTag("setting:界面字体"))
+        shot("fonts")
+        rule.onNodeWithTag("setting:界面字体").performClick()
+        shot("font-choice")
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        rule.onNodeWithTag("settings:性能").performClick()
+        shot("performance")
+        rule.onNodeWithTag("settings:灯带设置").performClick()
+        shot("ambilight")
+        rule.onNodeWithTag("settings:categories").performScrollToNode(hasTestTag("settings:关于"))
+        rule.onNodeWithTag("settings:关于").performClick()
+        shot("about")
+        rule.runOnIdle {model.saveSettings(model.settings.copy(appearanceMaterial="glass"))}
         // Isolated native material study: unchanged TopNav and shader over the supplied artwork.
         // Centering the navigation crosses the colorful building instead of a flat sky.
         rule.activityRule.scenario.onActivity {activity->
             model.navigate(Route.Home,root=true)
             val artwork=instrumentation.context.assets.open("showcase-seven/0-wide.webp").use {BitmapFactory.decodeStream(it)}.asImageBitmap()
             activity.setContent {
-                CompositionLocalProvider(LocalAppModel provides model,LocalHandset provides false,LocalTouchFirst provides false) {
+                val density=androidx.compose.ui.platform.LocalDensity.current
+                CompositionLocalProvider(LocalAppModel provides model,LocalHandset provides false,LocalTouchFirst provides false,
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*closeupScale,density.fontScale)) {
                     SunnyTheme(model.settings) {
                         val backdrop=rememberGlassBackdrop(true)
                         val bridge=remember {NavigationBridge()}
                         Box(Modifier.fillMaxSize()) {
                             Image(artwork,null,Modifier.fillMaxSize().captureGlassBackdrop(backdrop),contentScale=ContentScale.Crop)
-                            CompositionLocalProvider(LocalGlassBackdrop provides backdrop,LocalNavigationBridge provides bridge,LocalCompact provides false) {
+                            CompositionLocalProvider(LocalGlassBackdrop provides backdrop,LocalNavigationBridge provides bridge,LocalCompact provides (closeupScale>1f)) {
                                 Box(Modifier.align(Alignment.Center).fillMaxWidth()) {TopNav(bridge)}
                             }
                         }
@@ -121,6 +145,28 @@ class WebsiteCaptureTest {
         }
         rule.onNodeWithTag("nav:首页").performSemanticsAction(SemanticsActions.RequestFocus)
         shot("glass-study")
+        // Increase native drawing density, rather than enlarging a raster screenshot.
+        rule.runOnIdle {closeupScale=2f}
+        rule.waitForIdle()
+        shot("glass-detail-hd")
+        val bounds=rule.onNodeWithTag("nav:首页").fetchSemanticsNode().boundsInRoot
+        val last=rule.onNodeWithTag("nav:设置").fetchSemanticsNode().boundsInRoot
+        File(instrumentation.targetContext.cacheDir,"showcase-seven-glass-detail-bounds.txt").writeText(
+            "${(bounds.left+last.right)/2},${(bounds.top+bounds.bottom)/2}")
+        rule.runOnIdle {closeupScale=1f}
+        rule.onNodeWithTag("nav:首页").performKeyInput {pressKey(Key.DirectionRight)}
+        rule.onNodeWithTag("nav:媒体库").assertIsFocused().performKeyInput {pressKey(Key.DirectionRight)}
+        rule.onNodeWithTag("nav:搜索").assertIsFocused().performKeyInput {pressKey(Key.DirectionCenter)}
+        rule.runOnIdle {org.junit.Assert.assertEquals(Route.Search,model.route)}
+        model.app.store.setRealtimePlaybackInfo(false)
+        val request=PlaybackRequest("","http://127.0.0.1:${server.localPort}/movie.mp4","云上邮局 · 原创场景演示",durationMs=30000)
+        androidx.test.core.app.ActivityScenario.launch<io.github.xudong7587.sunnytv.feature.player.PlayerActivity>(
+            io.github.xudong7587.sunnytv.feature.player.PlayerActivity.intent(instrumentation.targetContext,request)).use {
+            Thread.sleep(3500)
+            rule.onNodeWithTag("player:pause").performSemanticsAction(SemanticsActions.RequestFocus)
+            rule.onNodeWithTag("player:stats").assertIsOff()
+            shot("player")
+        }
         server.close()
     }
 }

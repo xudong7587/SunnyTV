@@ -102,8 +102,8 @@ private class GlassEffectCache {var size=Size.Zero;var effect:RenderEffect?=null
                     shader.setFloatUniform("offset",-pad,-pad)
                     shader.setFloatUniform("cornerRadii",rounded?.topLeftCornerRadius?.x ?: r,rounded?.topRightCornerRadius?.x ?: r,
                         rounded?.bottomRightCornerRadius?.x ?: r,rounded?.bottomLeftCornerRadius?.x ?: r)
-                    shader.setFloatUniform("refractionHeight",24f*scale)
-                    shader.setFloatUniform("refractionAmount",-24f*scale)
+                    shader.setFloatUniform("refractionHeight",18f*scale)
+                    shader.setFloatUniform("refractionAmount",-14f*scale)
                     shader.setFloatUniform("depthEffect",0f)
                 } else {
                 shader.setFloatUniform("panelSize",size.width,size.height)
@@ -119,11 +119,11 @@ private class GlassEffectCache {var size=Size.Zero;var effect:RenderEffect?=null
                 // RenderEffect snapshots the builder uniforms: recreate only for geometry/theme changes.
                 val lens=android.graphics.RenderEffect.createRuntimeShaderEffect(shader,if(material=="glass") "content" else "backdrop")
                 cache.effect=if(material=="glass") {
-                    val saturation=android.graphics.ColorMatrix().apply {setSaturation(1.5f)}
+                    val saturation=android.graphics.ColorMatrix().apply {setSaturation(.85f)}
                     val colorEffect=android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(saturation))
                     // Miuix defines sigma as radius * .45; Android maps radius to .57735*r + .5.
-                    // Match the reference sigma while using the platform's cached separable blur.
-                    val sigma=with(density) {4.dp.toPx()}*.45f
+                    // A quiet diffusion softens sampled colors while keeping a transparent centre.
+                    val sigma=with(density) {6.dp.toPx()}*.45f
                     val blurRadius=((sigma-.5f)/.57735f).coerceAtLeast(.01f)
                     val blur=android.graphics.RenderEffect.createBlurEffect(blurRadius,blurRadius,colorEffect,android.graphics.Shader.TileMode.CLAMP)
                     android.graphics.RenderEffect.createChainEffect(lens,blur).asComposeRenderEffect()
@@ -222,7 +222,7 @@ half4 main(float2 coord) {
         val blur=2.dp.toPx()
         shader.setFloatUniform("innerBlurRadius",blur)
         shader.setFloatUniform("innerBlurRadiusSq",blur*blur)
-        shader.setFloatUniform("highlightAlpha",.75f)
+        shader.setFloatUniform("highlightAlpha",.55f)
         shader.setColorUniform("strokeColor",android.graphics.Color.WHITE)
         shader.setFloatUniform("strokeAlphaMul",.12f)
         shader.setFloatUniform("lightDir1",-.70622456f,-.70622456f,-.04993762f)

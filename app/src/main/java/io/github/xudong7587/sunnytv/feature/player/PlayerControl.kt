@@ -17,7 +17,6 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
@@ -109,115 +108,11 @@ import io.github.xudong7587.sunnytv.feature.ui.LocalSunnyPalette
         } else if(icon=="speed") {
             // Speed is intentionally just the value: no pill, gauge or decorative color block.
             Text(badge ?: "1.0x",color=color,fontSize=9.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else Canvas(Modifier.fillMaxSize()) {
-            val w=size.width; val h=size.height
-            fun x(v:Float)=w*v/24f
-            fun y(v:Float)=h*v/24f
-            fun triangle(points:List<Offset>) {drawPath(Path().apply {moveTo(points[0].x,points[0].y);lineTo(points[1].x,points[1].y);lineTo(points[2].x,points[2].y);close()},color)}
-            when(icon) {
-                "lock", "unlock" -> {
-                    val stroke=Stroke(x(1.8f),cap=StrokeCap.Round,join=StrokeJoin.Round)
-                    drawRoundRect(color,Offset(x(5.5f),y(10.5f)),Size(x(13f),y(10f)),CornerRadius(x(2.2f)),style=stroke)
-                    val shackle=Path().apply {
-                        moveTo(x(8f),y(10.5f));lineTo(x(8f),y(7f))
-                        cubicTo(x(8f),y(1.7f),x(16f),y(1.7f),x(16f),y(7f))
-                        if(icon=="lock") lineTo(x(16f),y(10.5f))
-                    }
-                    drawPath(shackle,color,style=stroke)
-                    drawLine(color,Offset(x(12f),y(14.3f)),Offset(x(12f),y(17f)),strokeWidth=x(1.8f),cap=StrokeCap.Round)
-                }
-                "play" -> triangle(listOf(Offset(x(7f),y(4f)),Offset(x(20f),y(12f)),Offset(x(7f),y(20f))))
-                "pause" -> {
-                    drawRoundRect(color,Offset(x(6.5f),y(4f)),Size(x(4f),y(16f)),CornerRadius(x(1.2f)))
-                    drawRoundRect(color,Offset(x(13.5f),y(4f)),Size(x(4f),y(16f)),CornerRadius(x(1.2f)))
-                }
-                "previous" -> {
-                    drawRoundRect(color,Offset(x(4.5f),y(4f)),Size(x(2.5f),y(16f)),CornerRadius(x(.7f)))
-                    triangle(listOf(Offset(x(18.5f),y(4.5f)),Offset(x(8f),y(12f)),Offset(x(18.5f),y(19.5f))))
-                }
-                "next" -> {
-                    drawRoundRect(color,Offset(x(17f),y(4f)),Size(x(2.5f),y(16f)),CornerRadius(x(.7f)))
-                    triangle(listOf(Offset(x(5.5f),y(4.5f)),Offset(x(16f),y(12f)),Offset(x(5.5f),y(19.5f))))
-                }
-                "rewind" -> {
-                    // Counter-clockwise 10-second seek: one heavy circular arrow around the value.
-                    drawArc(color,55f,-285f,false,style=Stroke(x(2.2f),cap=StrokeCap.Round),
-                        topLeft=Offset(x(3.6f),y(3.6f)),size=Size(x(16.8f),y(16.8f)))
-                    triangle(listOf(Offset(x(4.2f),y(5.0f)),Offset(x(9.1f),y(4.3f)),Offset(x(6.4f),y(8.4f))))
-                }
-                "forward" -> {
-                    // Clockwise counterpart, mirrored so both transport icons read as a pair.
-                    drawArc(color,-235f,285f,false,style=Stroke(x(2.2f),cap=StrokeCap.Round),
-                        topLeft=Offset(x(3.6f),y(3.6f)),size=Size(x(16.8f),y(16.8f)))
-                    triangle(listOf(Offset(x(19.8f),y(5.0f)),Offset(x(14.9f),y(4.3f)),Offset(x(17.6f),y(8.4f))))
-                }
-                "sleep" -> {
-                    val moon=Path().apply {
-                        moveTo(x(15.8f),y(3.5f));cubicTo(x(9.8f),y(4.2f),x(6.2f),y(9.2f),x(7.6f),y(14.3f))
-                        cubicTo(x(9.0f),y(19.2f),x(14.3f),y(21.4f),x(19.1f),y(18.5f))
-                        cubicTo(x(12.2f),y(18.8f),x(9.4f),y(9.0f),x(15.8f),y(3.5f));close()
-                    }
-                    drawPath(moon,color)
-                    drawCircle(color,x(1.05f),Offset(x(18.2f),y(7.2f)))
-                }
-                "chapters" -> {
-                    repeat(3) {i->
-                        val yy=6f+i*6f
-                        drawRoundRect(color,Offset(x(4f),y(yy)),Size(x(3f),y(3f)),CornerRadius(x(.6f)))
-                        drawRoundRect(color,Offset(x(9f),y(yy+.5f)),Size(x(11f),y(2f)),CornerRadius(x(1f)))
-                    }
-                }
-                "subtitle","subtitle-timing" -> {
-                    drawRoundRect(color.copy(alpha=.28f),Offset(x(3f),y(5f)),Size(x(18f),y(14f)),CornerRadius(x(2.3f)))
-                    drawRoundRect(color,Offset(x(6f),y(10f)),Size(x(5f),y(2.2f)),CornerRadius(x(1f)))
-                    drawRoundRect(color,Offset(x(13f),y(10f)),Size(x(5f),y(2.2f)),CornerRadius(x(1f)))
-                    drawRoundRect(color,Offset(x(6f),y(14f)),Size(x(12f),y(2.2f)),CornerRadius(x(1f)))
-                }
-                "audio" -> {
-                    val speaker=Path().apply {moveTo(x(4f),y(10f));lineTo(x(8f),y(10f));lineTo(x(13f),y(6f));lineTo(x(13f),y(18f));lineTo(x(8f),y(14f));lineTo(x(4f),y(14f));close()}
-                    drawPath(speaker,color)
-                    drawArc(color,300f,120f,false,style=Stroke(x(1.8f),cap=StrokeCap.Round),topLeft=Offset(x(11f),y(7f)),size=Size(x(8f),y(10f)))
-                }
-                "cast" -> {
-                    drawCircle(color,x(3.1f),Offset(x(10f),y(8f)))
-                    drawOval(color,Offset(x(4.5f),y(13f)),Size(x(11f),y(7f)))
-                    drawCircle(color.copy(alpha=.72f),x(2.3f),Offset(x(17.5f),y(9f)))
-                    drawOval(color.copy(alpha=.72f),Offset(x(14f),y(14f)),Size(x(7f),y(5f)))
-                }
-                "frame" -> {
-                    val t=x(2.4f); val l=x(6f)
-                    drawRect(color,Offset(x(3f),y(3f)),Size(l,t));drawRect(color,Offset(x(3f),y(3f)),Size(t,l))
-                    drawRect(color,Offset(x(15f),y(3f)),Size(l,t));drawRect(color,Offset(x(18.6f),y(3f)),Size(t,l))
-                    drawRect(color,Offset(x(3f),y(18.6f)),Size(l,t));drawRect(color,Offset(x(3f),y(15f)),Size(t,l))
-                    drawRect(color,Offset(x(15f),y(18.6f)),Size(l,t));drawRect(color,Offset(x(18.6f),y(15f)),Size(t,l))
-                }
-                "stats" -> {
-                    repeat(3) {i->
-                        drawRoundRect(color,Offset(x(4f+i*6f),y(14f-i*4f)),Size(x(3.5f),y(6f+i*4f)),CornerRadius(x(.8f)))
-                    }
-                }
-                "info" -> {
-                    drawCircle(color,x(9f),Offset(x(12f),y(12f)))
-                    drawCircle(Color.Black.copy(.72f),x(1.15f),Offset(x(12f),y(7.7f)))
-                    drawRoundRect(Color.Black.copy(.72f),Offset(x(10.9f),y(10f)),Size(x(2.2f),y(7f)),CornerRadius(x(1.1f)))
-                }
-                "exit" -> {
-                    drawRoundRect(color.copy(alpha=.72f),Offset(x(4f),y(4f)),Size(x(3f),y(16f)),CornerRadius(x(.8f)))
-                    drawRoundRect(color,Offset(x(8f),y(10.7f)),Size(x(10f),y(2.6f)),CornerRadius(x(1.3f)))
-                    triangle(listOf(Offset(x(15f),y(6.5f)),Offset(x(21f),y(12f)),Offset(x(15f),y(17.5f))))
-                }
-                else -> {
-                    // Less common player actions keep the shared icon language, centered in the same box.
-                    drawCircle(color.copy(alpha=.18f),x(9.5f),Offset(x(12f),y(12f)))
-                }
-            }
+        } else {
+            LineIcon(icon,color,Modifier.fillMaxSize())
         }
-        if(icon=="subtitle-timing") {
-            Text("↔",color=color,fontSize=13.sp,fontWeight=FontWeight.Bold,modifier=Modifier.align(Alignment.BottomCenter))
-        } else if(icon=="rewind" || icon=="forward") {
-            Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.ExtraBold,maxLines=1)
-        } else if(icon !in setOf("quality","lock","unlock","speed","play","pause","previous","next","sleep","chapters","subtitle","subtitle-timing","audio","cast","frame","info","stats","exit","rewind","forward")) {
-            LineIcon(icon,color,Modifier.size(18.dp))
+        if(icon=="rewind" || icon=="forward") {
+            Text(badge ?: "10",color=color,fontSize=8.5.sp,fontWeight=FontWeight.Bold,maxLines=1)
         }
     }
 }
