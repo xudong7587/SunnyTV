@@ -30,7 +30,7 @@ class ExperimentalUpdateUiTest {
             val title=rule.onAllNodesWithText("SunnyTV").fetchSemanticsNodes().first {it.boundsInRoot.top>=0}
             assertTrue(title.boundsInRoot.top < rule.onNodeWithTag("update:github").fetchSemanticsNode().boundsInRoot.top)
             rule.onNodeWithTag("update:github-download").assertIsDisplayed()
-            rule.onNodeWithTag("update:github-auto").assertIsOff().performClick().assertIsOn()
+            rule.onNodeWithTag("update:github-auto").performScrollTo().assertIsOff().performClick().assertIsOn()
             assertTrue(store.githubAutomaticUpdates())
             for(tag in listOf("update:webdav","update:save","update:auto","update:check","WebDAV 用户名"))
                 rule.onNodeWithTag(tag).assertDoesNotExist()
