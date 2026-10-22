@@ -2,6 +2,7 @@
 """Source-package sanity checks. This is NOT Android compilation or a dependency audit."""
 from pathlib import Path
 import ast
+import hashlib
 import json
 import subprocess
 import shutil
@@ -30,7 +31,11 @@ if shutil.which('node') and (root/'preview/ui.js').exists():
 def no_packaged_demo():
     forbidden = ('.jpg','.jpeg','.png','.woff','.woff2')
     # User screenshots and prototype illustrations stay outside the APK tree.
-    assert not [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden]
+    approved = root/'app/src/main/res/drawable-nodpi/media_index_icon.png'
+    assert approved.is_file(), 'Missing attributed MediaIndex project icon'
+    assert hashlib.sha256(approved.read_bytes()).hexdigest() == '559deef506301aa7c7fb5d667ed2950f8dc7a0ff1c9e60cdbdcb43b6db54e6c3', 'Unexpected MediaIndex project icon bytes'
+    unexpected = [p for p in (root/'app/src/main').rglob('*') if p.suffix.lower() in forbidden and p != approved]
+    assert not unexpected, 'Unapproved packaged imagery: ' + ', '.join(str(p.relative_to(root)) for p in unexpected)
 check('No preview imagery in native app', no_packaged_demo)
 
 def no_bundled_fonts():
