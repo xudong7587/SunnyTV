@@ -8,8 +8,8 @@
     rose: {name:'玫瑰', light:['#9c3f62','#745099','#a96938'], dark:['#edacc3','#ccb4f1','#ecc69d']},
     sunset: {name:'日落', light:['#a4562c','#9d465a','#6a657d'], dark:['#f1b58f','#edaaba','#c2b7dd']}
   };
-  const materials={paper:['纸页档案','温暖纸面与细描边'],default:['清晰默认','中性色与轻量层次'],aurora:['极光玻璃','多色柔光与通透层次'],glass:['iOS 玻璃','清透亮边与轻磨砂'],soft:['柔软浮雕','柔和方向性明暗'],outline:['精致描边','纤细轮廓与轻底色'],duotone:['双色渐层','有方向的双色过渡'],satin:['缎光瓷面','细腻高光与柔阴影']};
-  const defaults={theme:'light',palette:'forest',material:'paper'};
+  const materials={paper:['纸页档案','温暖纸面与细描边'],default:['清晰默认','中性色与轻量层次'],aurora:['极光玻璃','多色柔光与通透层次'],glass:['清透玻璃','清透亮边与轻磨砂'],soft:['柔软浮雕','柔和方向性明暗'],outline:['精致描边','纤细轮廓与轻底色'],duotone:['双色渐层','有方向的双色过渡'],satin:['缎光瓷面','细腻高光与柔阴影']};
+  const defaults={theme:'dark',palette:'ocean',material:'glass'};
   function normalize(value){return {theme:['light','dark'].includes(value?.theme)?value.theme:defaults.theme,palette:palettes[value?.palette]?value.palette:defaults.palette,material:materials[value?.material]?value.material:defaults.material};}
   let state=defaults;
   try{state=normalize(JSON.parse(localStorage.getItem(key)));}catch{}
