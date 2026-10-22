@@ -9,6 +9,16 @@ import zipfile
 from pathlib import Path
 
 
+def read_release(repository, version):
+    # REST /releases/tags/{tag} excludes unpublished drafts. The CLI's release
+    # lookup can resolve their requested tag without creating a public Git tag.
+    release = json.loads(subprocess.check_output(['gh', 'release', 'view', 'v' + version,
+        '--repo', repository, '--json', 'tagName,isDraft,isPrerelease,targetCommitish,assets'], text=True))
+    return {'tag_name': release['tagName'], 'draft': release['isDraft'],
+            'prerelease': release['isPrerelease'], 'target_commitish': release['targetCommitish'],
+            'assets': release['assets']}
+
+
 def validate_draft(release, version, commit, digest):
     if not re.fullmatch(r'[0-9a-f]{64}', digest):
         raise ValueError('Expected a lowercase APK SHA256')
@@ -58,8 +68,7 @@ def main():
     parser.add_argument('--rebuilt', type=Path, required=True)
     parser.add_argument('--native-baseline', required=True)
     args = parser.parse_args()
-    release = json.loads(subprocess.check_output(
-        ['gh', 'api', f'repos/{args.repository}/releases/tags/v{args.version}'], text=True))
+    release = read_release(args.repository, args.version)
     validate_draft(release, args.version, args.commit, args.sha256)
     subprocess.run(['git', 'fetch', '--no-tags', 'origin', args.native_baseline], check=True)
     subprocess.run(['git', 'diff', '--exit-code', args.native_baseline, args.commit, '--',
