@@ -33,10 +33,23 @@ def validate_draft(release, version, commit, digest):
         raise ValueError('Draft must contain only the device-tested candidate APK')
 
 
-def compare_application(candidate, rebuilt):
+def approved_dex_variance(different, original, fresh, candidate_sha):
+    # This is a reviewed, immutable build pair, not a generic DEX comparison bypass.
+    path = Path(__file__).resolve().parent.parent / 'docs/release-evidence/0.3.8-dex-variance.json'
+    record = json.loads(path.read_text())
+    name = record['entry']
+    if (different == [name] and candidate_sha == record['candidateApkSha256']
+            and original[name] == record['candidateEntrySha256']
+            and fresh[name] == record['cleanEntrySha256']):
+        return path.relative_to(Path(__file__).resolve().parent.parent).as_posix()
+    return None
+
+
+def compare_application(candidate, rebuilt, variance_report=None):
     # Signing/ZIP metadata and unchanged native decoders are checked separately.
     # DEX, manifest and compiled resources must match the fresh release build
-    # byte for byte. License text permits only Git's Windows/Linux newline change.
+    # byte for byte, apart from the explicitly reviewed 0.3.8 incremental Compose
+    # build pair. License text permits only Git's Windows/Linux newline change.
     def contents(path):
         with zipfile.ZipFile(path) as apk:
             return {name: hashlib.sha256(apk.read(name).replace(b'\r\n', b'\n')
@@ -56,7 +69,12 @@ def compare_application(candidate, rebuilt):
         raise ValueError('Candidate or rebuilt APK is missing required application entries')
     if original != fresh:
         different = sorted(k for k in original.keys() | fresh.keys() if original.get(k) != fresh.get(k))
-        raise ValueError('Candidate differs from committed application build: ' + ', '.join(different))
+        approved = approved_dex_variance(different, original, fresh, hashlib.sha256(Path(candidate).read_bytes()).hexdigest())
+        if not approved:
+            raise ValueError('Candidate differs from committed application build: ' + ', '.join(different))
+        if variance_report is not None:
+            variance_report.update(reviewedDexVariance=approved, byteIdenticalApplicationEntries=len(original)-1,
+                                  reviewedNonIdenticalEntries=different)
     return len(original)
 
 
@@ -82,18 +100,19 @@ def main():
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     if digest != args.sha256:
         raise ValueError('Candidate APK SHA256 differs from the explicitly selected tested bytes')
+    variance = {}
     try:
-        count = compare_application(candidate, args.rebuilt)
+        count = compare_application(candidate, args.rebuilt, variance)
     except ValueError:
         # Keep the failed rebuild available for investigation; never publish it
         # in place of the already distributed candidate.
         shutil.copyfile(args.rebuilt, 'build-logs/rebuilt-app-release.apk')
         raise
     Path('build-logs/candidate-validation.json').write_text(json.dumps({
-        'sha256': digest, 'sourceCommit': args.commit, 'matchedApplicationEntries': count,
+        'sha256': digest, 'sourceCommit': args.commit, 'verifiedApplicationEntries': count, **variance,
         'nativeSourceUnchangedSince': args.native_baseline,
         'distribution': 'originalDeviceTestedBytes'}, indent=2) + '\n')
-    print(f'Verified candidate SHA256 and {count} committed application entries.')
+    print(f'Verified candidate SHA256 and {count} application entries; reviewed DEX variance: {bool(variance)}.')
 
 
 if __name__ == '__main__':

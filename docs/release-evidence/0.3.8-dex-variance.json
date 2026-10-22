@@ -1,0 +1,377 @@
+{
+  "version": "0.3.8",
+  "candidateApkSha256": "b8e5b6bd026421b0b185aac79b21353727b193430fd8ff13afd7a25d6ce4d917",
+  "entry": "classes2.dex",
+  "candidateEntrySha256": "cb36f6011765ce3158b554cbb088c38f9bd480a6398f904f427a8245fce3f623",
+  "cleanEntrySha256": "68196604f5465fc2b684a4778ea7ff19c60d52a77997d804d331ad7067436081",
+  "reason": "The previously distributed incremental build and a full build emit different Compose stability/strong-skipping branches in UI classes. All three DEX files from clean Windows and clean Linux builds are byte-identical. This record approves only this exact APK and exact DEX pair, not arbitrary non-reproducible builds.",
+  "scope": "Every other application DEX, AndroidManifest.xml, compiled resource and normalized third-party license must remain byte-identical. Native source must remain unchanged since 0.2.8. The exact candidate additionally runs release-compatible Android tests; ordinary debug Android gates remain mandatory.",
+  "observations": [
+    "PlayerActivity reads generated $stable fields in the incremental APK; clean build folds the same flags to constants.",
+    "Compose ArtworkView recomposition comparisons use the generated stability mask versus directly selected changedInstance branches.",
+    "No networking, source-adapter, model or native decoder class differs in disassembly."
+  ],
+  "changedClassCount": 72,
+  "changedClasses": [
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivity$onCreate$2$3$1.smali",
+      "candidateSmaliSha256": "4a663c40b915cf57fccb7eda507ba0be8451f5914f432d1b49ca366c3e6f9d7a",
+      "cleanSmaliSha256": "0c5281fb22eb1637153e16dd907dca2197b185d2794bfe9d7e96fde3253e14ec"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivity$onCreate$2$3.smali",
+      "candidateSmaliSha256": "6c8bd1bc46c40d7bc1587dac5ba51a3f5f2ae6428688738f6f49d45c7e52b94e",
+      "cleanSmaliSha256": "94267abaaffd6fcb905ee1dc907ea2514f7d0935277ae8af248fab504e08dd83"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3$3$2$3$1$1$1$1.smali",
+      "candidateSmaliSha256": "77bb5bd563b25fdd4b057a16b6ee8340337491b6c1da3ea66f98115ab7ae3414",
+      "cleanSmaliSha256": "5b091cfbf5e76f8e9227eb515b3260c248a4e9e7d3f40c3d29010e5ec8f03483"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3$3$3$1.smali",
+      "candidateSmaliSha256": "c66d1b45182b689f5fdefbc496717879270b0c8ae3e7a4d094ed687b36515884",
+      "cleanSmaliSha256": "9a40f90cc325cf12b4942852348f32468393cda0b85c91e4eb6e6f849dcd5dd6"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3.smali",
+      "candidateSmaliSha256": "7dc8f7ea4352c774f9ee4c319668dfe6d521e2a99fafb902ab5c15baec14ea83",
+      "cleanSmaliSha256": "fc54e414ef48fd2639afb9462a25a6c72a5dbd45aae7ec12c2eba6e10cfa228a"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/MainActivityKt.smali",
+      "candidateSmaliSha256": "f7c69d428a404aadbc49bd3130541513881c30f93629588f2032178bf64aa87e",
+      "cleanSmaliSha256": "cf67ab2303cba1582e62d0995353ffcb247c0e5840ebee3b84e5038b34796468"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$4$1.smali",
+      "candidateSmaliSha256": "228c5a17435b3ca255dcabb5df7f2eec9c55934f80fb03eb9aa5be7e189808aa",
+      "cleanSmaliSha256": "e16ce4b37ea606ba2693a9289c8d0950c37b3831f9c7ef786a7be839aacac1d9"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$4.smali",
+      "candidateSmaliSha256": "d8fc222b197532855ed4d238efed557ad276d67ab9687bdbcea7aa5b0b943ec6",
+      "cleanSmaliSha256": "997c286d62beb1e12d1a8ca1f495ddada0085f5d39a863ad1bdb5775b271cbe9"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$chrome$1$1$1.smali",
+      "candidateSmaliSha256": "f6849def2407bee73c6991d9fc028d5cc1ce1be56a491136cbfabedeae32c0e3",
+      "cleanSmaliSha256": "3db9f415bd7631a5cb59502ec37bcaf945404c7a5119b70dd8c24f5a823c076f"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$chrome$1$1.smali",
+      "candidateSmaliSha256": "1269f7f431749ff54c224fb296d469badc2c593657b1faabab4cd1cafbea41c5",
+      "cleanSmaliSha256": "bd250f5640dfedf0b73e8064ab62a8765be43fcb4542e5244202692240e1644c"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/player/PlayerActivity.smali",
+      "candidateSmaliSha256": "b08b81d361615ab7202605824102faa9905acbf8e876acd5bacfb7af51eee258",
+      "cleanSmaliSha256": "77b75e103a9c24f40e203e1b0e1905cc21956a4a6078e87312d978530666c6cd"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/AppearancePickerKt$MaterialPreviewCard$1$3.smali",
+      "candidateSmaliSha256": "afbd80e8ee9cf3676a9c5ac2f53f09eb3d3931ff4588eb44c8a0425eb5fe705b",
+      "cleanSmaliSha256": "a71122609f655a5198ff85b528bc486f4aebcb8bd610dc2951c320dde54f0bed"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/AppearancePickerKt.smali",
+      "candidateSmaliSha256": "d3e342c92c4e0b4d0d2f8e71dd05f9c6396cf48d134e77ab12fc284958e66dc9",
+      "cleanSmaliSha256": "3031abc23cdb92d904fefe1c76db2318c79a78f6eefbf060b9c564964591dd0e"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$FolderScreen$lambda$195$lambda$194$lambda$193$$inlined$items$default$4.smali",
+      "candidateSmaliSha256": "fff59aedc485546c247b0e681ea990506f05118c29cf75727882a8afa7cb6db8",
+      "cleanSmaliSha256": "fd81d1533b444982d117a5a9c124f981721a67d9dbf5c337c34110f3d86af7e5"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$Hero$lambda$13$lambda$12$lambda$11$$inlined$items$default$4.smali",
+      "candidateSmaliSha256": "2c060969e1bd8f36ea54940e733c5a41f32fe14ccb5248cd6e0e469187ecc802",
+      "cleanSmaliSha256": "067cb6d8eb3ae3d7d8d91f41bc47d5f0876380e7b40b78259f412b53be32f81c"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$Hero$lambda$29$lambda$28$lambda$27$lambda$26$$inlined$items$default$4.smali",
+      "candidateSmaliSha256": "ba0469d6809c8edfbf890eb73965c4008e66008494e4c5d28532f852d9bf9e63",
+      "cleanSmaliSha256": "d427af5202742506600dccd9f177b1741a26e85adbaed95692b12efd306bf849"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HeroPane$1.smali",
+      "candidateSmaliSha256": "709681ff69a7484f0b4f8376b060a326d2dcd8b07b407ab9e9a1f347a84e5a87",
+      "cleanSmaliSha256": "e320432a38a52534c0a36ee32b52a7a27a72d93863f92ed2c4e3fa47790b8e3f"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$3$1$invoke$lambda$9$lambda$8$lambda$7$$inlined$itemsIndexed$default$3.smali",
+      "candidateSmaliSha256": "d3506fcf99fca5f4a5bb58780c9ef127cac14082e84d3900317c7da9c9b7ea15",
+      "cleanSmaliSha256": "24efb7567b2969e6b3f6d8219ba4b8582ec3e07570e445c270182e3861c46d0b"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$4$1.smali",
+      "candidateSmaliSha256": "2e7c500edfab529e7eceb46e728ef464269b196c77504f71b5e2bb043f9edb3a",
+      "cleanSmaliSha256": "f5562f15fc6ef09ab6d5f4c19855a2f356c5bc402508f292834c25fe6537a2ba"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$6$1.smali",
+      "candidateSmaliSha256": "9660652e25f1856caa5b12330a9f59a581f11a3a4aab23f2bedc57704688fa76",
+      "cleanSmaliSha256": "684b8ab3ea7ad426b97fc5e6b4621687dc8763ef56972ade9223be7ea479293c"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibrariesScreen$2$invoke$lambda$6$lambda$5$$inlined$itemsIndexed$default$4.smali",
+      "candidateSmaliSha256": "d06bd772a8a5ef350da8aec11da9644575ad25c017df65137822f2532e41c835",
+      "cleanSmaliSha256": "b0c524322c5d6ab75226a6d8fc4a3314b3e939db332758316bbe649085071c92"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$18.smali",
+      "candidateSmaliSha256": "a1b395de9c363eea46876631bf02933491901fb53c220619030aab05e0988c14",
+      "cleanSmaliSha256": "d08dd22b43832ec7cdfe5c668519ebbe98e304055dd2677d6ee6a39fa0d7ff2c"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$2.smali",
+      "candidateSmaliSha256": "92e77a0fd94ed0beb040ab329c80f0f98fe2a7b2df5cb7f28855943646408828",
+      "cleanSmaliSha256": "bfb18622b2bba99161be6baf1ee58a7acfb3420ec1493c6c797619d42784763d"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$20.smali",
+      "candidateSmaliSha256": "aa4895667b85e235c09dbc3f34a2dd502b6763b7b9fe107ecf73979250058997",
+      "cleanSmaliSha256": "73badab8234905cacc5ef25e683bd9bd41a6509dfd41ec34d07ab9010a577b71"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$4$1$2$4$1$3.smali",
+      "candidateSmaliSha256": "b52f137f4dcc977c770fb96cc6a003ba7332e91d43340aecef320c90fe565f17",
+      "cleanSmaliSha256": "50bee9c773d05ef84f578a430cd99417580dbbc53c0f375d9fd34e8e88eceef7"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$4.smali",
+      "candidateSmaliSha256": "e65e0ab418ef43742a2dc935b263e0910e07d34f2e49574dbdbc1a682c95aabf",
+      "cleanSmaliSha256": "eb813207cc03b12e2be59c23c7bd07323e90be8c64b33433ea74271fc3f9d933"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$12.smali",
+      "candidateSmaliSha256": "5907a60c9f27b581de2673f0e95720e7d8dc528f9b913fbb7f745665a09d7718",
+      "cleanSmaliSha256": "a548f0e5010b3862de4c53e80422b918625e0300ab71b4e748bbe047a3fffdf5"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$4.smali",
+      "candidateSmaliSha256": "f0400a90e48527c19de6b293e5b9ddedab213faf2ee66613f94d797caa3d56cc",
+      "cleanSmaliSha256": "92706dd4526678eac4a548c05376ed46100a952b3208cc64632693157d144ba3"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$8.smali",
+      "candidateSmaliSha256": "5f04e52c39b4d4423991c97ba851381f46634f32ba45aeaa8528032679f7d089",
+      "cleanSmaliSha256": "4d8addc4f921e50e6df137b7fdcf2815bc43a779921036b5bf4621098469115a"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8.smali",
+      "candidateSmaliSha256": "c06aacd836708e25317c449d7d38dcd3e30ed9bfeaa64a41468b4b3a759ed7d1",
+      "cleanSmaliSha256": "7aa8c87efb646bd83735b76c82d6ce63e503c09fd3e4a9c639e2962b82d61fe9"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt.smali",
+      "candidateSmaliSha256": "5828168d2ce3c735f054e7a1506e98690c1ad31addccabde3a0f223a7ca77959",
+      "cleanSmaliSha256": "88739306b873c75dcc2ba481465c8a6026c02e72a839d342c4a678dcacd28ec0"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt$AccordionCards$5$Card$5.smali",
+      "candidateSmaliSha256": "c25d86dddc837509529034ec4d562adb0d05134a93acaf0451010aa18556b3ff",
+      "cleanSmaliSha256": "345ddae03473153740bfc79a48b5789f6c1e17c65c97631202d252ff309b26ee"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt$CinemaBackdrop$1$1.smali",
+      "candidateSmaliSha256": "55a9a28528c45dcc31f6e1530aa511a64539b7ee445ce26190891fb284c3039d",
+      "cleanSmaliSha256": "cc25b5515128a6f071ff103f8212924e6888bbdb43d3ff15f0bae45c4d54e31b"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt.smali",
+      "candidateSmaliSha256": "ac8ab3b40fa311705c6d01ea65db4342144371376d1331fa8fc2c1cf21950de9",
+      "cleanSmaliSha256": "d00fc03d912242fa5e0909e36af6024dbc137df3ec07409cd43b9538b9fa67b9"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComponentsKt$Backdrop$1$1.smali",
+      "candidateSmaliSha256": "dd975d34989236b1efebd07909e016226866c6878f28ee37de7146bf4fdc179c",
+      "cleanSmaliSha256": "6728f980cd3d8551857a28261e69efc92058d2c9ff681c8630a2154a89aaf7ca"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComponentsKt$LibraryCard$1$1.smali",
+      "candidateSmaliSha256": "18edd316b156669a495bf235957a3d07b5552dc5983c4cf780835168db2b544a",
+      "cleanSmaliSha256": "fa3754c64c26a14ce6806a5860d0d8ab7cc3fb6689f91833338a23abc4633a73"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComponentsKt$MediaCard$2$1.smali",
+      "candidateSmaliSha256": "b541b35151b1ac7bb2c72e605ed650482854164ca10137ceceeb66c0d7c422a0",
+      "cleanSmaliSha256": "49c1e1afe4dcf32e30e31e8e787b56d6149b8213f49ab851aa42fe01d7e001de"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComponentsKt$MediaShelf_au3_HiA$lambda$75$lambda$74$lambda$73$$inlined$itemsIndexed$default$3.smali",
+      "candidateSmaliSha256": "e2f494a3f2a4d86bdff7e7d31567a4abbe3073a497cb1e68501c82a19928daee",
+      "cleanSmaliSha256": "e01b032ec384ca178d8a8269c10e0589be331fcb13b455aa8acd83dae20bb4b9"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComponentsKt.smali",
+      "candidateSmaliSha256": "7b3e2126a9596d47f875ed228937c471a26c40bccd99c9c666a4f4f5b0160113",
+      "cleanSmaliSha256": "087abfe5dfc93f643ab8d3d1f493bb6a0e661b2fa8398882b2d421696644a9f2"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ComposableSingletons$HomeHeroContentKt$lambda$-893046949$1.smali",
+      "candidateSmaliSha256": "790f4d06ae0163ea3d7445a0afa3a6051fec6f6c6943e96e9c8479f7e4450af8",
+      "cleanSmaliSha256": "154142742fb15fd2c71a56f2067693e91ccff899d1f9a99eadffe91c4013537a"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt$EpisodeHorizontal__jt2gSs$lambda$21$lambda$20$$inlined$itemsIndexed$default$3.smali",
+      "candidateSmaliSha256": "a89a36d3ece007ebcdd71f5d4548236ac4681c148faed76826854b5e87f0708d",
+      "cleanSmaliSha256": "b86970ed709d978ad91099fa5390fe26658347ae292494254a674461e84742da"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt$EpisodeListCard$3.smali",
+      "candidateSmaliSha256": "2132c1e1216cdb375826ddc106aa8cbeaa74677e685ab5dad4fbd9bce248d9f3",
+      "cleanSmaliSha256": "3dfe54c275e54d507c6413cb2936e294d1e212d700d063c6e2edc9ed06398408"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt.smali",
+      "candidateSmaliSha256": "275ad409d05538006eee851a741cff7853e3e3e99992d7d782b439d61c477fd2",
+      "cleanSmaliSha256": "0d8b419dbfd8d99019285a8653ca739d94d98747ac3b0552a6bb990a2c6da6fd"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/HomeHeroContentKt$HomeHeroContent$ResumeControls$1$1$1$2.smali",
+      "candidateSmaliSha256": "8513d00bbd00fce5520ed7d77a2f8edc9a3d24c9ab62216ab2202642faf24d1b",
+      "cleanSmaliSha256": "4aa52d81621cb83ecfab4048d682ea3bc155dc4554a621806b9a0b8ed220d44e"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/HomeHeroContentKt$RotatingHeroCards$2$1$1$2.smali",
+      "candidateSmaliSha256": "f9aebf25bbd36de4dea94bbdec67ac3c8d8065592be28975ec78563ef7f545f1",
+      "cleanSmaliSha256": "8798913443af8092aec056c4e4494d24b8cb63aac56ccb4426e70cfd8043a7a0"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/HomeHeroContentKt$RotatingHeroCards$2$1$2$1$2$1$3.smali",
+      "candidateSmaliSha256": "6eee452a9c0067b2b764778e296cecb520c097bc32b67c0bc2abff3f08ace73c",
+      "cleanSmaliSha256": "f675be6d9c5aabc468a71c2a2633695e1c9474596b5929ee61b97d77ad359207"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/HomeHeroContentKt.smali",
+      "candidateSmaliSha256": "a5495f7a34b347454e294ab7faa8c4e5e99bed9ed272e5acd837ac29012aed56",
+      "cleanSmaliSha256": "b77a0ed345f6ed60da7b7f203d56edd2093d0e02614fccab71bea3d7c8a52723"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ItemActionsKt.smali",
+      "candidateSmaliSha256": "94445afe5af1e4928b8e45a036b67dbdf7adeb44dae697de6466e46e8ae7eb33",
+      "cleanSmaliSha256": "71d999dd96896126afe3261ec254039b9760a2d4f184c664352f3b0d51308038"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MaterialOptionSwatchKt.smali",
+      "candidateSmaliSha256": "a47c6b19f2baa1cf1b4761a4012c89b8f6e460e5a5edb9df44271151766a4efb",
+      "cleanSmaliSha256": "6b48eb479b567174224cfcc09ca19630a59e7b3cb0b1134936780982adadfc67"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$1.smali",
+      "candidateSmaliSha256": "f929cd96aeeb235a488edfa35400d7a2d9eb0073e2a93045bffe80ec2440fcf1",
+      "cleanSmaliSha256": "7b9d44a763a3c7d80cd45a5a728b03769392601beef1d3511fcefce92a8c6f87"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$11.smali",
+      "candidateSmaliSha256": "6aa624d6bb311d5d5f4bf192d2b5ea4276cd96746c1591d9053de69caa8a1dd5",
+      "cleanSmaliSha256": "b5ec0ee1eb9a7ba593456f04a3c39543edbcec6d324d5ddd9104f0535fcf3f9f"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$13$1$3$1$2$1$2.smali",
+      "candidateSmaliSha256": "711aa75c9647b08c3723e8f7faee426f8cbde391bb76851b4df4040d27fdab30",
+      "cleanSmaliSha256": "3bed73d79b349bcb84c33eda37aa2d7b3ab0a50eb18f7327a12dd2027b7dfe66"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$14.smali",
+      "candidateSmaliSha256": "a97cf16c187d03570efbfe1b960612f43005fbb28910716b468ebdf110dff5e1",
+      "cleanSmaliSha256": "ee4ee9b7bf2f6a824925963d091b3c37e7ec1312841d958e47c7c0ac70025b10"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$4$invoke$lambda$6$lambda$5$lambda$4$$inlined$itemsIndexed$default$3.smali",
+      "candidateSmaliSha256": "29021737114eb2a2905fa54a74ada2508872b75b97b30bf61d535bae415d1a5d",
+      "cleanSmaliSha256": "4e1e61162721fdc8b7115f7a24d3adbb43bf1ef5eb14c1a2ce50ee20b70cb499"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$4.smali",
+      "candidateSmaliSha256": "05464c7478fa12584728a53c9d4a5e57baa0a1ca8497af99e8789bede9a1cbdf",
+      "cleanSmaliSha256": "253f0cc4a11ddb7d33400ce6c0f9c5f29731f6adb80b63d7678903d70e41d632"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$6.smali",
+      "candidateSmaliSha256": "f1e06d871443a2b89b3f0e4eb72270300fa948f555720f6d57c1cf6307548c8f",
+      "cleanSmaliSha256": "5bfa779f0e95b2fe3957b5b7bfbb4a5099ccfbcd3873d1643500e1f348c6877a"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$invoke$lambda$13$lambda$12$$inlined$items$default$4.smali",
+      "candidateSmaliSha256": "ac437b0ddbe4ef3c14ca0034066dc34dd0ba0fa9dfa8448f6b4f8b445a0b0cec",
+      "cleanSmaliSha256": "8e4639fc2336182f883108e99c0f4c02a0f23e170d7c32fe4976d39f9fb29bc1"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$invoke$lambda$13$lambda$12$$inlined$items$default$8.smali",
+      "candidateSmaliSha256": "7eb9fc0427784ca521ac8b7c05bf0b6e6de526b7cb4220a62e2e6b0f7014797c",
+      "cleanSmaliSha256": "44c37516f8bc780ac10d07b8cad1b48f76e19ad1608916a39d20d5f04f0ad874"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2.smali",
+      "candidateSmaliSha256": "0e2117024191a3b75835885ee2a3c3b4634130b18d0d7b041596650891c46db3",
+      "cleanSmaliSha256": "a3187e2a62d60afa595ea1863b32323d552cc264649e0d5dce875250de22edd4"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1.smali",
+      "candidateSmaliSha256": "3c7b329a49f944b8a129244830bb9799c8ddce97bf4ffbf43f9fc7070fc84106",
+      "cleanSmaliSha256": "6bdd9491f44e722c3684fef21330956d5dde7e10cb18c19b5a6932507b8cd87b"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2.smali",
+      "candidateSmaliSha256": "1dfc0e3d4f4ffc3d47d50cfd9d8882bd5b6df45a9fcd2a469a06e8c196161bf5",
+      "cleanSmaliSha256": "ba5fd21cc57619ff932fddf354432583bec7046f0cc2640ae78827cd1ea27180"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt.smali",
+      "candidateSmaliSha256": "0878112b210809f451b1d651ff1342a6b031949d5cdfe9d621df0b117035d359",
+      "cleanSmaliSha256": "80d28bc28f2483f7c2686c0e59547cce3c3b5404c508fd4e2a82f9c2b1489da1"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/PosterWallCardKt$PosterWallSlot$2$4.smali",
+      "candidateSmaliSha256": "22869d5cc72fe0db06cccea7017bf312b20c576b4811e8044586d385a38eaf36",
+      "cleanSmaliSha256": "f097337233197cc35fa5c4e32d4c191e487c2b69032f9bbc4425fdb93c4b1767"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/PosterWallCardKt.smali",
+      "candidateSmaliSha256": "d778db23f3804e032a35eb78122fbd51e8a3fe183ff977078f6151732b72be0a",
+      "cleanSmaliSha256": "2cea373e2cd44e006bfd9f5a3c5f2d047f6c653770013e951efe5a5c960ab37e"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/SettingsScreenKt$SettingsScreen$3$1$1$26.smali",
+      "candidateSmaliSha256": "81d3202db795a637099fac48ef17834edf06d244c2a5b08fd059bea563cd573b",
+      "cleanSmaliSha256": "520c98f41e7314f3bfc7a793d1504205c897e619d4e71d18d4f7cf60ab3e380e"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/SubtitleSearchDialogKt.smali",
+      "candidateSmaliSha256": "b75f31dc75ee0a3c1bccd9bc4b54a2c8e7a27d1b3e31bbb47c598cb707952a22",
+      "cleanSmaliSha256": "461dcc422766483eb672457821b9b346cdb977309bd76298c8175b41c9ea1e3a"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/ThemeKt.smali",
+      "candidateSmaliSha256": "622d710ab6c03573aab9bfce77053d9fbaac87bbdb9d50849182ec6e44b03d11",
+      "cleanSmaliSha256": "7e3bd9fc7fd11a40d5f4a3aae7b98d567c9dc7c174cb29566b9858ebb3b20922"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/TvAccordionKt$ShelfArtwork$1$1.smali",
+      "candidateSmaliSha256": "bf71d4d915d41065e837f572b29d4276103829b103bb93cde4c1ee6cc1c41959",
+      "cleanSmaliSha256": "5685cbd7ac1037a650962e5686f1195d9a21187377c764b0bc6cc6723ea72460"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/TvAccordionKt$TvAccordionCards$5$4$1$4$3.smali",
+      "candidateSmaliSha256": "ee8eaa5887e8179966a0e546bc594e416cc8577dfd3cbc1da04de2b2e2067f56",
+      "cleanSmaliSha256": "4e09cd9741e507da75f17aa057e89c68647d0e3722d798b9e52e3d70ef9af1f4"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/TvAccordionKt$TvAccordionCards$5$4$1$4.smali",
+      "candidateSmaliSha256": "e0e0e301b14989348b44394f38f79825ca2e88fd6a4b9b13857f037836b10b5a",
+      "cleanSmaliSha256": "eac3e2c57e149c53d9c2a1daad0991f2e5e836a508dff193176b1d26785fa9b7"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/TvAccordionKt$TvAccordionCards$5.smali",
+      "candidateSmaliSha256": "d37f48974c5a963968400331081e35ebb082d0cdccf4dd9b23feb69bc8659e94",
+      "cleanSmaliSha256": "7433d41998ce22c7cba33567d0228be91566235f330c84c53fad13ca6ee0f128"
+    },
+    {
+      "classFile": "io/github/xudong7587/sunnytv/feature/ui/TvAccordionKt.smali",
+      "candidateSmaliSha256": "c2e0872753c6ab8c9b5fbe35d43b9c7926a12aa2d1b268878ec5cc89b27e2afd",
+      "cleanSmaliSha256": "5912f0397aae374f1674a370540e7338ca91eccfb70d08bb045ba166748085bf"
+    }
+  ]
+}

@@ -12,6 +12,8 @@
 
 本次分发保留用户已测试 APK 的原始字节。发布流程重新构建并核对应用代码、资源、包身份及既有签名，另验证未修改的原生解码器来源。APK 为非 debuggable release，安装 ID 和签名身份延续现有版本。未包含私有字体、账号或签名密钥。
 
+0.3.8 的增量测试包与全量重建包有一项已审查的 `classes2.dex` 差异，涉及 Compose 生成的稳定性/重组分支；Linux 与 Windows 全量重建的全部 DEX 字节一致。发布校验只认可本包 SHA256 和这组固定 DEX 哈希，其余 289 项应用 DEX、Manifest、资源与规范化许可证内容一致，不宣称此包可逐字节复现。差异及类哈希见 [审查记录](https://github.com/xudong7587/SunnyTV/blob/main/docs/release-evidence/0.3.8-dex-variance.json)。既有 debug Android 门禁保留，原始签名候选另执行原生音频、真实播放、字幕、详情及网络回归。
+
 文件：`SunnyTV-v0.3.8.apk`，29,170,595 字节。
 
 SHA256：`b8e5b6bd026421b0b185aac79b21353727b193430fd8ff13afd7a25d6ce4d917`

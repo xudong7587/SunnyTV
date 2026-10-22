@@ -2,7 +2,7 @@
 set -euo pipefail
 adb install -r "build-logs/device-tested-candidate/SunnyTV-v${VERSION}.apk"
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.PlayerResizeTest,io.github.xudong7587.sunnytv.SeriesDetailRegressionTest,io.github.xudong7587.sunnytv.UgreenLanConnectionTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/candidate-android.txt
+adb shell am instrument -w -r -e class androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.PlayerResizeTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.SeriesDetailRegressionTest,io.github.xudong7587.sunnytv.UgreenLanConnectionTest,io.github.xudong7587.sunnytv.OutroAdvanceTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/candidate-android.txt
 python3 - <<'PY'
 import pathlib,re
 text=pathlib.Path('build-logs/candidate-android.txt').read_text()

@@ -20,7 +20,8 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SeriesDetailRegressionTest {
-    @get:Rule val rule=createAndroidComposeRule<ComponentActivity>()
+    // Use the real declared host so this same fixture can validate the signed release APK.
+    @get:Rule val rule=createAndroidComposeRule<MainActivity>()
     @Test fun phoneSeriesDetailsSurviveLoadingSeasonsAndReturningAcrossMaterials() {
         lateinit var model:AppModel
         rule.activityRule.scenario.onActivity {activity->
