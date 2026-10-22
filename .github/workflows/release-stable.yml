@@ -127,12 +127,11 @@ jobs:
           mkdir -p dist
           if [ -n "$CANDIDATE_APK_SHA256" ]; then
             # Recheck draft identity immediately before adding assets or publishing it.
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/v${VERSION}" > build-logs/candidate-draft.json
             python3 - <<'PY'
-          import importlib.util,json,os,pathlib
+          import importlib.util,os
           spec=importlib.util.spec_from_file_location('candidate','scripts/verify-stable-candidate.py')
           module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-          module.validate_draft(json.loads(pathlib.Path('build-logs/candidate-draft.json').read_text()),os.environ['VERSION'],os.environ['GITHUB_SHA'],os.environ['CANDIDATE_APK_SHA256'])
+          module.validate_draft(module.read_release(os.environ['GITHUB_REPOSITORY'],os.environ['VERSION']),os.environ['VERSION'],os.environ['GITHUB_SHA'],os.environ['CANDIDATE_APK_SHA256'])
           PY
             cp "build-logs/device-tested-candidate/SunnyTV-v${VERSION}.apk" "dist/SunnyTV-v${VERSION}.apk"
             printf '%s  %s\n' "$CANDIDATE_APK_SHA256" "dist/SunnyTV-v${VERSION}.apk" | sha256sum --check

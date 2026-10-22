@@ -4,6 +4,7 @@ import importlib.util
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('candidate', Path(__file__).with_name('verify-stable-candidate.py'))
@@ -26,6 +27,15 @@ class StableCandidateTest(unittest.TestCase):
                 other[key] = value
                 with self.assertRaises(ValueError):
                     candidate.validate_draft(other, '0.3.8', 'a' * 40, 'b' * 64)
+
+    def test_unpublished_candidate_uses_draft_aware_lookup(self):
+        import json
+        metadata = {'tagName': 'v0.3.8', 'isDraft': True, 'isPrerelease': False,
+                    'targetCommitish': 'a' * 40, 'assets': [{'name': 'SunnyTV-v0.3.8.apk'}]}
+        with patch.object(candidate.subprocess, 'check_output', return_value=json.dumps(metadata)) as call:
+            release = candidate.read_release('owner/repo', '0.3.8')
+        self.assertEqual(release, self.release)
+        self.assertEqual(call.call_args.args[0][:4], ['gh', 'release', 'view', 'v0.3.8'])
 
     def test_digest_and_commit_must_be_exact(self):
         for commit, digest in [('main', 'b' * 64), ('a' * 40, ''), ('a' * 40, '$(command)')]:
