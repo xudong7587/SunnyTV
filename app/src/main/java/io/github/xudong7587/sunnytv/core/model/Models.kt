@@ -7,7 +7,8 @@ enum class EmbyProfile { STANDARD, UGREEN }
 data class SourceConfig(
     val id: String, val kind: SourceKind, val name: String, val baseUrl: String,
     val userId: String = "", val username: String = "", val secret: String = "",
-    val embyProfile: EmbyProfile = EmbyProfile.STANDARD, val serverId: String = ""
+    val embyProfile: EmbyProfile = EmbyProfile.STANDARD, val serverId: String = "",
+    val lanTlsCertificate: String = ""
 ) : Serializable {
     val isUgreen: Boolean get() = kind==SourceKind.EMBY && embyProfile==EmbyProfile.UGREEN
 }
@@ -52,7 +53,7 @@ data class HomeFeed(
     val warnings: List<String> = emptyList()
 )
 
-data class HeaderScope(val baseUrl: String, val headers: Map<String, String>) : Serializable
+data class HeaderScope(val baseUrl: String, val headers: Map<String, String>, val lanTlsCertificate: String = "") : Serializable
 
 data class ExternalSubtitle(val url: String, val mime: String, val language: String, val title: String, val id:String="", val isDefault:Boolean=false) : Serializable
 
@@ -110,4 +111,13 @@ data class AppSettings(
      * STRM's remote URL to the television. Needed when the source only answers the server, not the TV.
      */
     , val preferServerPlayback:Boolean = false
+    // Empty color migrates the legacy accent index on first load; dimensions remain independent.
+    , val appearanceColor:String = ""
+    , val appearanceMaterial:String = "clear"
+    , val appearanceCorner:String = "default"
+    , val highPerformanceThemes:Boolean = false
+    , val customThemeColor:Long = AppearanceColors.DEFAULT_CUSTOM
+    , val monetEnabled:Boolean = false
+    , val monetSource:String = "system"
+    , val monetStyle:String = "tonal_spot"
 )

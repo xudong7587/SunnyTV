@@ -1,3 +1,13 @@
+# 2026-10-21 0.3.8 TV画面补充
+
+TV画面比例已换原生视频宿主并验证真实视频几何/整窗像素与模式恢复；尚未连接用户电视，实体OEM结果待复测。视频像素内部黑边不会按容器比例自动识别。详情退出也仍缺用户设备堆栈，保留0.3.7容错，三部实际条目需复测。验证、官方兼容依据与边界见 [0.3.8本地记录](RELEASE-0.3.8-LOCAL.md)。
+
+# 2026-10-21 0.3.7 补充
+
+- 手机部分剧集详情退出：已修复可复现的重复演员Lazy键异常，并防护季、版本与相似推荐重复条目；用户手机尚未连接，具体三部真实媒体需复测，不能确认全部原因。
+- API30扩展回归再次遇 `TvInteractionTest.actorsMoveDownIntoOffscreenRecommendationsAndBackUp` Compose空闲超时，与下方历史第4项一致，日志保留在 `.local-tests/037/final30.log`；没有禁用或计为通过。
+- 详见 [0.3.7本地记录](RELEASE-0.3.7-LOCAL.md)。下文保留历史记录。
+
 # 2026-10-15 本轮检查补充
 
 - `scripts/test-bootstrap.py` 为新仓库初始化器的既有测试。在本机 Windows 执行 18 项时，`test_backslash_path` 因 ZIP 写入路径规范化未触发预期 ValueError，`test_destination_symlink` 因 WinError 1314 缺少符号链接权限报错，其余16项通过。本轮未改初始化器、未禁用测试，不将该结果记为通过；发行工作流仍在 Linux 执行此检查。

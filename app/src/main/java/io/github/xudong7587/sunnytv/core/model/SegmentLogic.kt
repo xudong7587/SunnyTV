@@ -1,6 +1,9 @@
 package io.github.xudong7587.sunnytv.core.model
 
 object SegmentLogic {
+    /** An explicit outro skip advances directly; never depend on a decoder emitting ENDED after a terminal seek. */
+    fun opensNextEpisode(segment:SkipSegment,hasNext:Boolean)=segment.type=="outro" && hasNext
+
     private fun normalized(name:String)=name.trim().lowercase()
     private fun namedType(name:String):String? {
         val n=normalized(name)

@@ -1,6 +1,7 @@
 package io.github.xudong7587.sunnytv
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -55,6 +56,19 @@ class PlayerPanelFocusTest {
                 rule.onNodeWithTag("player:speed").performKeyInput {pressKey(Key.DirectionUp)}
                 awaitFocus(rule.onNodeWithTag("player:progress"))
                 rule.onNodeWithTag("player:progress").assertIsFocused().performKeyInput {pressKey(Key.DirectionUp)}
+                awaitFocus(rule.onNodeWithContentDescription("音频输出"))
+                rule.onNodeWithText("音频输出",useUnmergedTree=true).assertIsDisplayed()
+                val label=rule.onNodeWithText("音频输出",useUnmergedTree=true).getUnclippedBoundsInRoot()
+                val button=rule.onNodeWithTag("player:audio").getUnclippedBoundsInRoot()
+                org.junit.Assert.assertTrue("Top label must open below its button: label=$label button=$button",label.top>=button.bottom)
+                rule.onNodeWithContentDescription("音频输出").performKeyInput {pressKey(Key.DirectionLeft)}
+                awaitFocus(rule.onNodeWithTag("player:stats"))
+                rule.onNodeWithText("实时信息",useUnmergedTree=true).assertIsDisplayed()
+                val capture=rule.onRoot().captureToImage()
+                java.io.File(context.cacheDir,"player-top-labels.png").outputStream().use {
+                    capture.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+                }
+                rule.onNodeWithTag("player:stats").performKeyInput {pressKey(Key.DirectionRight)}
                 awaitFocus(rule.onNodeWithContentDescription("音频输出"))
                 rule.onNodeWithContentDescription("音频输出").assertIsFocused().performClick()
                 rule.onNodeWithText("原始声道（默认）").assertExists()

@@ -8,6 +8,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PresentationTest {
+    @Test fun liquidGlassPreservesDayNightAndTheArtworkAccent() {
+        for(dark in listOf(false,true)) for(monet in listOf(false,true)) {
+            val settings=AppSettings(appearanceColor="rose",appearanceMaterial="glass",darkTheme=dark,monetEnabled=monet)
+            val glass=palette(settings)
+            val ordinary=palette(settings.copy(appearanceMaterial="clear"))
+            assertEquals(ordinary.accent,glass.accent)
+            assertEquals(ordinary.background,glass.background)
+            assertEquals(dark,glass.background.luminance()<.3f)
+            assertEquals("rose",settings.appearanceColor)
+            assertEquals(dark,settings.darkTheme)
+        }
+    }
+
     @Test fun heroWrapsButLibraryEndDoesNot() {
         assertEquals(0,Presentation.next(5,1,6,true))
         assertEquals(5,Presentation.next(0,-1,6,true))
@@ -26,18 +39,21 @@ class PresentationTest {
         assertFalse(Presentation.canRotate(false,false,true,true,false,false,true,6))
         assertFalse(Presentation.canRotate(false,false,true,true,false,false,false,1))
     }
-    @Test fun allAccentsKeepReadableTextInBothThemes() {
+    @Test fun allNativeThemeControlsKeepReadableTextInBothThemes() {
         fun contrast(a:Color,b:Color):Float {
             val x=a.luminance();val y=b.luminance()
             return (maxOf(x,y)+.05f)/(minOf(x,y)+.05f)
         }
-        assertEquals(10,Presentation.accents.size)
-        for(dark in listOf(true,false)) for(index in 0..9) {
-            val p=palette(AppSettings(darkTheme=dark,accentIndex=index))
-            assertTrue("accent ink $index dark=$dark",contrast(p.accent,p.ink)>=4.5f)
-            assertTrue("body $index dark=$dark",contrast(p.text,p.background)>=7f)
-            assertTrue("secondary $index dark=$dark",contrast(p.secondary,p.background)>=4.5f)
-            assertTrue("focus $index dark=$dark",contrast(p.accent,p.surface)>=3f)
+        assertEquals(7,AppearanceColors.all.size)
+        for(dark in listOf(true,false)) for(material in AppearancePolicy.materials) for(color in AppearanceColors.all) {
+            val p=palette(AppSettings(darkTheme=dark,appearanceColor=color.id,appearanceMaterial=material.first))
+            // Native primary/selected controls now use tonal fill + normal reading text. The CSS
+            // accent-ink pair is retained as source data but is not used for these small labels.
+            assertTrue("primary ${color.id} dark=$dark",contrast(p.focusContent,p.focusBackground)>=4.5f)
+            assertTrue("control ${color.id} dark=$dark",contrast(p.text,p.control)>=4.5f)
+            assertTrue("body ${color.id} dark=$dark",contrast(p.text,p.background)>=7f)
+            assertTrue("secondary ${color.id} dark=$dark",contrast(p.secondary,p.background)>=4.5f)
+            assertTrue("focus ${color.id} dark=$dark",contrast(p.accent,p.surface)>=3f)
         }
     }
     @Test fun simplifiedPreferenceDoesNotSilentlyChooseTraditional() {

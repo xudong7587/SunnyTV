@@ -15,8 +15,8 @@ android {
         applicationId = "io.github.xudong7587.sunnytv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 60
-        versionName = "0.2.8"
+        versionCode = 70
+        versionName = "0.3.8"
         val transcodeTestOrigin = providers.gradleProperty("mediaindexTranscodeTestOrigin").getOrElse("")
         check(transcodeTestOrigin.matches(Regex("[A-Za-z0-9:/._-]*"))) { "Invalid transcode test origin" }
         buildConfigField("String", "MEDIAINDEX_TRANSCODE_TEST_ORIGIN", "\"$transcodeTestOrigin\"")
@@ -79,6 +79,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.9.4")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
     testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
@@ -86,5 +87,6 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 }
-

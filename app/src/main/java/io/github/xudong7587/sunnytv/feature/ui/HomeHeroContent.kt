@@ -6,7 +6,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
@@ -71,7 +70,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                             }
                         }) {event,amount->event.consume();drag+=amount}
                     }
-                FocusTile("$id:featured",focusModifier,shape=RoundedCornerShape(18.dp),focusLift=false,
+                FocusTile("$id:featured",focusModifier,shape=sunnyShape(18.dp),focusLift=false,
                     onClick={model.navigate(Route.Detail(entry))}) {
                     AnimatedContent(entry,transitionSpec={
                         (fadeIn(motion.fade(320))+slideInHorizontally(motion.fade(320)) {it/8*direction}) togetherWith
@@ -92,7 +91,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                 items(following,key={it.key}) {media->
                     Column(Modifier.width(stripWidth).animateItem(fadeInSpec=motion.fade(300),placementSpec=motion.spring(),fadeOutSpec=motion.fade(300))) {
                         FocusTile("$id:strip:${media.key}",Modifier.fillMaxWidth().height(side).focusProperties {canFocus=false},
-                            shape=RoundedCornerShape(13.dp),focusOutline=false,focusLift=false,onClick={direction=1;leftTravel=0;choose(items.indexOf(media))}) {
+                            shape=sunnyShape(13.dp),focusOutline=false,focusLift=false,onClick={direction=1;leftTravel=0;choose(items.indexOf(media))}) {
                             ArtworkView(media,media.primary,Modifier.fillMaxSize(),320)
                         }
                     }
@@ -137,7 +136,7 @@ import io.github.xudong7587.sunnytv.feature.Route
                                     else -> false
                                 }
                             }
-                        FocusTile("quick-resume:${media.key}",quickModifier,shape=RoundedCornerShape(24.dp),button=true,onClick={onPlay(media,false)}) {
+                        FocusTile("quick-resume:${media.key}",quickModifier,shape=sunnyShape(24.dp),button=true,onClick={onPlay(media,false)}) {
                             Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,
                                 horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 ArtworkView(media,media.primary,Modifier.size(32.dp).clip(CircleShape),128)

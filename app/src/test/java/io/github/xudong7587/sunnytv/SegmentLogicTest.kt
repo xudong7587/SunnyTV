@@ -5,6 +5,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SegmentLogicTest {
+    @Test fun explicitOutroSkipAdvancesEvenWhenDurationAndSegmentEndDisagree() {
+        assertTrue(SegmentLogic.opensNextEpisode(SkipSegment("outro:1","outro",90_000,100_000),true))
+        assertTrue(SegmentLogic.opensNextEpisode(SkipSegment("outro:2","outro",90_000,95_000),true))
+        assertFalse(SegmentLogic.opensNextEpisode(SkipSegment("intro:1","intro",0,10_000),true))
+        assertFalse(SegmentLogic.opensNextEpisode(SkipSegment("outro:1","outro",90_000,100_000),false))
+    }
+
     @Test fun earlyCreditsAndNamesContainingEndingAreNotAnOutro() {
         assertTrue(SegmentLogic.segments(listOf(MediaChapter("Credits",10_000)),3_000_000).isEmpty())
         assertTrue(SegmentLogic.segments(listOf(MediaChapter("Unexpected ending",2_900_000)),3_000_000).isEmpty())

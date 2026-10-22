@@ -44,9 +44,9 @@ class Dev27UiTest {
         rule.waitUntil(8_000) {rule.onAllNodes(hasTestTag(tag) and isFocused()).fetchSemanticsNodes().isNotEmpty()}
         rule.onNodeWithTag(tag).assertIsFocused()
     }
-    private fun mount(compact:Boolean=false,setup:(AppModel)->Unit={},content:@Composable (AppModel)->Unit) {
+    private fun mount(compact:Boolean=false,initialSources:List<SourceConfig> = emptyList(),setup:(AppModel)->Unit={},content:@Composable (AppModel)->Unit) {
         rule.activityRule.scenario.onActivity {activity->
-            val model=AppModel(activity.application,false)
+            val model=AppModel(activity.application,false,initialSources)
             setup(model)
             activity.setContent {
                 val input=LocalInputModeManager.current
@@ -91,7 +91,10 @@ class Dev27UiTest {
     /** A series offers 继续播放 first and focuses it, with 从头播放 right after. */
     @Test fun seriesDetailFocusesResumeBeforeStart() {
         val series=MediaEntry("series","fixture","示例剧集","Series")
-        mount {MediaDetailContent(series) {_,_->}}
+        // Favorite is offered only for an existing source; this fixture does not make API calls.
+        mount(initialSources=listOf(SourceConfig("fixture",SourceKind.EMBY,"Fixture","http://127.0.0.1:9","fixture-user"))) {
+            MediaDetailContent(series) {_,_->}
+        }
         awaitFocused("detail-resume")
         assertTrue("继续播放 should sit before 从头播放",bounds("detail-resume").left<bounds("detail-start").left)
         assertTrue("both play actions should stay before 收藏",bounds("detail-start").left<bounds("detail-favorite").left)

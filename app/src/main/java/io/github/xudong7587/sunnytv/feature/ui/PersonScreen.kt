@@ -2,7 +2,6 @@ package io.github.xudong7587.sunnytv.feature.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +30,7 @@ import io.github.xudong7587.sunnytv.feature.Route
             modifier=Modifier.gridFocusTarget(navigator,0,null,if(entries.isNotEmpty()) offset else null)) {model.back()}}
         item(span={GridItemSpan(maxLineSpan)}) {
             Row(horizontalArrangement=Arrangement.spacedBy(22.dp)) {
-                ArtworkView(person,person.primary,Modifier.width(if(LocalCompact.current) 100.dp else 170.dp).aspectRatio(2f/3).clip(RoundedCornerShape(16.dp)),400)
+                ArtworkView(person,person.primary,Modifier.width(if(LocalCompact.current) 100.dp else 170.dp).aspectRatio(2f/3).clip(sunnyShape(16.dp)),400)
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                     Text(person.title,color=SunnyColors.Text,fontSize=28.sp,lineHeight=34.sp,fontWeight=FontWeight.Bold)
                     Text(person.overview.ifBlank {if(model.loading["person:${initial.key}"]==true) "正在读取人物介绍…" else "Emby 暂无此人物的介绍"},

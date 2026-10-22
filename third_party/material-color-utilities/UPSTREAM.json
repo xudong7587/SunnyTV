@@ -1,0 +1,194 @@
+{
+  "repository": "https://github.com/material-foundation/material-color-utilities",
+  "revision": "bd811e4ca2ab94c4ce3cadc89c19b1820b9704b3",
+  "scope": "31 HCT and dynamic scheme files; no image quantizers or unrelated utilities",
+  "changes": "package/import namespace relocation; source-only ErrorProne annotations removed; no algorithm edits",
+  "files": [
+    {
+      "path": "hct/Cam16.java",
+      "upstreamSha256": "3e7be67aa82307be9d1eff1e48253c5b121a7fbb25cbfa0d86a1734211619e5b",
+      "lines": 437,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "hct/Hct.java",
+      "upstreamSha256": "5e0722f1061dd8476391050eea9cc41a7bc0f87e1fe4b38f3bd1b8c1f7d93140",
+      "lines": 180,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "hct/HctSolver.java",
+      "upstreamSha256": "20633d9574ba4b8d755a91293ee7427dd89ffd0a3d3fe00883534724431c735b",
+      "lines": 672,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "hct/ViewingConditions.java",
+      "upstreamSha256": "792511b92b9aabe28eab2757e7527762220f5a7f406e0250656f0d4b3090cdf9",
+      "lines": 205,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ColorSpec.java",
+      "upstreamSha256": "834441d1a7501349eb8cd60da55576818137f245cb93ef8e609ae9ec8b2b22d7",
+      "lines": 319,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ColorSpec2021.java",
+      "upstreamSha256": "76bdc70ef276cdb1bc9d3c131b97a34e928addfa0e79744e69887a16942387c6",
+      "lines": 1473,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ColorSpec2025.java",
+      "upstreamSha256": "06a91df40f0490e259e8cbd37d110861eef05a61d9d353f7484ab3b2bfca5b41",
+      "lines": 2259,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ColorSpec2026.java",
+      "upstreamSha256": "b38125700c7c24ddac9e92dcf7e196bf459468beb78f6c4601cc51e6a70f20c5",
+      "lines": 999,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ColorSpecs.java",
+      "upstreamSha256": "cb0ebd71c3a52bd3a57e68339f7df8208f3a4623ee85d68bb0bb6f9fd25fe151",
+      "lines": 45,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ContrastCurve.java",
+      "upstreamSha256": "b72f3564c988a54eb6d32212cca68fa6211314f06872017b8cdf8c8d9eabe147",
+      "lines": 75,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/DynamicColor.java",
+      "upstreamSha256": "bb978a89fff9282d882abe05b5146e2e4c7e9859d5e83a94c5c0859ad7a4d854",
+      "lines": 607,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/DynamicScheme.java",
+      "upstreamSha256": "17a5be823c3199ed72797b8d266c2ee63fd8d387a08d05e00222ad9f817a3e84",
+      "lines": 577,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/MaterialDynamicColors.java",
+      "upstreamSha256": "db9edbf0e7e65db4714a601e4c40fdfbd4cfcf9ccfeee473c46e4ad9b13e4e6e",
+      "lines": 517,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/ToneDeltaPair.java",
+      "upstreamSha256": "f7a6ab4aba80314ae0d78d5b4a46412ce44179f0493fede20aa5dcc4573becbd",
+      "lines": 145,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/TonePolarity.java",
+      "upstreamSha256": "ebf862dec07b9073c27af941fe0308e60bdc1a4df712fd8bf93f10fec385657a",
+      "lines": 44,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dynamiccolor/Variant.java",
+      "upstreamSha256": "69931692dacd96ebc695e78095ca5dd1f5361f54d512f1d1f1c5ba40a3dd4ea3",
+      "lines": 30,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "contrast/Contrast.java",
+      "upstreamSha256": "4b97bf07d78c861bc4ea6e82034e685e20473cabab352eda818cfefaca80c7d2",
+      "lines": 208,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "dislike/DislikeAnalyzer.java",
+      "upstreamSha256": "d165554c4ee5c04bbd133f7c347a2dcd8bb084808590a4fadb02d6caee81ff91",
+      "lines": 57,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "temperature/TemperatureCache.java",
+      "upstreamSha256": "ed585ccb80376f108c1e6963e1ed4808f59fbaf6a4c1bbf58e635d37ddf00224",
+      "lines": 323,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "utils/MathUtils.java",
+      "upstreamSha256": "cb6e3c7be16d85e67533a67dc1dafbce52fcab05242adb39dfa3eedd512c89c5",
+      "lines": 134,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "utils/ColorUtils.java",
+      "upstreamSha256": "96a10df020cd6fa6e72fb2386d6b8acb98089be526f003ae0b2788f6c02b5e8f",
+      "lines": 267,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "palettes/TonalPalette.java",
+      "upstreamSha256": "1d0347ed7978768cd588e98761db7db44d378f8f9eb322345aadd0140cb4229e",
+      "lines": 203,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeContent.java",
+      "upstreamSha256": "772a4a8046d8e923697fcc1ccb51ad2d78deaafa0e1d74c172504c711eade788",
+      "lines": 96,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeExpressive.java",
+      "upstreamSha256": "03521936197c685cdbca9f3daeed216f9a13e19c83bde7b2fa914fc1e38dda14",
+      "lines": 80,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeFidelity.java",
+      "upstreamSha256": "7c103ea237fcac4fe9f92e617b061fdeb1f1ffe239a2d182ace0d1673a66b1f4",
+      "lines": 89,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeFruitSalad.java",
+      "upstreamSha256": "0ff4fe67fbb6da7dfcfc6efe49e246439d490a98fdac85f012a40a9d21b6ce81",
+      "lines": 79,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeMonochrome.java",
+      "upstreamSha256": "eb3df13230729d3d4540a97eb13f1bc4706f337a3c5d1f95223a58f681f54b96",
+      "lines": 80,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeNeutral.java",
+      "upstreamSha256": "a8505baa39617e33ac19513bb74d88c862c8919ba291adfb2a8aaadc83717e63",
+      "lines": 79,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeRainbow.java",
+      "upstreamSha256": "a98b164793eee5e2a35dc9bfc0e70f86f7631630ca6ed7e027cff2a3e9d45e12",
+      "lines": 79,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeTonalSpot.java",
+      "upstreamSha256": "acbbc77e533664a8239ea9978b8daffd3a620f5f2d95c62f1eb68f5436ba3cc5",
+      "lines": 79,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    },
+    {
+      "path": "scheme/SchemeVibrant.java",
+      "upstreamSha256": "25b5f0f7d3af5c414c6059629537c6b21e032d77370c14a84f4723d6b6fd2aa6",
+      "lines": 79,
+      "review": "pure color math; no IO, reflection, process, network, or platform behavior; Java 8 utilities; Android minSdk24 checked by release lint; Apache-2.0 headers retained"
+    }
+  ]
+}

@@ -66,6 +66,10 @@
       "passed": true
     },
     {
+      "name": "Python syntax import-sunny-appearance.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax package-native-relink.py",
       "passed": true
     },
@@ -90,11 +94,19 @@
       "passed": true
     },
     {
+      "name": "Python syntax test-stable-candidate.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax verify-release-package.py",
       "passed": true
     },
     {
       "name": "Python syntax verify-release-signer.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax verify-stable-candidate.py",
       "passed": true
     },
     {

@@ -38,14 +38,14 @@ Network policies live in core/network; metadata/URLs in source adapters; UI cann
 
 The user explicitly removed the dev14 certificate restriction on 2026-09-18. Read docs/SIGNING.md. Use the existing repository signing Secret; never generate a replacement key as a fallback. Publishing requires a valid APK signature matching the public certificate of that existing key. No dev14 APK/certificate gate applies. Keep the current application ID and never replace an existing release tag or asset silently.
 
-## Local WebDAV update distribution (dev30 onward)
+## Local APK distribution (2026-10-21 onward)
 
-用户要求：以后 SunnyTV 新版本将经过现有签名及发行检查的升级包同步到 `Z:\V1 Tools\SunnyTV-updata`。
-用户于 2026-10-16 调整更新协议：0.2.5 起客户端先读取 GitHub latest 元数据，再从 WebDAV 升级目录下载与官方最新版同名的 `SunnyTV-v版本.apk`，验证包名、版本及既有签名，不读取 WebDAV JSON。使用 `scripts/publish-webdav-update.py` 发布同名不可变 APK，同时保留带哈希文件及 `latest.json`，供旧版客户端升级；不覆盖同版本不同内容，不删除历史包。
-这是用户明确授权的 SunnyTV 升级目录写入例外，不允许操作该目录以外 NAS 媒体。挂载缺失时记录未同步，不改写其它位置假装成功。
-以公开 dev29（`543b25d`）为本轮基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
-WebDAV 地址、用户名和密码由用户在终端「设置 → 软件升级」填写，不推断或导出私有凭据。WebDAV 默认关闭，开启后才显示配置；自动模式还需 WebDAV 开关开启，应用启动时检查并下载，安装交给系统确认。
+用户于 2026-10-21 明确调整：以后经过现有签名及发行检查的 SunnyTV APK 只复制到 `Z:\V3 Download\tv apk`，只放 APK，不写 JSON，不再执行 WebDAV 发布或同步旧目录 `Z:\V1 Tools\SunnyTV-updata`。本条取代此前本地 WebDAV 分发要求。
+这是用户明确授权的 APK 目录写入例外；不操作其它 NAS 媒体，不删除历史包，不覆盖同版本不同内容。挂载缺失时如实记录未复制。
+Git/GitHub 发布流程照旧；本次绿联内网 HTTPS 修复先留在本地，待用户测试反馈后再按用户指示提交、推送或发布。
+此次仅调整 APK 投放方式，不要求修改应用内已有升级功能。
+以公开 dev29（`543b25d`）为历史基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
 
 ## GitHub stable releases from 0.2.2
 
-官网、README 和应用内 GitHub 网页下载默认指向 `/releases/latest`；原生更新读取官方 latest 下载元数据。纯数字正式版使用 `release-stable.yml` 并设置 latest，不发布为 prerelease，不覆盖已有标签或资产。同版本 APK 一经 WebDAV 或 GitHub 分发即保持不变，客户端变更须递增数字版本及 versionCode。
+官网、README 和应用内 GitHub 网页下载默认指向 `/releases/latest`；原生更新读取官方 latest 下载元数据。纯数字正式版使用 `release-stable.yml` 并设置 latest，不发布为 prerelease，不覆盖已有标签或资产。同版本 APK 一经本地目录或 GitHub 分发即保持不变，客户端变更须递增数字版本及 versionCode。

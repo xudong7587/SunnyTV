@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -68,10 +67,10 @@ import io.github.xudong7587.sunnytv.feature.Route
     val model=LocalAppModel.current
     val imageWidth=if(LocalCompact.current) 110.dp else 185.dp
     // 20dp outer radius minus the 12dp inset gives an 8dp image radius, sharing corner centres.
-    FocusTile("episode:${entry.key}",Modifier.fillMaxWidth().then(modifier),shape=RoundedCornerShape(20.dp),
+    FocusTile("episode:${entry.key}",Modifier.fillMaxWidth().then(modifier),shape=sunnyShape(20.dp),
         onLongPress={model.showItemActions(entry)},onClick={model.navigate(Route.Detail(entry))}) {
         Row(Modifier.fillMaxWidth().padding(12.dp).height(IntrinsicSize.Min).heightIn(min=imageWidth*9f/16f),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-            ArtworkView(entry,MediaLogic.wideArtwork(entry),Modifier.width(imageWidth).fillMaxHeight().clip(RoundedCornerShape(8.dp)),480)
+            ArtworkView(entry,MediaLogic.wideArtwork(entry),Modifier.width(imageWidth).fillMaxHeight().clip(sunnyShape(8.dp)),480)
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 Text(entry.title,color=SunnyColors.Text,fontSize=16.sp,lineHeight=21.sp,fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)
                 Text(entry.overview.ifBlank {"暂无简介"},color=SunnyColors.Secondary,fontSize=13.sp,lineHeight=20.sp,maxLines=3,overflow=TextOverflow.Ellipsis)

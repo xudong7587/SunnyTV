@@ -4,7 +4,7 @@ New-Item -ItemType Directory -Force '.local-tests' | Out-Null
 $Root = 'app/src/main/java/io/github/xudong7587/sunnytv'
 $Sources = @(
     "$Root/core/model/DisplayModePolicy.kt", "$Root/core/model/Models.kt", "$Root/core/model/MediaLogic.kt",
-    "$Root/core/model/FontCatalog.kt", "$Root/core/model/SubtitleAppearance.kt",
+    "$Root/core/model/AppearanceColors.kt", "$Root/core/model/FontCatalog.kt", "$Root/core/model/SubtitleAppearance.kt",
     "$Root/core/network/HttpPolicy.kt", "$Root/source/strm/StrmParser.kt",
     "$Root/source/clouddrive/DavXmlParser.kt", "$Root/core/playback/SessionEvents.kt", "$Root/core/playback/StartupTiming.kt",
     "$Root/core/playback/PlaybackRecovery.kt",

@@ -13,6 +13,8 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +32,8 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.layout.ContentScale
@@ -84,6 +88,8 @@ class PlayerActivity: ComponentActivity() {
     private var rendered = false
     private var lastPosition=0L
     private var resizeMode by mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+    // TV's SurfaceView is hosted directly by the window. OSD recomposition never owns its geometry.
+    private var tvPlayerView:PlayerView?=null
     private var retryUsed=false
     private var mp4EditListFallbackUsed=false
     private var autoRetryAttempts=0
@@ -183,6 +189,9 @@ class PlayerActivity: ComponentActivity() {
         manualOrientation=savedInstanceState?.getInt("manualOrientation") ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         requestedOrientation=if(orientationLocked) manualOrientation else playerOrientation(tvPlayback)
         playbackSpeed=savedInstanceState?.getFloat("speed",1f) ?: 1f
+        resizeMode=(savedInstanceState?.getInt("resizeMode",AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            ?: AspectRatioFrameLayout.RESIZE_MODE_FIT).takeIf {it in setOf(AspectRatioFrameLayout.RESIZE_MODE_FIT,
+                AspectRatioFrameLayout.RESIZE_MODE_ZOOM,AspectRatioFrameLayout.RESIZE_MODE_FILL)} ?: AspectRatioFrameLayout.RESIZE_MODE_FIT
         // Activity recreation and resume must not count time spent in the background.
         originalLaunch = savedInstanceState == null
         lastPosition=savedInstanceState?.getLong("position",request.startMs) ?: request.startMs
@@ -197,7 +206,23 @@ class PlayerActivity: ComponentActivity() {
             when {panel.isNotBlank()->panel=""; controls->controls=false; else->finish()}
         }
         // Video, subtitles and the translucent OSD keep bright controls on a dark surface in daylight too.
-        setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
+        if(tvPlayback) {
+            val host=FrameLayout(this).apply {setBackgroundColor(android.graphics.Color.BLACK)}
+            tvPlayerView=createVideoView(this)
+            host.addView(tvPlayerView,FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT))
+            val chrome=ComposeView(this).apply {
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
+            }
+            host.addView(chrome,FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT))
+            setContentView(host)
+        } else setContent {ScaledUi(settings) {SunnyTheme(settings.copy(darkTheme=true)) {PlayerContent()}}}
+    }
+
+    private fun createVideoView(context:Context)=PlayerView(context).apply {
+        useController=false;keepScreenOn=true
+        isFocusable=false;isFocusableInTouchMode=false
+        descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
     }
 
     // Targeting suppression: overriding the framework Activity key dispatch is a normal app pattern;
@@ -225,7 +250,7 @@ class PlayerActivity: ComponentActivity() {
         super.onResume()
         window.decorView.post {applyPreferredDisplayMode(window,settings.displayModePreference)}
     }
-    override fun onSaveInstanceState(outState: Bundle) {outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle) {outState.putInt("resizeMode",resizeMode);outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
 
     override fun onStop() {
         subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
@@ -234,6 +259,7 @@ class PlayerActivity: ComponentActivity() {
             lastPosition=absolutePosition(); app.store.savePosition(request.localKey,if(p.playbackState==Player.STATE_ENDED) 0 else lastPosition)
             resumePlayWhenReady = p.playWhenReady
             reporter?.close(lastPosition, reporterHasStarted,duration)
+            tvPlayerView?.player=null
             p.release()
         }
         player=null; rendered=false; progressJob?.cancel(); reporter=null;reporterHasStarted=false
@@ -613,8 +639,8 @@ class PlayerActivity: ComponentActivity() {
     }
     private fun switchEpisode(item:MediaEntry) {
         if(switchingEpisode) return
+        switchingEpisode=true
         lifecycleScope.launch {
-            switchingEpisode=true
             try {
                 val started=SystemClock.elapsedRealtime()
                 val next=withContext(Dispatchers.IO) {
@@ -858,31 +884,30 @@ class PlayerActivity: ComponentActivity() {
             value=withContext(Dispatchers.IO) {subtitleTypeface(this@PlayerActivity,settings)}
         }
         val appliedSubtitle=remember {arrayOfNulls<Any>(1)}
+        val activePlayer=player
+        val activeResizeMode=resizeMode
+        fun updateVideoView(view:PlayerView) {
+            if(view.player!==activePlayer) view.player=activePlayer
+            if(view.resizeMode!=activeResizeMode) view.resizeMode=activeResizeMode
+            // Media3 calculates fit/zoom from the decoded size and pixel aspect ratio.
+            // Avoid an additional view scale, which would crop a second time.
+            view.scaleX=1f;view.scaleY=1f
+            val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
+                settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
+            if(appliedSubtitle[0]!=key) {
+                appliedSubtitle[0]=key
+                applySubtitleAppearance(view,settings,subtitleInk,subtitleAccent,resolvedSubtitleFont)
+            }
+        }
         val activeSkip=SegmentLogic.active(context?.skipSegments.orEmpty(),position,dismissedSegments)
         val remainingMs=(duration-position).coerceAtLeast(0)
         val showNextUp=context?.next!=null && !nextUpDismissed && rendered && duration>0 &&
             remainingMs in 1..90_000 && activeSkip==null
-        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(if(tvPlayback) Color.Transparent else Color.Black)) {
             val titleWidth=if(tvPlayback) 300.dp else (maxWidth-120.dp).coerceIn(70.dp,300.dp)
-            AndroidView(factory={androidContext->PlayerView(androidContext).apply {
-                useController=false;keepScreenOn=true
-                isFocusable=false
-                descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            }},update={view->
-                view.player=player;view.resizeMode=resizeMode
-                // 裁切 is Media3's own ZOOM: the aspect ratio is kept and the picture is grown until
-                // the screen is filled, so a 18:9 file loses its sides and a 16:10 file its top and
-                // bottom — and nothing more. The old extra 1.12 upscale cut a further 12% of the
-                // frame away on every edge, which the user rejected as too much.
-                view.scaleX=1f
-                view.scaleY=1f
-                val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
-                    settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
-                if(appliedSubtitle[0]!=key) {
-                    appliedSubtitle[0]=key
-                    applySubtitleAppearance(view,settings,subtitleInk,subtitleAccent,resolvedSubtitleFont)
-                }
-            },modifier=Modifier.fillMaxSize().testTag("player:video"))
+            if(tvPlayback) SideEffect {tvPlayerView?.let {updateVideoView(it)}}
+            else AndroidView(factory={createVideoView(it)},update={updateVideoView(it)},
+                modifier=Modifier.fillMaxSize().testTag("player:video"))
 
             if(panel.isBlank()) PlayerTouchSurface(
                 onTap={controls=!controls},
@@ -962,8 +987,12 @@ class PlayerActivity: ComponentActivity() {
 
             if(activeSkip!=null && rendered && error.isBlank() && panel.isBlank()) {
                 SkipSegmentPrompt(activeSkip,onSkip={
-                    seekToAbsolute(activeSkip.endMs.coerceAtMost(duration.takeIf {it>0} ?: activeSkip.endMs))
-                    dismissedSegments=dismissedSegments+activeSkip.id
+                    if(SegmentLogic.opensNextEpisode(activeSkip,context?.next!=null)) {
+                        switchEpisode(requireNotNull(context?.next))
+                    } else {
+                        seekToAbsolute(activeSkip.endMs.coerceAtMost(duration.takeIf {it>0} ?: activeSkip.endMs))
+                        dismissedSegments=dismissedSegments+activeSkip.id
+                    }
                 },onDismiss={dismissedSegments=dismissedSegments+activeSkip.id},
                     modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
             } else if(showNextUp && panel.isBlank() && error.isBlank()) {
@@ -976,14 +1005,14 @@ class PlayerActivity: ComponentActivity() {
 
             if(controls && panel.isBlank() && error.isBlank()) {
                 Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    PlayerControl("实时信息","stats",selected=realtimeInfo,showFocusLabel=false,
+                    PlayerControl("实时信息","stats",selected=realtimeInfo,labelBelow=true,
                         modifier=Modifier.focusProperties {down=progressFocus}.semantics {
                             role=Role.Switch;toggleableState=if(realtimeInfo) ToggleableState.On else ToggleableState.Off
                             stateDescription=if(realtimeInfo) "开启" else "关闭"
                         }) {realtimeInfo=!realtimeInfo;app.store.setRealtimePlaybackInfo(realtimeInfo)}
                     PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=progressFocus},
-                        initial=returnControl=="audio-output",showFocusLabel=true) {returnControl="audio-output";panel="audio-output"}
-                    if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,showFocusLabel=false) {
+                        initial=returnControl=="audio-output",labelBelow=true) {returnControl="audio-output";panel="audio-output"}
+                    if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,labelBelow=true) {
                         orientationLocked=!orientationLocked
                         if(orientationLocked) {manualOrientation=fixedOrientation();requestedOrientation=manualOrientation}
                         else {val size=player?.videoSize;requestedOrientation=playerOrientation(false,size?.width ?: 0,size?.height ?: 0,size?.pixelWidthHeightRatio ?: 1f)}
@@ -1027,7 +1056,9 @@ class PlayerActivity: ComponentActivity() {
                             if((quality=="original" || isCloudQuality) && (request.embyItemId.isNotBlank() || availableTracks.groups.any {it.type==C.TRACK_TYPE_TEXT} || request.subtitles.isNotEmpty())) PlayerControl("字幕","subtitle",initial=returnControl=="subtitle") {returnControl="subtitle";panel="subtitles"}
                             if(request.sourceTracks.any {it.type=="Audio"} || availableTracks.groups.any {it.type==C.TRACK_TYPE_AUDIO}) PlayerControl("音轨","audio",initial=returnControl=="audio") {returnControl="audio";panel="audio"}
                             if(context?.item?.people?.isNotEmpty()==true) PlayerControl("演职员","cast",initial=returnControl=="cast") {returnControl="cast";panel="cast"}
-                            PlayerControl("画面："+when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"},"frame") {
+                            val resizeLabel=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_ZOOM->"裁切";AspectRatioFrameLayout.RESIZE_MODE_FILL->"拉伸";else->"适应"}
+                            PlayerControl("画面：$resizeLabel","frame",badge=resizeLabel,initial=returnControl=="frame") {
+                                returnControl="frame"
                                 resizeMode=when(resizeMode) {AspectRatioFrameLayout.RESIZE_MODE_FIT->AspectRatioFrameLayout.RESIZE_MODE_ZOOM;AspectRatioFrameLayout.RESIZE_MODE_ZOOM->AspectRatioFrameLayout.RESIZE_MODE_FILL;else->AspectRatioFrameLayout.RESIZE_MODE_FIT}
                             }
                             PlayerControl(sleepMinutes?.let {"睡眠 $it 分钟"} ?: "睡眠定时","sleep",initial=returnControl=="sleep") {returnControl="sleep";panel="sleep"}

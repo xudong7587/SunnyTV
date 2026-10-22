@@ -11,11 +11,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
@@ -52,7 +53,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable fun FocusTile(
     id:String, modifier:Modifier=Modifier, active:Boolean=false, autoFocus:Boolean=false,
-    shape:Shape=RoundedCornerShape(12.dp), focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,focusLift:Boolean=true,onFocus:()->Unit={}, onLongPress:(()->Unit)?=null, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
+    shape:Shape=sunnyShape(12.dp), artwork:Boolean=false, focusOutline:Boolean=true, button:Boolean=false, restoreFocus:Boolean=true,focusLift:Boolean=true,emphasized:Boolean=false,onFocus:()->Unit={}, onLongPress:(()->Unit)?=null, onClick:()->Unit, content:@Composable BoxScope.(Boolean)->Unit
 ) {
     val model=LocalAppModel.current; val page=LocalPageKey.current
     val pageActive=LocalPageActive.current
@@ -70,22 +71,35 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
         onDispose {homeNavigator?.unregister(id,requester)}
     }
     var focused by remember { mutableStateOf(false) }
+    val interactions=remember {MutableInteractionSource()}
+    val pressed by interactions.collectIsPressedAsState()
     // A held D-pad centre opens the long-press menu exactly once per gesture.
     var longPressFired by remember { mutableStateOf(false) }
     val motion=LocalMotion.current
     val selected=focused || active
     val base=LocalSunnyPalette.current
     // Read transition values only during draw; media and text stay out of per-frame recomposition.
-    val settingsTile=LocalSettingsTiles.current && !model.settings.darkTheme
-    val fill=animateColorAsState(if(selected) base.focusBackground else base.raised.copy(if(settingsTile) 1f else .72f),motion.fade(240),label="focus-fill")
-    val bottom=animateColorAsState(if(selected) lerp(base.focusBackground,Color.Black,.16f) else base.surface.copy(if(settingsTile) 1f else .70f),motion.fade(240),label="focus-gradient")
-    val contentPalette=if(selected) base.copy(text=base.focusContent,secondary=base.focusContent.copy(.88f),accent=base.focusContent) else base
+    // TV primary actions use the native tonal treatment: source accents stay exact, small labels
+    // keep the normal reading color rather than forcing white text onto every light-theme swatch.
+    // Apply a new palette atomically; otherwise new text can briefly sit on the previous theme's
+    // animated fill. Only this color state resets, not the tile's requester or remembered focus.
+    val fill=key(base) {animateColorAsState(if(emphasized || selected) base.focusBackground else base.control,
+        motion.fade(240),label="focus-fill")}
+    val material=LocalNativeAppearance.current.material
+    val liquidButton=material=="glass" && !artwork
+    val glassControls=material in setOf("glass","frosted","aurora") && !artwork
+    val monochrome=if(model.settings.darkTheme) Color.White else Color.Black
+    val contentPalette=if(liquidButton) base.copy(text=monochrome,accent=monochrome,focusContent=monochrome,
+        secondary=monochrome.copy(alpha=.72f)) else base
+    val flatGlass=LocalGlassControls.current
+    val liquidFocus=animateFloatAsState(if(selected || pressed) .06f else if(emphasized) .03f else 0f,
+        motion.fade(150),label="glass-flat-focus")
+    val textured=(glassControls || button || emphasized || id.startsWith("setting:") || id.startsWith("toggle:")) && material!="clear"
+    val materialModifier=if(textured) Modifier.materialSurface(shape,control=true,pressed=pressed,focused=selected) else Modifier
     val dark=model.settings.darkTheme
-    val outline=if(dark) base.focusContent else base.focusBackground
+    val outline=if(emphasized) base.text else base.accent
     val outlineWidth=if(dark) 1.67.dp else 2.dp
-    // A crisp theme border remains visible even when soft shadows are enabled.
-    val showShadow=model.settings.shadowsEnabled && !dark && focused
-    val showOutline=focused && focusOutline
+    val showOutline=focused && focusOutline && !liquidButton
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45)
@@ -97,22 +111,24 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     }
     Box(modifier.onGloballyPositioned {
         if(homeNavigator!=null) {val p=it.positionInRoot();homeNavigator.placed(id,Rect(p.x,p.y,p.x+it.size.width,p.y+it.size.height))}
-    }.testTag(id).focusElevation(shape,showShadow,liftEnabled=focusLift)
+    }.testTag(id)
         .focusRequester(requester).focusProperties {canFocus=pageActive}.onFocusChanged {
             focused=it.isFocused
             // The pinned navigation is shared by every page, so remembering it as "the last place
             // this page was" would send the next visit back up to the top bar instead of the content
             // the user was on. Content tiles keep the memory.
             if(it.isFocused && pageActive) {if(!id.startsWith("nav:")) model.focusMemory[page]=id; homeNavigator?.focused(id); onFocus() }
-        }.clip(shape)
+        }.then(materialModifier).then(if(textured && !glassControls) Modifier else Modifier.clip(shape))
         .drawWithCache {
             val edge=shape.createOutline(size,layoutDirection,this)
             val stroke=outlineWidth.toPx()
             // Concentric with the card outline, so the frame wraps the rounded corners completely.
             val focusEdge=concentricInsetOutline(shape,size,stroke/2f,layoutDirection,this)
             onDrawWithContent {
-                if(dark) drawOutline(edge,fill.value)
-                else drawOutline(edge,Brush.verticalGradient(listOf(fill.value,bottom.value)))
+                drawOutline(edge,fill.value.copy(alpha=if(glassControls) {0f} else if(textured) {if(selected) .65f else .04f} else 1f))
+                if(liquidButton && flatGlass) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
+                else if(glassControls && !liquidButton && (selected || emphasized)) drawOutline(edge,base.accent.copy(alpha=.10f))
+                if(focusOutline && !showOutline && !liquidButton && (!glassControls || emphasized)) drawOutline(focusEdge,if(emphasized) base.accent else base.controlEdge,style=Stroke(1.dp.toPx()))
                 drawContent()
                 if(showOutline) drawOutline(focusEdge,outline,style=Stroke(stroke))
             }
@@ -133,9 +149,9 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
                 else -> false
             }
         }
-        .combinedClickable(enabled=pageActive,onClick={longPressFired=false;onClick()},
+        .combinedClickable(interactionSource=interactions,indication=null,enabled=pageActive,onClick={longPressFired=false;onClick()},
             onLongClick=onLongPress?.let {{longPressFired=true;it()}}), contentAlignment=Alignment.Center) {
-        CompositionLocalProvider(LocalSunnyPalette provides contentPalette) {content(focused)}
+        CompositionLocalProvider(LocalSunnyPalette provides contentPalette,LocalGlassControls provides (LocalGlassControls.current || glassControls)) {content(focused)}
     }
 }
 
@@ -144,8 +160,8 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     secondaryIcon:String?=null,leading:(@Composable (Color)->Unit)?=null,onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
-        shape=RoundedCornerShape(28.dp),button=true,onClick=onClick) { focused ->
-        val ink=if(primary || focused) SunnyColors.Accent else SunnyColors.Text
+        shape=sunnyShape(28.dp),button=true,emphasized=primary,onClick=onClick) { focused ->
+        val ink=if(primary) SunnyColors.Text else if(focused) SunnyColors.Accent else SunnyColors.Text
         Row(Modifier.height(48.dp).widthIn(min=48.dp)
             .padding(horizontal=14.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
             Box(Modifier.size(20.dp),contentAlignment=Alignment.Center) {
@@ -164,7 +180,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             AnimatedVisibility(focused || alwaysShowLabel || (active && !collapseWhenIdle),
                 enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
                 exit=shrinkHorizontally(motion.spring())+fadeOut(motion.fade(240))) {
-                Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
+                Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=SunnyColors.Text,fontSize=13.sp,fontWeight=FontWeight.SemiBold,
                     modifier=Modifier.padding(start=8.dp),maxLines=1)
             }
         }
@@ -214,7 +230,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     // Orientation decides whether a poster or a backdrop suits the frame.
     val portrait=androidx.compose.ui.platform.LocalConfiguration.current.orientation==
         android.content.res.Configuration.ORIENTATION_PORTRAIT
-    Box(Modifier.fillMaxSize().background(SunnyColors.Background)) {
+    Box(Modifier.fillMaxSize().captureButtonSceneBackdrop().background(SunnyColors.Background)) {
         if(model.settings.backdropEnabled && item!=null && (item.backdrop!=null || item.primary!=null)) {
             Crossfade(item,animationSpec=motion.fade(400),label="library-backdrop") {media->
                 ArtworkView(media,if(portrait) media.primary ?: media.backdrop else media.backdrop ?: media.primary,Modifier.fillMaxSize(),widthPx=1920)
@@ -239,12 +255,21 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
 
 @Composable fun LibraryCard(item:MediaEntry,modifier:Modifier=Modifier,onLongPress:(()->Unit)?=null,onClick:()->Unit) {
     Column(Modifier.width(240.dp)) {
-        FocusTile("library:${item.key}",modifier.fillMaxWidth().aspectRatio(16f/9),onLongPress=onLongPress,onClick=onClick) {
+        FocusTile("library:${item.key}",modifier.fillMaxWidth().aspectRatio(16f/9),artwork=true,onLongPress=onLongPress,onClick=onClick) {
             // Reuse the native library picture; crop to fill the banner at the user's request.
             ArtworkView(item,MediaLogic.libraryArtwork(item),Modifier.fillMaxSize(),420,fit=false)
         }
         Text(item.title,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.padding(top=8.dp),maxLines=1)
     }
+}
+
+/** Poster overlays need a paired foreground/background, independent of the image and theme accent. */
+@Composable internal fun PosterRatingBadge(rating:Double,modifier:Modifier=Modifier) {
+    val dark=SunnyColors.Background.luminance()<.3f
+    Text("★ %.1f".format(rating),color=if(dark) Color.White else Color.Black,fontSize=10.sp,
+        modifier=modifier.testTag("poster:rating").clip(sunnyShape(6.dp))
+            .background(if(dark) Color.Black.copy(.65f) else Color.White.copy(.82f))
+            .padding(horizontal=6.dp,vertical=3.dp))
 }
 
 @Composable fun MediaCard(item:MediaEntry,wide:Boolean=false,autoFocus:Boolean=false,onFocus:()->Unit={},onLongPress:(()->Unit)?=null,
@@ -254,11 +279,10 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     val longPress=onLongPress ?: {model.showItemActions(item)}
     Column(Modifier.width(width)) {
         FocusTile(id=focusId,modifier=Modifier.fillMaxWidth().aspectRatio(if(wide) 16f/9 else 2f/3).then(modifier),autoFocus=autoFocus,
-            onFocus=onFocus,onLongPress=longPress,onClick=onClick) {
+            artwork=true,onFocus=onFocus,onLongPress=longPress,onClick=onClick) {
             ArtworkView(item,if(wide) MediaLogic.wideArtwork(item) else item.primary,Modifier.fillMaxSize(),if(wide) 640 else 400)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Black.copy(.1f),Color.Black.copy(.5f)))))
-            if(item.rating>0) Text("★ %.1f".format(item.rating),color=SunnyColors.Text,fontSize=10.sp,
-                modifier=Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(.65f)).padding(horizontal=6.dp,vertical=3.dp))
+            if(item.rating>0) PosterRatingBadge(item.rating,Modifier.align(Alignment.TopStart).padding(8.dp))
             if(item.played) Text("已看",color=SunnyColors.Accent,fontSize=10.sp,modifier=Modifier.align(Alignment.TopEnd).padding(8.dp))
             if(item.positionMs>0 && item.durationMs>0) {
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.White.copy(.15f)))

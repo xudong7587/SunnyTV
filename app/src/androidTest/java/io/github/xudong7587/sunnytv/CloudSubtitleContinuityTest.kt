@@ -92,13 +92,13 @@ class CloudSubtitleContinuityTest {
             ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,
                 PlaybackRequest("",f.root+"/api/play/fixture","菜单播放连续性"))).use {scenario->
                 rule.waitUntil(15000) {var playing=false;scenario.onActivity {playing=player(it).isPlaying};playing}
-                val before=rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot
+                val before=playerViewBounds(scenario)
                 var p:ExoPlayer?=null;var position=0L
                 scenario.onActivity {p=player(it);position=p!!.currentPosition}
                 rule.onNodeWithTag("player:speed").performClick()
                 rule.onNodeWithTag("player:close").assertDoesNotExist()
                 rule.waitUntil(5000) {var advanced=false;scenario.onActivity {assertSame(p,player(it));advanced=player(it).currentPosition>position+1000};advanced}
-                assertEquals(before,rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot)
+                assertEquals(before,playerViewBounds(scenario))
                 // Use the landscape activity's actual screen coordinates, not application
                 // display metrics (which can still describe the pre-rotation display).
                 var tapX=0f;var tapY=0f
@@ -299,7 +299,7 @@ class CloudSubtitleContinuityTest {
                 rule.onNodeWithText("⚙ 字幕调整").performClick()
                 rule.onNodeWithTag("player:subtitle").assertDoesNotExist()
                 val toolbar=rule.onNodeWithTag("subtitle-timing:overlay").fetchSemanticsNode().boundsInRoot
-                val video=rule.onNodeWithTag("player:video").fetchSemanticsNode().boundsInRoot
+                val video=playerViewBounds(scenario)
                 assertEquals("Opening timing must not move the video",0f,video.top,1f)
                 assertTrue(toolbar.top>=video.top)
                 for((step,cue) in listOf(-3000L to "EARLY",-500L to "EARLY",10_000L to "MIDDLE",

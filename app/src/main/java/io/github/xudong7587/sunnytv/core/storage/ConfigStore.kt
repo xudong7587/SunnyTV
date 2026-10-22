@@ -59,14 +59,15 @@ class ConfigStore(context: Context) {
                 j.getString("base"), j.optString("user"), j.optString("username"),
                 decrypt(j.getString("secret")),
                 EmbyProfile.entries.firstOrNull {it.name==j.optString("embyProfile")} ?: EmbyProfile.STANDARD,
-                j.optString("serverId"))
+                j.optString("serverId"),j.optString("lanTlsCertificate"))
         }
     }
     fun saveSources(sources: List<SourceConfig>) {
         val a = JSONArray()
         sources.forEach { s -> a.put(JSONObject().put("id",s.id).put("kind",s.kind.name)
             .put("name",s.name).put("base",s.baseUrl).put("user",s.userId).put("username",s.username)
-            .put("secret",encrypt(s.secret)).put("embyProfile",s.embyProfile.name).put("serverId",s.serverId)) }
+            .put("secret",encrypt(s.secret)).put("embyProfile",s.embyProfile.name).put("serverId",s.serverId)
+            .put("lanTlsCertificate",s.lanTlsCertificate)) }
         prefs.edit().putString("sources",a.toString()).apply()
     }
     /**
@@ -137,6 +138,14 @@ class ConfigStore(context: Context) {
         SubtitleAppearance.background(prefs.getString("subtitleBackground",SubtitleAppearance.BACKGROUND_BLACK).orEmpty())
         ,prefs.getString("activeSource","").orEmpty()
         ,prefs.getBoolean("preferServerPlayback",false)
+        ,AppearancePolicy.color(prefs.getString("appearanceColor","").orEmpty(),prefs.getInt("accent",2)).id
+        ,AppearancePolicy.material(prefs.getString("appearanceMaterial","clear").orEmpty())
+        ,AppearancePolicy.corner(prefs.getString("appearanceCorner","default").orEmpty())
+        ,prefs.getBoolean("highPerformanceThemes",false)
+        ,AppearanceColors.opaque(prefs.getLong("customThemeColor",AppearanceColors.DEFAULT_CUSTOM))
+        ,prefs.getBoolean("monetEnabled",false)
+        ,MonetPolicy.source(prefs.getString("monetSource","system").orEmpty())
+        ,MonetPolicy.style(prefs.getString("monetStyle","tonal_spot").orEmpty())
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
@@ -163,6 +172,14 @@ class ConfigStore(context: Context) {
         .putString("subtitleBackground",SubtitleAppearance.background(s.subtitleBackground))
         .putString("activeSource",s.activeSourceId)
         .putBoolean("preferServerPlayback",s.preferServerPlayback)
+        .putString("appearanceColor",AppearancePolicy.color(s.appearanceColor,s.accentIndex).id)
+        .putString("appearanceMaterial",AppearancePolicy.material(s.appearanceMaterial))
+        .putString("appearanceCorner",AppearancePolicy.corner(s.appearanceCorner))
+        .putBoolean("highPerformanceThemes",s.highPerformanceThemes)
+        .putLong("customThemeColor",AppearanceColors.opaque(s.customThemeColor))
+        .putBoolean("monetEnabled",s.monetEnabled)
+        .putString("monetSource",MonetPolicy.source(s.monetSource))
+        .putString("monetStyle",MonetPolicy.style(s.monetStyle))
         .putInt("heroInterval",s.heroIntervalSeconds.coerceIn(3,60)).putInt("uiScale",s.uiScaleLevel.coerceIn(0,4)).apply() }
     fun position(key: String): Long = prefs.getLong("pos:$key",0)
     fun savePosition(key: String, ms: Long) { if(key.isNotEmpty()) prefs.edit().putLong("pos:$key",ms.coerceAtLeast(0)).apply() }

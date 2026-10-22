@@ -5,7 +5,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -70,7 +69,7 @@ import kotlinx.coroutines.*
 /** Standalone native dialog: also works in PlayerActivity without an AppModel composition local. */
 @Composable private fun SubtitleChoices(title:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,onChoose:(String)->Unit) {
     Popup(alignment=Alignment.Center,onDismissRequest=onDismiss,properties=PopupProperties(focusable=true)) {
-        Column(Modifier.widthIn(max=520.dp).fillMaxWidth().padding(16.dp).heightIn(max=520.dp).background(Color.Black.copy(alpha=.5f),RoundedCornerShape(18.dp)).padding(22.dp),
+        Column(Modifier.widthIn(max=520.dp).fillMaxWidth().padding(16.dp).heightIn(max=520.dp).background(Color.Black.copy(alpha=.5f),sunnyShape(18.dp)).padding(22.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(title,color=SunnyColors.Text,fontSize=18.sp)
             LazyColumn(Modifier.weight(1f,false),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -80,10 +79,7 @@ import kotlinx.coroutines.*
     }
 }
 @Composable private fun SubtitleChoiceRow(label:String,initial:Boolean,onClick:()->Unit) {
-    val focus=remember {FocusRequester()}
-    var focused by remember {mutableStateOf(false)}
-    LaunchedEffect(Unit) {if(initial) {withFrameNanos {};focus.requestFocus()}}
-    Text(label,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.fillMaxWidth().focusRequester(focus)
-        .onFocusChanged {focused=it.isFocused}.background(if(focused) Color.White.copy(alpha=.14f) else Color.Transparent,RoundedCornerShape(10.dp))
-        .border(1.dp,if(focused) SunnyColors.Accent else SunnyColors.Border,RoundedCornerShape(10.dp)).clickable(onClick=onClick).padding(12.dp))
+    FocusTile("subtitle-choice:$label",Modifier.fillMaxWidth(),autoFocus=initial,onClick=onClick) {
+        Text(label,color=SunnyColors.Text,fontSize=15.sp,modifier=Modifier.fillMaxWidth().padding(12.dp))
+    }
 }
