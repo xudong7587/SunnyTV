@@ -23,6 +23,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // Candidate validation compiles its tests against release, including Kotlin internal names.
+    // Normal debug instrumentation remains the default for the existing CI gates.
+    testBuildType = providers.gradleProperty("sunnytvTestBuildType").getOrElse("debug").also {
+        require(it in setOf("debug", "release")) { "Unsupported instrumentation build type" }
+    }
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
         release {
