@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import subprocess
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -81,7 +82,13 @@ def main():
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     if digest != args.sha256:
         raise ValueError('Candidate APK SHA256 differs from the explicitly selected tested bytes')
-    count = compare_application(candidate, args.rebuilt)
+    try:
+        count = compare_application(candidate, args.rebuilt)
+    except ValueError:
+        # Keep the failed rebuild available for investigation; never publish it
+        # in place of the already distributed candidate.
+        shutil.copyfile(args.rebuilt, 'build-logs/rebuilt-app-release.apk')
+        raise
     Path('build-logs/candidate-validation.json').write_text(json.dumps({
         'sha256': digest, 'sourceCommit': args.commit, 'matchedApplicationEntries': count,
         'nativeSourceUnchangedSince': args.native_baseline,
