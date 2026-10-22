@@ -24,7 +24,7 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 
 - **流畅**：焦点与滚动按遥控器节奏设计——整屏切换只做 GPU 平移，网格跨行先交接焦点再滚动，
   详情页进入即停在「播放 / 继续播放」上、按上回顶部导航、再按下回到按钮，连续按键不丢焦点、不抖屏。
-- **美观**：深浅主题 + 十组重点色，海报墙、banner、详情页与播放器共用同一套渐变、柔光与留白；
+- **美观**：深浅主题、26 套配色与莫奈/自定义色，海报墙、banner、详情页与播放器共用同一套渐变、柔光与留白；
   焦点框与卡片圆角同心，行内预留阴影空间，聚焦不改变卡片几何。
 - **STRM 支持好**：STRM 一律按「文件内唯一一条 HTTP(S) 地址」处理，支持 302/重定向、带签名的直链与
   Emby 服务端取流；电视直连失败时自动改用 Emby 服务端读一次，失败原因写到能看懂（主机 + 阶段）。
@@ -49,12 +49,18 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
   1x / 1.25x / 1.5x / 2x 倍速、字幕外观（字体、大小、描边、位置、背景，带实时预览）、
   电视遥控器长按左右连续快进快退、手机分区手势（亮度/音量/进度）与双击控制。
   手机和平板可在播放页锁定当前方向，躺卧观看时画面保持稳定；解锁后恢复自动旋转。
-- **外观**：深浅主题、十组重点色、五档界面大小与独立字号、五档动画速度与完全关闭。
+- **外观**：深浅主题、26 套配色、莫奈/自定义色、独立圆角及按设备能力回退的玻璃材质；五档界面大小与独立字号、五档动画速度与完全关闭。
 - **字体**：系统默认字体，或自己导入 TTF / OTF / TTC（只保存在本机）。**仓库与安装包不含任何字体文件。**
 - **搜索**：遥控器键盘 + 本地拼音首字母匹配（输入 `sdyq` 可命中「速度与激情」，无需联网、不内置词典）。
 - **云盘**：CloudDrive2 WebDAV 只读浏览与播放，不提供删除、移动、重命名。
 - **性能**：启动快照缓存、图片按「来源 + 条目 + 类型 + tag + 尺寸」缓存、低负载模式、界面分辨率偏好。
 - **软件升级**：优先使用 GitHub 官方更新；可开启 WebDAV，从自己的目录下载与官方最新版同名、同签名的 APK。安装由 Android 系统确认。
+
+## 液态玻璃源码
+
+液态玻璃是 SunnyTV 的组成部分，随主项目继续开源，使用根目录 [GPL-3.0 许可证](LICENSE)。实现包含背景层采样、非色散折射、双峰高光与缓存模糊；Android 13 及以上使用 RuntimeShader，低版本按能力回退。
+
+源码入口：[LiquidGlass.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/LiquidGlass.kt)、[GlassShaders.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/GlassShaders.kt) 和 [NativeAppearance.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/NativeAppearance.kt)。接入方式、透明度参数、性能边界和上游声明见 [液态玻璃说明](docs/LIQUID-GLASS.md)。上游 shader 摘录的 Apache-2.0 许可和版权声明保留在 [third_party/miuix-glass](third_party/miuix-glass)。
 
 ## 原生界面截图
 
