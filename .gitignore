@@ -33,3 +33,5 @@ dist/
 !/app/src/main/assets/licenses/miuix-glass-notice.txt
 /app/src/androidTest/assets/tone.eac3
 /app/src/androidTest/assets/tone.dts
+# Generated synthetic lamp-test pattern, never a release asset.
+/app/src/androidTest/assets/ambilight.mp4
