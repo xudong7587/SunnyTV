@@ -98,6 +98,8 @@ jobs:
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
             adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-repair-logcat.txt
+            adb root || true
+            adb wait-for-device
             adb pull /sdcard/Android/data/io.github.xudong7587.sunnytv.debug/files/ build-logs/tv-repair-screenshots || true
             python3 -c 'from pathlib import Path; s=Path("build-logs/tv-repair-android.txt").read_text(); assert "OK (" in s and "FAILURES" not in s and "INSTRUMENTATION_FAILED" not in s, s'
       - name: Verify final release on Android TV system image
@@ -114,6 +116,8 @@ jobs:
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
             adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-system-logcat.txt
+            adb root || true
+            adb wait-for-device
             adb pull /sdcard/Android/data/io.github.xudong7587.sunnytv.debug/files/ build-logs/tv-system-screenshots || true
             python3 -c 'from pathlib import Path; s=Path("build-logs/tv-system-android.txt").read_text(); assert "OK (" in s and "FAILURES" not in s and "INSTRUMENTATION_FAILED" not in s, s'
       - name: Package signed test candidate (no release publication)

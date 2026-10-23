@@ -31,3 +31,7 @@
 候选CI [39962596711](https://github.com/xudong7587/SunnyTV/actions/runs/39962596711) 的构建/签名/既有Android回归及普通Android正式包5项定向测试通过。新增真正Android TV镜像回归中，4K完整缓冲、玻璃实时滚动和模式/生命周期测试通过，编码黑边圆形比例测试超时，未发布该候选。保留原画面断言；补上暂停切换解码缩放模式时1ms微调以重投帧（Media3 1.9.4源码明确忽略精确同位置seek），并增加失败截图与FramingQA日志留存，等待重新验证。
 
 候选CI [39965226918](https://github.com/xudong7587/SunnyTV/actions/runs/39965226918) 的普通Android50项及正式包5项通过，TV仍在编码黑边裁切失败。FramingQA明确显示圆形从304×303变为303×412，发生在pictureArea确定、Surface从1920×1080变为1920×1473后；仅切换模式时刷新不够。补上SurfaceHolder尺寸更新后重新提交解码缩放与暂停帧，保留全部断言继续验证。
+
+最终候选CI [39968054995](https://github.com/xudong7587/SunnyTV/actions/runs/39968054995) 在提交 `f6f8442` 全部通过：212单测、lint/身份/既有签名检查、50项原有Android回归、普通Android与真正Android TV正式包各5项画面回归，零失败/跳过。保留原圆形/边缘断言，没有跳过失败用例。TV玻璃子图层滚动、4K完整缓冲、编码黑边等比裁切、独立拉伸、模式切换与Activity重建均通过。模拟器的截图拉取因shell外部目录权限不足失败，FramingQA与测试结果已保留；后续发行在测试结束后仅对临时模拟器请求root以拉取图像，不触碰用户设备。
+
+用户再次要求直接推Git；将同一应用源码合入main，使用release-stable.yml发布1.0.5 /78。真实TV与灯带复测仍由用户稍后进行。

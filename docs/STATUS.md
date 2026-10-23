@@ -2,7 +2,7 @@
 
 用户明确要求先修复并发布GitHub新版，稍后自行安装复测。当前工作区为 `/Users/sunnydunn/Documents/ChatGPT/SunnyTV 2`，从GitHub main `8893c09`克隆，修复分支 `codex/tv-1.0.5-fixes`。已停止操作用户电视，不覆盖其安装或配置。此前版本/日志/图层来自1.0.4现场；新代码不能标作实体TV验收。
 
-修复包括统一灯带RGB限载及避免重复选灯效、完整4K缓冲取色和读回退避、TV解码器等比裁切，以及仅API30–32电视的实时玻璃图层。手机LegacyGlass与API33+shader未改。具体证据、已知限制及复测项见 [TV-REPAIR-1.0.5.md](TV-REPAIR-1.0.5.md)，发布说明见 [RELEASE-1.0.5.md](RELEASE-1.0.5.md)。本地212单测通过、编译通过、debug/release lint零错误；GitHub沿用现有签名Secret并运行Android与Android TV系统镜像回归，完成后才发布。以下为历史记录。
+修复包括统一灯带RGB限载及避免重复选灯效、完整4K缓冲取色和读回退避、TV解码器等比裁切，以及仅API30–32电视的实时玻璃图层。手机LegacyGlass与API33+shader未改。具体证据、已知限制及复测项见 [TV-REPAIR-1.0.5.md](TV-REPAIR-1.0.5.md)，发布说明见 [RELEASE-1.0.5.md](RELEASE-1.0.5.md)。本地212单测通过、编译通过、debug/release lint零错误；候选CI [39968054995](https://github.com/xudong7587/SunnyTV/actions/runs/39968054995) 已通过既有签名及60项Android/Android TV回归（50+5+5），修复后保留原裁切画面断言。用户再次要求直接推Git，现合入main并启动正式发行；实体TV仍待复测。以下为历史记录。
 
 # 2026-10-23 SunnyTV 1.0.4 与 SunnyUI 2.1.0 已发布
 
