@@ -1,3 +1,11 @@
+# 2026-10-23 SunnyTV 1.0.4 与 SunnyUI 2.1.0 已发布
+
+[SunnyTV 1.0.4](https://github.com/xudong7587/SunnyTV/releases/tag/v1.0.4) /77 已公开并设置 latest，非草稿/非预发行。源码标签 051732dce295ab25be8b6b8f0703f5dcce693f64，[稳定发行 CI](https://github.com/xudong7587/SunnyTV/actions/runs/39940136128) 成功，含四 ABI 解码构建、单测、完整 lint、签名/内容检查、API30 debug 回归及最终原 APK 的46项 release 回归。此前一致性失败保留：完整 Windows/Linux 构建291项条目一致，原增量包仅 classes2.dex 有已审阅的 Compose 差异，严格绑定 APK 与两份 DEX 哈希，另290项一致；见 release-evidence/1.0.4-dex-variance.json。没有替换 APK 或跳过 Android 门禁。
+
+GitHub 下载回读的 APK 为29,392,809字节，SHA256 1131a9e6c08b306d6dfe81b070f1a0842238ee293d5c2255543142f15c684b99，与此前 NAS 原包一致。签名匹配既有密钥，BUILD_INFO/候选校验/签名记录核对通过，7项发行内容校验值与GitHub服务端摘要一致。所有旧标签和资产保留，未进行WebDAV发布或NAS媒体操作。
+
+[SunnyUI 2.1.0](https://github.com/xudong7587/sunny-ui-design-system/releases/tag/v2.1.0) 已从 e44fc8823599c7158a43d6952d1bd521b2895b0c 发布为 latest，包含原安装包、完整设计Skill、组件源码、BUILD_INFO及校验清单；云端类型检查/构建成功，附件已全部下载回读校验。SunnyTV官网已更新正式版本与Android11说明，并链接SunnyUI发行；35个当前引用文件HTTP200且SHA256一致，黑白主题/同心圆角/无外部压暗/窄屏检查通过。实体TV、真实闪电片段及长时蓝牙的待验范围保持。以下均为历史记录。
+
 # 2026-10-23 1.0.4 正式发行准备
 
 用户已明确要求将 SunnyTV 与 SunnyUI 2.1 同步到 GitHub 并发布新版，取代此前暂缓发布的状态。SunnyTV 使用已交付的 1.0.4 /77 原包，经稳定发行流程复核后设置为 latest；不覆盖旧标签或附件。新版源码已从公开 bf749e6 基线恢复到独立工作区 D:/Documents/ChatGPT/SunnyTV-release-1.0.4，缺失的 .github 和 .gitignore 保留基线内容并补齐生成夹具规则；原文件目录保留。以下是此前本地验证和部署记录，正式发布状态以新版发行记录为准。

@@ -1,6 +1,6 @@
 # SunnyTV 官网
 
-2026-10-23：接入SunnyUI2.1的真实网页背景玻璃，使用同一份无React构建；工具栏和内层焦点保持同心圆角，说明弹窗外框玻璃/内层磨砂、外侧不压暗。网页仍默认白色/黑白主题，没有恢复完整模拟器。新增1.0.4本地电视测试的Android11兼容、灯带与裁切说明；当前正式下载仍为GithubLatest的1.0.0。玻璃组件完整源码与许可随网站提供下载。当前部署与校验见docs/WEBSITE-DEPLOYMENT.md；下面保留旧截图和部署方法，旧Android13门槛仅指此前正式版。
+2026-10-23：接入SunnyUI2.1的真实网页背景玻璃，使用同一份无React构建；工具栏和内层焦点保持同心圆角，说明弹窗外框玻璃/内层磨砂、外侧不压暗。网页仍默认白色/黑白主题，没有恢复完整模拟器。正式下载更新为GitHubLatest的1.0.4 /77，说明Android11兼容、灯带防闪/重连和等比裁切，并保留实体电视待验范围。SunnyUI2.1安装包和设计Skill链接指向其正式Release。玻璃组件完整源码与许可随网站提供下载。当前部署与校验见docs/WEBSITE-DEPLOYMENT.md；下面保留旧截图和部署方法，旧Android13门槛仅指此前正式版。
 
 线上：https://sunnytv.dunn.fun:666/ 。纯静态 HTML/CSS/JS，沿用既有 myblog `sites/sunnytv` 托管。
 
@@ -18,7 +18,7 @@
 
 复现：运行 `python scripts/prepare-website-seven.py`，准备被 Git 忽略的公开海报与本地合成视频（需 OpenCV）；构建 Debug 和 AndroidTest。使用隔离 API34 模拟器、1920×1080、320dpi，运行 `WebsiteCaptureTest`，从 Debug 应用缓存提取 `showcase-seven-*.png`。`glass-detail-hd` 使用2倍原生组件绘制密度，裁切中心见同缓存中的 bounds 文件。真实4K TV framebuffer实验被系统限制为1080p，已放回本地实验归档，不宣称成功取得4K屏幕截图。
 
-液态玻璃需要 Android13 /API33、硬件加速、允许高开销主题及非低负载模式；条件不足按原生策略回退清晰默认。官网玻璃为本轮开发预览，正式下载仍指向 GitHub Latest 的 1.0.0 /73。本轮未替换或重发已有 APK。
+1.0.4 的 Android11–12L 使用玻璃兼容模式，Android13 /API33 及以上使用原生着色器；两者都需要硬件加速、允许高开销主题及非低负载模式。条件不足按原生策略回退。官网原生截图仍来自Android14，兼容路径的实体电视效果待确认。GitHub正式发布保留此前已交付APK的原始字节。
 
 ## 部署
 

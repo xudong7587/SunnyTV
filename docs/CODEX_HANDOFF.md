@@ -1,3 +1,9 @@
+# 2026-10-23 GitHub 发布已完成
+
+SunnyTV v1.0.4 /77 与 SunnyUI v2.1.0 均已公开为各自 latest。SunnyTV标签051732d，稳定CI39940136128成功；原签名APK SHA256 1131a9e6c08b306d6dfe81b070f1a0842238ee293d5c2255543142f15c684b99回读一致，实际候选包API30 release回归46项通过。首轮CI因增量Compose差异失败；非增量Windows与Linux重建291项一致，专项记录只接受这对精确DEX哈希，其余290项和完整Android门禁保留。原APK未重打/覆盖。
+
+SunnyUI仓库D:/Documents/ChatGPT/Sunny-UI已推送e44fc88，安装包与Skill/组件源码全部回读通过。SunnyTV官网已同步正式1.0.4及SunnyUI2.1发行链接，35个引用HTTP及SHA通过；首次原子替换后的短暂404后复核通过。当前可用Git工作区是D:/Documents/ChatGPT/SunnyTV-release-1.0.4；原失联目录和D:/Documents/ChatGPT/SunnyTV旧覆盖层保留。今后开发从此Git入口/远端main增量继续，不能以旧覆盖层覆盖。完整记录见STATUS与RELEASE-1.0.4.md；实体电视与控制器长时表现仍待用户验证。
+
 # 2026-10-23 GitHub 发布入口
 
 用户已授权同步两个仓库并发布新版。SunnyTV 的 Git 工作区恢复在 D:/Documents/ChatGPT/SunnyTV-release-1.0.4，分支 codex/release-1.0.4，基线为 GitHub main 的 bf749e6。从此前最新目录逐文件核对复制代码与官网，不删除基线中缺失的 .github/.gitignore；补齐黑边/多音轨夹具的 CI 生成与忽略规则。旧开发覆盖层及失联目录不重置、不覆盖。发行选用既有 1.0.4 /77 原包及既有签名，经过稳定候选包流程核对；后续新增客户端代码必须递增版本，不能替换这份已交付 APK。以下“未推送/未发布”为历史状态。

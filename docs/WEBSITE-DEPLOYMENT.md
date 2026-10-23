@@ -1,3 +1,9 @@
+# 2026-10-23 正式发行同步
+
+SunnyTV 1.0.4 /77 与 SunnyUI 2.1.0 已公开为各自 GitHub latest。官网首页、下载区、Android11玻璃兼容、灯带/裁切和FAQ统一改为正式版说明；下载仍指向SunnyTV `/releases/latest`，网页玻璃说明新增SunnyUI安装包与设计Skill的发行链接。保留黑白主题、默认白色、同心圆角与内层磨砂、原生截图，完整模拟器继续暂停。
+
+发布只作用于原授权 `Z:/docker/myblog/sites/sunnytv`。12路径白名单中资源与前版一致，仅首页变化；原首页本地备份。线上35个当前引用文件HTTP200、SHA256全匹配，源码ZIP和第三方许可保留。替换后首次首页404，后续复核全部通过。320/390/768/1366无溢出、黑白保存、背景切换、键盘、弹窗外侧亮度及同心圆角检查通过。APK从GitHub完整回读后才执行网站发布。证据位于 `.local-tests/release-104/`。以下是历史记录。
+
 # 2026-10-23 SunnyUI 2.1 玻璃接入 SunnyTV 官网
 
 本轮目标是现有SunnyTV官网 `https://sunnytv.dunn.fun:666/`，不是发布SunnyUI站点。使用最新1.0.4所在目录的website；`D:/Documents/ChatGPT/SunnyTV`仍是较早覆盖层。用户纠正后已将可见浏览器切回SunnyTV，并打开已部署的正式地址。
