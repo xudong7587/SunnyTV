@@ -24,6 +24,7 @@ import kotlin.random.Random
 data class NativeAppearance(val material:String="clear",val cornerScale:Float=1f,val shadows:Boolean=true)
 val LocalNativeAppearance=staticCompositionLocalOf {NativeAppearance()}
 val LocalGlassControls=staticCompositionLocalOf {false}
+internal val LocalChoiceControls=staticCompositionLocalOf {false}
 
 @Composable fun AppearanceSwatch(color:AppearanceColor,dark:Boolean,selected:Boolean) {
     Box(Modifier.size(22.dp).background(Color(if(dark) color.dark else color.light),CircleShape)
@@ -194,4 +195,17 @@ internal fun materialStops(id:String,p:SunnyPalette):List<Color> {
     return if(appearance.material in setOf("glass","frosted","aurora") && backdrop!=null)
         liquidGlass(backdrop,shape,panelRadius(radius,appearance),appearance.material)
     else materialSurface(shape)
+}
+
+/** Dialogs sample the same complete page as navigation; native dialog windows never enter that layer. */
+@Composable internal fun Modifier.choicePanel(radius:Dp):Modifier {
+    val a=LocalNativeAppearance.current
+    val scene=LocalGlassButtonScene.current
+    val source=LocalChoiceBackdrop.current ?: LocalGlassBackdrop.current ?: scene?.artwork ?: scene?.fallback
+    // Toolbar buttons are 48dp high: their visible corner never exceeds 24dp, even in round mode.
+    val corner=(radius*a.cornerScale).coerceAtMost(24.dp)
+    val shape=remember(corner) {RoundedCornerShape(corner)}
+    return if(a.material=="glass" && source!=null) liquidGlass(source,shape,corner,"glass") {.21f}
+        else if(a.material in setOf("frosted","aurora") && source!=null) liquidGlass(source,shape,corner,a.material)
+        else materialSurface(shape)
 }

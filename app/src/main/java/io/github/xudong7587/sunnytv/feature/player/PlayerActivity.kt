@@ -91,6 +91,8 @@ class PlayerActivity: ComponentActivity() {
     // TV's SurfaceView is hosted directly by the window. OSD recomposition never owns its geometry.
     private var tvPlayerView:PlayerView?=null
     private var lightPlayerView:PlayerView?=null
+    private var frameCropper:VideoFrameCropper?=null
+    private var pictureArea=PictureArea()
     private var edgeSampler:io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler?=null
     private var retryUsed=false
     private var mp4EditListFallbackUsed=false
@@ -226,6 +228,27 @@ class PlayerActivity: ComponentActivity() {
         useController=false;keepScreenOn=true
         isFocusable=false;isFocusableInTouchMode=false
         descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        clipChildren=true
+        addOnLayoutChangeListener {view,_,_,_,_,_,_,_,_->applyVideoGeometry(view as PlayerView)}
+        findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+            .addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->applyVideoGeometry(this)}
+    }
+
+    private fun applyVideoGeometry(view:PlayerView) {
+        val size=view.player?.videoSize ?: return
+        if(size.width<=0 || size.height<=0 || view.width<=0 || view.height<=0)return
+        val bounds=VideoGeometry.bounds(view.width,view.height,size.width*size.pixelWidthHeightRatio/size.height,
+            resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM,resizeMode==AspectRatioFrameLayout.RESIZE_MODE_FILL,pictureArea)
+        val frame=view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+        // Explicit native dimensions survive EXACT measure constraints and TV compositor quirks.
+        // The decoder always sees a surface with the original aspect in FIT/ZOOM, never FILL's shape.
+        frame.setAspectRatio(0f)
+        val params=frame.layoutParams as FrameLayout.LayoutParams
+        if(params.width!=bounds.width || params.height!=bounds.height) {
+            params.width=bounds.width;params.height=bounds.height;params.gravity=android.view.Gravity.CENTER
+            frame.layoutParams=params
+        }
+        frame.translationX=bounds.x;frame.translationY=bounds.y
     }
 
     // Targeting suppression: overriding the framework Activity key dispatch is a normal app pattern;
@@ -252,7 +275,7 @@ class PlayerActivity: ComponentActivity() {
         if(app.ambilight.config.value.enabled && edgeSampler==null) {
             edgeSampler=io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler(app.ambilight,{
                 lightPlayerView?.let {view->(view.videoSurfaceView as? android.view.SurfaceView)?.let {it to view}}
-            },{rendered && player?.isPlaying==true && error.isBlank()}).also {it.start()}
+            },{rendered && player?.let {it.playWhenReady && it.playbackState!=Player.STATE_ENDED}==true && error.isBlank()}).also {it.start()}
         }
     }
     override fun onResume() {
@@ -262,6 +285,7 @@ class PlayerActivity: ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {outState.putInt("resizeMode",resizeMode);outState.putLong("subtitleProgressMs",subtitleProgressMs);outState.putInt("audioOutputMaximum",audioOutputMaximum);outState.putBoolean("orientationLocked",orientationLocked);outState.putInt("manualOrientation",manualOrientation);outState.putLong("position",absolutePosition());outState.putFloat("speed",playbackSpeed);super.onSaveInstanceState(outState)}
 
     override fun onStop() {
+        frameCropper?.close();frameCropper=null;pictureArea=PictureArea()
         edgeSampler?.stop();edgeSampler=null
         subtitleAdjustmentJob?.cancel();subtitleAdjustmentJob=null
         routeSwitchJob?.cancel();routeSwitchJob=null
@@ -415,6 +439,7 @@ class PlayerActivity: ComponentActivity() {
         )
         p.addListener(object:Player.Listener {
             override fun onVideoSizeChanged(videoSize:VideoSize) {
+                lightPlayerView?.let {applyVideoGeometry(it)}
                 if(!tvPlayback && videoSize.width>0 && videoSize.height>0) {
                     if(!orientationLocked) requestedOrientation=playerOrientation(false,videoSize.width,videoSize.height,videoSize.pixelWidthHeightRatio)
                 }
@@ -431,7 +456,8 @@ class PlayerActivity: ComponentActivity() {
                             val f=g.getTrackFormat(i)
                             if(type==C.TRACK_TYPE_TEXT) Presentation.languageMatches(language,f.language.orEmpty(),f.label.orEmpty()) ||
                                 (language !in setOf("zh-Hans","zh","en") && language.isNotBlank() && f.language.equals(language,true))
-                            else language.isNotBlank() && f.language.equals(language,true)
+                            else language.isNotBlank() && (f.language.equals(language,true) ||
+                                AudioPreference.matches(language,f.language.orEmpty(),f.label.orEmpty()))
                         }
                     if(match!=null) {
                         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(type,false)
@@ -450,7 +476,7 @@ class PlayerActivity: ComponentActivity() {
                         p.trackSelectionParameters=p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,false)
                             .setOverrideForType(TrackSelectionOverride(exact.first.mediaTrackGroup,exact.second)).build()
                     } else selectionNotice="无法播放所选音轨，请选择其他音轨"
-                } else if(quality=="original" && !audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
+                } else if(!audioManuallySelected && !audioPreferenceApplied && (request.audioTitle.isNotBlank() || request.audioLanguage.isNotBlank())) {
                     audioPreferenceApplied=choose(C.TRACK_TYPE_AUDIO,request.audioTitle,request.audioLanguage)
                 }
                 if(!subtitleManuallySelected && !subtitlePreferenceApplied && (request.explicitSubtitle || request.subtitlePreference !in setOf("default","none"))) {
@@ -485,8 +511,15 @@ class PlayerActivity: ComponentActivity() {
                 }
             }
             override fun onPlaybackStateChanged(playbackState:Int) {
-                status=when(playbackState) {Player.STATE_BUFFERING->"正在缓冲…";Player.STATE_ENDED->"播放结束";else->""}
-                if(playbackState==Player.STATE_ENDED) {controls=true;app.store.savePosition(request.localKey,0)}
+                status=when(playbackState) {
+                    Player.STATE_BUFFERING->"正在缓冲…"
+                    Player.STATE_ENDED->"播放结束"
+                    else->""
+                }
+                if(playbackState==Player.STATE_ENDED) {
+                    controls=true
+                    app.store.savePosition(request.localKey,0)
+                }
                 if(playbackState==Player.STATE_READY && quality!="original" && !isCloudQuality && !p.playWhenReady) pauseTranscode()
             }
             override fun onPlayerError(e:PlaybackException) {
@@ -662,7 +695,9 @@ class PlayerActivity: ComponentActivity() {
                         catch(e:CancellationException) {throw e}
                         catch(_:Exception) {null}
                     }
-                    api.playback(item,false,preferServerStream=settings.preferServerPlayback).let {next->
+                    val preferred=AudioPreference.forMedia(settings.mediaAudioPreferences,item,request.audioPreferenceScope)
+                    AudioPreference.apply(api.playback(item,false,preferServerStream=settings.preferServerPlayback),preferred)
+                        .copy(audioPreferenceScope=request.audioPreferenceScope).let {next->
                         if(chosen==null) next.copy(subtitlePreference=request.subtitlePreference)
                         else next.copy(explicitSubtitle=true,subtitleTrackId="emby-sub:${chosen.index}",subtitleTitle=chosen.title)
                     }
@@ -896,12 +931,22 @@ class PlayerActivity: ComponentActivity() {
         val appliedSubtitle=remember {arrayOfNulls<Any>(1)}
         val activePlayer=player
         val activeResizeMode=resizeMode
+        DisposableEffect(activeResizeMode,activePlayer) {
+            if(activeResizeMode!=AspectRatioFrameLayout.RESIZE_MODE_FIT && activePlayer!=null) {
+                frameCropper=VideoFrameCropper({lightPlayerView?.videoSurfaceView as? android.view.SurfaceView}) {area->
+                    pictureArea=area;lightPlayerView?.let {applyVideoGeometry(it)}
+                }.also {it.start()}
+            }
+            onDispose {frameCropper?.close();frameCropper=null;pictureArea=PictureArea()}
+        }
         fun updateVideoView(view:PlayerView) {
             if(view.player!==activePlayer) view.player=activePlayer
             if(view.resizeMode!=activeResizeMode) view.resizeMode=activeResizeMode
             // Media3 calculates fit/zoom from the decoded size and pixel aspect ratio.
             // Avoid an additional view scale, which would crop a second time.
             view.scaleX=1f;view.scaleY=1f
+            activePlayer?.videoScalingMode=C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            applyVideoGeometry(view)
             val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                 settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
             if(appliedSubtitle[0]!=key) {

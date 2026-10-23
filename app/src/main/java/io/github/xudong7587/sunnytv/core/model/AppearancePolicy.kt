@@ -40,7 +40,7 @@ object AppearancePolicy {
             !spec.highCost->null
             !optIn->"需开启高开销主题"
             lean->"低负载模式下不可用"
-            spec.glass && (sdk<33 || !hardware)->"需 Android 13 及硬件加速"
+            spec.glass && (sdk<30 || !hardware)->"需 Android 11 及硬件加速"
             else->null
         }
     }

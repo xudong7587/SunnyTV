@@ -79,6 +79,7 @@ import kotlinx.coroutines.withContext
     val versions=remember(item.versions) {item.versions.distinctBy {it.id}}
     val version=versions.firstOrNull {it.id==model.selectedVersion[item.key]} ?: versions.firstOrNull()
     val tracks=version?.tracks ?: item.tracks
+    val audioPreference=AudioPreference.forMedia(model.settings.mediaAudioPreferences,item)
     val list=rememberLazyListState()
     val scope=rememberCoroutineScope()
     val motion=LocalMotion.current
@@ -193,7 +194,7 @@ import kotlinx.coroutines.withContext
                             item {Action(if(item.positionMs>0) "▶  继续播放" else "▶  播放",id="detail-play",primary=true,autoFocus=true,
                                 modifier=Modifier.focusRequester(entryActionFocus).moveIntoContent()) {onPlay(item,false)}}
                             if(item.positionMs>0) item {Action("从头播放",icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
-                            item {Action("≋  音频",modifier=Modifier.moveIntoContent()) {panel="audio"}}
+                            item {Action("音轨",icon="audio",modifier=Modifier.moveIntoContent()) {panel="audio"}}
                             item {Action("▱  版本",modifier=Modifier.moveIntoContent()) {panel="version"}}
                             item {Action("CC  字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle"}}
                             if(!model.isUgreen(item.sourceId)) item {Action("查找字幕",modifier=Modifier.moveIntoContent()) {panel="subtitle-search"}}
@@ -204,6 +205,10 @@ import kotlinx.coroutines.withContext
                             item {Action("继续播放",id="detail-resume",primary=true,autoFocus=true,icon="play",
                                 modifier=Modifier.focusRequester(entryActionFocus).moveIntoContent()) {onPlay(item,false)}}
                             item {Action("从头播放",id="detail-start",primary=false,icon="restart",modifier=Modifier.moveIntoContent()) {onPlay(item,true)}}
+                        }
+                        if(item.type in setOf("Series","Season")) item {
+                            Action("默认音频",id="detail-audio-preference",icon="audio",iconOnly=true,
+                                modifier=Modifier.moveIntoContent()) {panel="audio-preference"}
                         }
                         if(model.canFavorite(item)) item {Action(if(item.favorite) "已收藏" else "收藏",id="detail-favorite",active=item.favorite,
                             autoFocus=!item.isPlayable && item.type !in setOf("Series","Season"),
@@ -299,6 +304,13 @@ import kotlinx.coroutines.withContext
             }
         }
         when(panel) {
+            "audio-preference" -> ChoiceDialog("默认音频",AudioPreference.choices,audioPreference,{panel=""},
+                description=if(item.type in setOf("Series","Season")) "用于此剧集的播放，逐集匹配音轨；没有匹配语言时跟随媒体默认。"
+                    else "仅用于此媒体，没有匹配语言时跟随媒体默认。") {value->
+                model.saveSettings(model.settings.copy(mediaAudioPreferences=model.settings.mediaAudioPreferences+(item.key to value)))
+                model.selectedAudio.remove(item.key)
+                panel=""
+            }
             "subtitle-search" -> model.sources.firstOrNull {it.id==item.sourceId && !it.isUgreen}?.let {config->
                 SubtitleSearchDialog(model.app.emby(config),model.app.store,item,version?.id.orEmpty(),{panel=""}) {track->
                     model.selectedSubtitleTrack[item.key]=track

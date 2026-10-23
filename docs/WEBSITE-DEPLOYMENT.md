@@ -1,3 +1,17 @@
+# 2026-10-23 SunnyUI 2.1 玻璃接入 SunnyTV 官网
+
+本轮目标是现有SunnyTV官网 `https://sunnytv.dunn.fun:666/`，不是发布SunnyUI站点。使用最新1.0.4所在目录的website；`D:/Documents/ChatGPT/SunnyTV`仍是较早覆盖层。用户纠正后已将可见浏览器切回SunnyTV，并打开已部署的正式地址。
+
+复用 `D:/Documents/ChatGPT/Sunny-UI` 的2.1无React构建，JS逐字节相同；新增真实网页背景折射演示、原SunnyTV SVG图标、动画/星空/山海背景切换。工具栏四边统一内距，实际外框34.5px、间距8px、内层26.5px；内层焦点与外框同心。说明dialog外框液态玻璃21%、内部磨砂阅读层65%，不压暗外侧；原生截图保持独立标注，完整网页模拟器仍暂停。官网继续默认白色/黑白两主题，MediaIndex保留原彩图标。
+
+Android11兼容、灯带稳亮/防闪/重连、等比裁切及编码黑边处理明确标为1.0.4本地电视测试；未宣称通过实体TV/SP658E验收。正式下载仍指向GithubLatest，已核验为v1.0.0 /73。本轮不重发APK或修改正式Release。
+
+类型检查/构建、SunnyUI2496组基础样式比较、真实背景像素位移/前景清晰/无空闲帧循环/跨标签/键盘与窄屏检查通过；SunnyTV本地320/390/768/1366宽度、无溢出、背景切换、同心圆角、黑白刷新、dialog/Esc和外侧不压暗检查通过。最终磨砂阅读层在可见浏览器人工复核。
+
+仅向既有 `Z:/docker/myblog/sites/sunnytv` 写白名单12文件（约1.07MB），资源先行、首页最后原子替换。原文件备份在`.local-tests/website-glass-21/before-deploy`，没有清理其它NAS目录或重启服务。首次资源回读出现短暂404，后续35个当前引用/许可/源码文件全部HTTP200，完整SHA256与本地一致。新组件的完整可构建源码及两套许可随ZIP公开下载；SunnyUI的2.1安装包/Skill已在本地生成，未创建GithubRelease。
+
+证据：`.local-tests/website-glass-21/browser-checks.json`、`deploy-manifest.json`、`http-verified.json`；SunnyUI的`docs/2.1.0-validation.md`。以下为历史部署记录。
+
 # 2026-10-22 图文官网与 SunnyTV Symbols
 
 本轮验证：192项单测零失败，Debug与AndroidTest编译通过，lint零错误/44项既有警告；54图标在20dp和40dp逐个渲染无裁切，实际播放器焦点与清晰度文字回归通过。最终API34原生截图测试通过，25个上线文件HTTP200且SHA256一致。

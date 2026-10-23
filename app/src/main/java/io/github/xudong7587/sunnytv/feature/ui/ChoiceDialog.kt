@@ -4,11 +4,20 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.window.DialogWindowProvider
+import android.view.WindowManager
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
 
 /**
@@ -20,7 +29,7 @@ import androidx.tv.material3.Text
  * 官方评级 left focus on 取消 instead of the current option).
  */
 @Composable fun ChoiceDialog(title:String,choices:List<Pair<String,String>>,selected:String,
-    onDismiss:()->Unit,columns:Int=1,onChoose:(String)->Unit) {
+    onDismiss:()->Unit,columns:Int=1,description:String="",onChoose:(String)->Unit) {
     val model=LocalAppModel.current
     val page=LocalPageKey.current
     val prior=remember {model.focusMemory[page]}
@@ -28,38 +37,59 @@ import androidx.tv.material3.Text
     LaunchedEffect(Unit) {inputMotion.horizontal=false}
     DisposableEffect(Unit) {onDispose {if(prior!=null) model.focusMemory[page]=prior}}
     val grid=columns>1
-    Dialog(onDismissRequest=onDismiss) {
-        Column(Modifier.onPreviewKeyEvent {inputMotion.record(it);false}.width(if(grid) 640.dp else 420.dp).heightIn(max=if(grid) 560.dp else 440.dp)
-            .sunnyPanel(22.dp).padding(22.dp),
-            verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            Text(title,color=SunnyColors.Text,fontSize=23.sp)
+    val selectedIndex=choices.indexOfFirst {it.first==selected}.coerceAtLeast(0)
+    val listState=rememberLazyListState(initialFirstVisibleItemIndex=selectedIndex)
+    Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
+      val window=(LocalView.current.parent as? DialogWindowProvider)?.window
+      SideEffect {window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window?.setDimAmount(0f)}
+      BoxWithConstraints(Modifier.fillMaxSize().padding(24.dp),contentAlignment=Alignment.Center) {
+        val panelHeight=maxHeight.coerceAtMost(if(maxWidth<600.dp) 760.dp else 560.dp)
+        val gridColumns=if(maxWidth<600.dp) minOf(columns,2) else columns
+        Column(Modifier.testTag("choice:panel").onPreviewKeyEvent {inputMotion.record(it);false}.widthIn(max=if(grid) 640.dp else 460.dp)
+            .fillMaxWidth().heightIn(max=panelHeight).choicePanel(28.dp).padding(20.dp),
+            verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text(title,color=SunnyColors.Text,fontSize=21.sp,fontWeight=FontWeight.SemiBold)
+            if(description.isNotBlank()) Text(description,color=SunnyColors.Secondary,fontSize=12.sp,lineHeight=18.sp)
+          CompositionLocalProvider(LocalGlassControls provides true,LocalChoiceControls provides true) {
             if(grid) {
-                Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    choices.chunked(columns).forEach {row->
+                Column(Modifier.weight(1f,false).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    choices.chunked(gridColumns).forEach {row->
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                             row.forEach {(value,label)->
-                                FocusTile("dialog:$title:$value",Modifier.weight(1f),active=value==selected,
+                                FocusTile("dialog:$title:$value",Modifier.weight(1f),active=value==selected,shape=sunnyShape(16.dp),
                                     autoFocus=value==selected || (choices.none {it.first==selected} && value==choices.firstOrNull()?.first),
                                     onClick={onChoose(value)}) {
-                                    Text((if(value==selected) "✓ " else "")+label,color=SunnyColors.Text,fontSize=14.sp,
-                                        maxLines=2,modifier=Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=11.dp))
+                                    ChoiceLabel(label,value==selected,compact=true)
                                 }
                             }
-                            repeat(columns-row.size) {Spacer(Modifier.weight(1f))}
+                            repeat(gridColumns-row.size) {Spacer(Modifier.weight(1f))}
                         }
                     }
                 }
-            } else LazyColumn(Modifier.weight(1f,false),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+            } else LazyColumn(Modifier.weight(1f,false),state=listState,verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 items(choices,key={it.first}) {(value,label)->
-                    FocusTile("dialog:$title:$value",Modifier.fillMaxWidth(),active=value==selected,
+                    FocusTile("dialog:$title:$value",Modifier.fillMaxWidth(),active=value==selected,shape=sunnyShape(16.dp),
                         autoFocus=value==selected || (choices.none {it.first==selected} && value==choices.firstOrNull()?.first),
                         onClick={onChoose(value)}) {
-                        Text((if(value==selected) "✓  " else "    ")+label,color=SunnyColors.Text,fontSize=15.sp,
-                            modifier=Modifier.fillMaxWidth().padding(12.dp))
+                        ChoiceLabel(label,value==selected)
                     }
                 }
             }
-            Action("取消",id="dialog:$title:cancel",onClick=onDismiss)
+            Action("取消",id="dialog:$title:cancel",alwaysShowLabel=true,icon="back",onClick=onDismiss)
+          }
         }
+      }
+    }
+}
+
+@Composable private fun ChoiceLabel(label:String,selected:Boolean,compact:Boolean=false) {
+    val rowHeight=maxOf(56f,36f*LocalDensity.current.fontScale+16f).dp
+    Row(Modifier.fillMaxWidth().then(if(compact) Modifier.height(rowHeight) else Modifier.heightIn(min=48.dp))
+        .padding(horizontal=12.dp,vertical=8.dp),
+        horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(label,color=SunnyColors.Text,fontSize=if(compact) 13.sp else 15.sp,
+            fontWeight=if(selected) FontWeight.SemiBold else FontWeight.Medium,
+            lineHeight=18.sp,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f))
+        Box(Modifier.size(18.dp)) {if(selected) LineIcon("check",SunnyColors.Text,Modifier.fillMaxSize())}
     }
 }

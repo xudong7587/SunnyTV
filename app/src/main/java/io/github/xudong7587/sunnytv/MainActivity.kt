@@ -179,7 +179,8 @@ class MainActivity: ComponentActivity() {
     val inputMotion=remember(route) {TvFocusMotion()}
     val motion=LocalMotion.current
     CompositionLocalProvider(LocalPageKey provides route.key(),LocalCompact provides compact,LocalNavigationBridge provides bridge,
-        LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion,LocalGlassButtonScene provides floatingGlassScene) {
+        LocalNavVisible provides navVisible,LocalTvFocusMotion provides inputMotion,LocalGlassButtonScene provides floatingGlassScene,
+        LocalChoiceBackdrop provides glassBackdrop) {
         Box(Modifier.fillMaxSize().background(SunnyColors.Background)
             .onPreviewKeyEvent {event->
                 inputMotion.record(event)

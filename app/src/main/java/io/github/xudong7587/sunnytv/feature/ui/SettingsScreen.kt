@@ -249,6 +249,10 @@ import kotlinx.coroutines.*
                             SectionTitle("材质",AppearancePolicy.spec(if(blocked==null) model.settings.appearanceMaterial else "clear").name)
                             Text(AppearancePolicy.spec(if(blocked==null) model.settings.appearanceMaterial else "clear").note,
                                 color=SunnyColors.Secondary,fontSize=12.sp)
+                            val glassBlocked=AppearancePolicy.blockedReason("glass",model.settings.highPerformanceThemes,
+                                model.app.lean(model.settings),Build.VERSION.SDK_INT,hardwareAccelerated)
+                            Text("Android ${Build.VERSION.RELEASE} · 液态玻璃${if(glassBlocked==null) {if(Build.VERSION.SDK_INT<33) "兼容模式可用" else "可用"} else "：$glassBlocked"}",
+                                color=SunnyColors.Secondary,fontSize=12.sp,modifier=Modifier.testTag("appearance:glass-availability"))
                         }
                     }
                     val materialStart=7+(themeColors.size+columns-1)/columns+(if(blocked!=null) 1 else 0)+(if(model.settings.monetEnabled) 3 else 0)

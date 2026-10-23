@@ -92,6 +92,9 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     val contentPalette=if(liquidButton) base.copy(text=monochrome,accent=monochrome,focusContent=monochrome,
         secondary=monochrome.copy(alpha=.72f)) else base
     val flatGlass=LocalGlassControls.current
+    val choiceGlass=LocalChoiceControls.current && liquidButton
+    val choiceFrost=animateFloatAsState(if(focused || pressed) .66f else if(active) .42f else .10f,
+        motion.fade(150),label="choice-frost")
     val liquidFocus=animateFloatAsState(if(selected || pressed) .06f else if(emphasized) .03f else 0f,
         motion.fade(150),label="glass-flat-focus")
     val textured=(glassControls || button || emphasized || id.startsWith("setting:") || id.startsWith("toggle:")) && material!="clear"
@@ -127,7 +130,11 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
             onDrawWithContent {
                 drawOutline(edge,fill.value.copy(alpha=if(glassControls) {0f} else if(textured) {if(selected) .65f else .04f} else 1f))
                 // Navigation communicates focus through its expanded label, keeping one clear lens.
-                if(liquidButton && flatGlass && !id.startsWith("nav:")) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
+                if(choiceGlass) {
+                    drawOutline(edge,base.surface.copy(alpha=choiceFrost.value))
+                    if(focused || active) drawOutline(focusEdge,monochrome.copy(alpha=if(focused) .20f else .10f),style=Stroke(1.dp.toPx()))
+                }
+                else if(liquidButton && flatGlass && !id.startsWith("nav:")) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
                 else if(glassControls && !liquidButton && (selected || emphasized)) drawOutline(edge,base.accent.copy(alpha=.10f))
                 if(focusOutline && !showOutline && !liquidButton && (!glassControls || emphasized)) drawOutline(focusEdge,if(emphasized) base.accent else base.controlEdge,style=Stroke(1.dp.toPx()))
                 drawContent()
@@ -158,7 +165,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
 
 @Composable fun Action(text:String,id:String=text,primary:Boolean=false,autoFocus:Boolean=false,active:Boolean=false,
     icon:String=actionIcon(text),modifier:Modifier=Modifier,alwaysShowLabel:Boolean=false,collapseWhenIdle:Boolean=false,
-    secondaryIcon:String?=null,leading:(@Composable (Color)->Unit)?=null,onClick:()->Unit) {
+    secondaryIcon:String?=null,leading:(@Composable (Color)->Unit)?=null,iconOnly:Boolean=false,onClick:()->Unit) {
     val model=LocalAppModel.current
     FocusTile(id=id,modifier=modifier.semantics {contentDescription=text},autoFocus=autoFocus,active=active,
         shape=sunnyShape(28.dp),button=true,emphasized=primary,onClick=onClick) { focused ->
@@ -178,7 +185,7 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
                 }
             }
             val motion=LocalMotion.current
-            AnimatedVisibility(focused || alwaysShowLabel || (active && !collapseWhenIdle),
+            AnimatedVisibility(!iconOnly && (focused || alwaysShowLabel || (active && !collapseWhenIdle)),
                 enter=expandHorizontally(motion.spring())+fadeIn(motion.fade(240)),
                 exit=shrinkHorizontally(motion.spring())+fadeOut(motion.fade(240))) {
                 Text(text.trimStart('▶','✓','♡','♥','ⓘ','≋','▱',' '),color=SunnyColors.Text,fontSize=13.sp,fontWeight=FontWeight.SemiBold,

@@ -1,3 +1,43 @@
+# 2026-10-23 GitHub 发布入口
+
+用户已授权同步两个仓库并发布新版。SunnyTV 的 Git 工作区恢复在 D:/Documents/ChatGPT/SunnyTV-release-1.0.4，分支 codex/release-1.0.4，基线为 GitHub main 的 bf749e6。从此前最新目录逐文件核对复制代码与官网，不删除基线中缺失的 .github/.gitignore；补齐黑边/多音轨夹具的 CI 生成与忽略规则。旧开发覆盖层及失联目录不重置、不覆盖。发行选用既有 1.0.4 /77 原包及既有签名，经过稳定候选包流程核对；后续新增客户端代码必须递增版本，不能替换这份已交付 APK。以下“未推送/未发布”为历史状态。
+
+# 2026-10-23 官网后续与目录状态
+
+用户要求玻璃移入SunnyUI，再更新SunnyTV官网。已完成SunnyUI本地2.1（D:/Documents/ChatGPT/Sunny-UI）与现有SunnyTV官网部署，35个线上文件回读通过；没有发布SunnyUI网站或恢复完整模拟器。源码ZIP和第三方许可随官网提供，聚焦内外同心、阅读层磨砂。浏览器已切到https://sunnytv.dunn.fun:666/#appearance。官网记录见WEBSITE-DEPLOYMENT.md。
+
+目录核对：D:/Documents/ChatGPT/SunnyTV仍是旧覆盖层，最新1.0.4文件与当前website在C:/Users/Sunny/.codex/worktrees/ugreen-lan-tls/SunnyTV。本轮后半核对时此最新目录的.git关联已不在，主仓库worktree列表也不列出该目录；来源不明，未重建Git或覆盖旧目录，现有文件完整保留。下一次Git操作先核实来源/恢复关联，不能从旧目录打包替代1.0.4。本轮SunnyUI改动尚未提交/推送，安装包和Skill已本地生成；没有新GitHubRelease。
+
+# 2026-10-23 当前交付：1.0.4 /77 电视本地测试
+
+最新实际工作区仍为 `C:/Users/Sunny/.codex/worktrees/ugreen-lan-tls/SunnyTV`。本轮含API30–32玻璃兼容、固定亮度/暗边扇区/防闪灯带、有限BLE重连与远端健康检查，以及原生等比裁切/独立拉伸/编码黑边识别。API33+玻璃及原签名/校准/媒体取流保持。新增核心文件LegacyGlass、VideoGeometry、VideoFrameCropper，详见[1.0.4本地记录](RELEASE-1.0.4-LOCAL.md)。
+
+最终APK已仅投放 `Z:/V3 Download/tv apk/SunnyTV-v1.0.4-77.apk`，29,392,809字节，SHA256 `1131a9e6c08b306d6dfe81b070f1a0842238ee293d5c2255543142f15c684b99`，NAS回读一致。203单测、172契约、release/AndroidTest、完整lint（0错45/48警告），实际签名包API30 TV/API34各13项通过、无跳过。实体电视/灯带未连接，长时蓝牙及真实影片待反馈。GitHub仍暂缓，勿覆盖已分发同版本APK，下一客户端改动递增到1.0.5 /78。
+
+以下为历史记录。
+
+# 2026-10-22 SunnyTV 1.0.3 /76 多集音频入口与玻璃弹窗微调
+
+默认音频入口仅保留Series/Season详情的纯图标，聚焦也不展开文字；电影/单集直接指定实际音轨，旧单集默认语言不再覆盖剧集。弹窗圆角上限24dp，玻璃底色16%→21%。材质区新增当前Android版本及玻璃不可用原因，仍要求Android13+、硬件加速、高开销主题授权、非低负载。电视版本尚未取得。
+
+release/AndroidTest编译、196单测、172核心契约、最终原签名包API34定向11项及窄屏3项均通过。完整lint为0错误，debug44/release47警告（其中3项是测试夹具screenWidthDp的Compose建议）。无本轮手机/实体TV新安装或验收。GitHub仍暂缓，未提交/推送/发布。
+
+只投放APK到`Z:/V3 Download/tv apk/SunnyTV-v1.0.3-76.apk`，29,376,425字节，SHA256 `8094860b55324dd686cd9a1ebaf7f4c2ac8a8466b61bd257b0ca3a47c3b8c181`，NAS回读一致；原版本保留。验证与实现边界见[1.0.3本地记录](RELEASE-1.0.3-LOCAL.md)。以下为历史记录。
+
+# 2026-10-22 当前交付：1.0.2 /75（GitHub发布暂缓）
+
+用户在1.0.1发布前要求改弹窗与默认音频，并纠正为每部媒体详情设置。已实现完整页面（含海报墙）玻璃取样、外侧不压暗、排序等宽等高，以及按电影/剧集/季保存的默认音频。每单集设置优先，连续播放按新集重配；不再有媒体库默认音频按钮。详情会显示继承的剧集偏好。
+
+最终APK已覆盖安装手机保留配置，并只投放`Z:/V3 Download/tv apk/SunnyTV-v1.0.2-75.apk`，29,376,425字节，SHA256 `4808cd5443a36992f99764987deb634cbc67893bd917978a9e85dbf693327014`。196单测、172核心契约、release/AndroidTest编译、完整lint（0错/44既有警告）、API34实际签名原包26项及竖屏3项通过。没有新增TV实机验收。未提交/推送或创建新GitHubRelease，1.0.1原包保留。证据与已处理的测试问题见[1.0.2本地记录](RELEASE-1.0.2-LOCAL.md)、`.local-tests/102`。以下为历史记录。
+
+# 2026-10-22 SunnyTV 1.0.1 /74 本地新图标测试包
+
+用户已确认54个重绘图标，要求提供新版APK到原tv apk目录。新包包含三推杆设置、叠放媒体卡片、饱满播放控件及一体玻璃修订，保留1.0.0功能、安装ID和签名。release/AndroidTest编译、192单测、172核心契约、debug/release lint（均0错/44既有警告）通过；实际签名包从1.0.0 /73覆盖升级，11项API34原生回归通过。实体TV视觉及灯带效果待用户安装验收。
+
+已仅复制APK到`Z:/V3 Download/tv apk/SunnyTV-v1.0.1-74.apk`并回读校验，29,376,511字节，SHA256 `9b300553d6f0acac84959b567bd114a4aeddb447222990b82828483b3a541344`。为保持音频行为，最终包保留公开1.0.0的四ABI原生库，DEX/资源/Manifest与本轮编译一致，重新对齐并用既有密钥签名。未发布GitHub新Release、覆盖旧APK或写NAS JSON。详见[1.0.1本地记录](RELEASE-1.0.1-LOCAL.md)。
+
+以下为历史记录。
+
 # 2026-10-22 图标重绘与官网图文修订（未新发APK）
 
 本轮验证：192项单测零失败，Debug与AndroidTest编译通过，lint零错误/44项既有警告；54图标在20dp和40dp逐个渲染无裁切，实际播放器焦点与清晰度文字回归通过。最终API34原生截图测试通过，25个上线文件HTTP200且SHA256一致。

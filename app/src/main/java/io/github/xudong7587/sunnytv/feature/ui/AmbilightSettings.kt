@@ -61,7 +61,7 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
         onDispose {lifecycle.removeObserver(observer);lights.leaveSettings()}
     }
     Column(Modifier.fillMaxWidth().testTag("settings:ambilight"),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        Text("SP658E · 播放同步四边向内 5% 的颜色；停止播放显示固定色，退出 SunnyTV 后熄灯。",color=SunnyColors.Secondary,fontSize=14.sp)
+        Text("SP658E · 边缘优先取色，暗边向内扩展；亮度固定、颜色平滑，黑屏保持上一色。停止播放显示固定色，退出 SunnyTV 后熄灯。",color=SunnyColors.Secondary,fontSize=14.sp)
         Text(status,color=SunnyColors.Accent,fontSize=17.sp)
         Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Action(if(connected) "重新连接" else "连接灯带",id="lights:connect",primary=true,alwaysShowLabel=true) {connect()}

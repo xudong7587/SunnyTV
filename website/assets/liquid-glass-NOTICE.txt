@@ -1,0 +1,18 @@
+Sunny UI 2.1 liquid glass
+
+Lens geometry ported from SunnyTV's GlassShaders.kt to a geometry-only SVG displacement texture.
+SunnyTV source: https://github.com/xudong7587/SunnyTV
+Upstream: https://github.com/compose-miuix-ui/miuix
+Pinned upstream revision: 153920c7e196de1f1c8188e16162f3ce4864b016
+Copyright 2026, compose-miuix-ui contributors. Apache-2.0.
+Original lens upstream: Kyant0/AndroidLiquidGlass, Apache-2.0.
+
+Relevant upstream files:
+example/shared/src/commonMain/kotlin/component/liquid/Lens.kt
+miuix-blur/src/commonMain/kotlin/top/yukonga/miuix/kmp/blur/internal/Shaders.kt
+
+Changes: TypeScript rounded-rectangle distance/gradient and circleMap; generated RG displacement
+texture, live browser backdrop filtering, mild diffusion/saturation, independent HTML foreground,
+native popover/dialog integration, resize-driven cache and reduced-transparency/forced-colors fallback.
+The Android renderer/GraphicsLayer pipeline was not copied. This is not a pixel-identical AGSL port.
+Apache-2.0 text is included as liquid-glass-LICENSE.txt. Other Sunny UI code remains GPL-3.0-only.

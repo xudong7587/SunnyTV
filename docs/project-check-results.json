@@ -58,6 +58,10 @@
       "passed": true
     },
     {
+      "name": "Python syntax generate-framing-fixture.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax generate-readme-art.py",
       "passed": true
     },
@@ -66,11 +70,19 @@
       "passed": true
     },
     {
+      "name": "Python syntax generate-sunny-icons.py",
+      "passed": true
+    },
+    {
       "name": "Python syntax import-sunny-appearance.py",
       "passed": true
     },
     {
       "name": "Python syntax package-native-relink.py",
+      "passed": true
+    },
+    {
+      "name": "Python syntax prepare-website-seven.py",
       "passed": true
     },
     {

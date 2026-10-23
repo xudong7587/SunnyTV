@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -22,13 +23,22 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.unit.*
 import kotlin.math.roundToInt
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 /** A display list, not a CPU screenshot. Capture excludes consumers, so recursion is impossible. */
 @Stable class GlassBackdrop(val layer:GraphicsLayer) {
     var coordinates:LayoutCoordinates? by mutableStateOf(null,neverEqualPolicy())
     var ready by mutableStateOf(false)
+    internal var legacyLayer:GraphicsLayer?=null
+    internal val updates=Channel<Unit>(Channel.CONFLATED)
+    internal var legacyFrame:LegacyGlassFrame? by mutableStateOf(null)
 }
 val LocalGlassBackdrop=staticCompositionLocalOf<GlassBackdrop?> {null}
+/** The complete page (including poster rows), captured before floating chrome and native dialogs. */
+val LocalChoiceBackdrop=staticCompositionLocalOf<GlassBackdrop?> {null}
 
 /** Per-page source registry. Artwork is recorded before controls; consumers never record themselves. */
 @Stable class GlassButtonSceneState(val fallback:GlassBackdrop) {
@@ -57,20 +67,41 @@ val LocalGlassButtonScene=staticCompositionLocalOf<GlassButtonSceneState?> {null
 }
 
 @Composable fun rememberGlassBackdrop(enabled:Boolean):GlassBackdrop? {
-    if(!enabled || Build.VERSION.SDK_INT<33) return null
+    if(!enabled || Build.VERSION.SDK_INT<30) return null
     val layer=rememberGraphicsLayer()
-    return remember(layer) {GlassBackdrop(layer)}
+    val source=remember(layer) {GlassBackdrop(layer)}
+    if(Build.VERSION.SDK_INT<33) {
+        val snapshot=rememberGraphicsLayer()
+        SideEffect {source.legacyLayer=snapshot}
+        LaunchedEffect(source) {
+            for(update in source.updates) {
+                if(!source.ready)continue
+                // Export only a downsampled, shared source. Never copy the full screen per button.
+                val image=snapshot.toImageBitmap()
+                source.legacyFrame=withContext(Dispatchers.Default) {legacyGlassFrame(image)}
+                delay(100) // <=10 source exports/s; changes are conflated, no idle frame loop.
+            }
+        }
+    }
+    return source
 }
 fun Modifier.captureGlassBackdrop(source:GlassBackdrop?):Modifier = if(source==null) this else
     onGloballyPositioned {source.coordinates=it}.drawWithContent {
         source.layer.record {this@drawWithContent.drawContent()}
         source.ready=true
+        source.legacyLayer?.let {snapshot->
+            val factor=minOf(.25f,640f/maxOf(size.width,size.height))
+            snapshot.record(size=IntSize((size.width*factor).roundToInt().coerceAtLeast(1),(size.height*factor).roundToInt().coerceAtLeast(1))) {
+                scale(factor,factor,pivot=Offset.Zero) {drawLayer(source.layer)}
+            }
+            source.updates.trySend(Unit)
+        }
         drawLayer(source.layer)
     }
 
 /** Local padded crop only. Text/icons are drawn afterwards and never enter the shader. */
 @Composable fun Modifier.liquidGlass(source:GlassBackdrop,shape:Shape,radius:Dp,material:String,surfaceAlpha:()->Float={.04f}):Modifier {
-    if(Build.VERSION.SDK_INT<33) return materialSurface(shape)
+    if(Build.VERSION.SDK_INT<33) return legacyLiquidGlass(source,shape,radius,material,surfaceAlpha)
     return liquidGlass33(source,shape,radius,material,surfaceAlpha)
 }
 private class GlassEffectCache {var size=Size.Zero;var effect:RenderEffect?=null}

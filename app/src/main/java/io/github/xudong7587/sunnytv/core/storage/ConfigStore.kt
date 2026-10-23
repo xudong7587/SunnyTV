@@ -146,9 +146,13 @@ class ConfigStore(context: Context) {
         ,prefs.getBoolean("monetEnabled",false)
         ,MonetPolicy.source(prefs.getString("monetSource","system").orEmpty())
         ,MonetPolicy.style(prefs.getString("monetStyle","tonal_spot").orEmpty())
+        ,prefs.all.filterKeys {it.startsWith("mediaAudio:")}.mapNotNull {(key,value)->
+            (value as? String)?.let {key.removePrefix("mediaAudio:") to AudioPreference.normalize(it)}
+        }.toMap()
     )
     fun saveSettings(s: AppSettings) {
         val libraryEditor=prefs.edit()
+        s.mediaAudioPreferences.forEach {(key,value)->libraryEditor.putString("mediaAudio:$key",AudioPreference.normalize(value))}
         s.librarySubtitlePreferences.forEach {(key,value)->libraryEditor.putString("librarySubtitle:$key",value)}
         s.episodeLayouts.forEach {(key,value)->libraryEditor.putString("episodeLayout:$key",value)}
         s.libraryArtworkModes.forEach {(key,value)->libraryEditor.putString("libraryArtwork:$key",value)}

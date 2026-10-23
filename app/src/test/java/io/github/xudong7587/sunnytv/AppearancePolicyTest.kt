@@ -51,7 +51,8 @@ class AppearancePolicyTest {
             assertEquals(id,AppearancePolicy.effectiveMaterial(id,true,false,36))
         }
         for(id in listOf("glass","aurora","frosted")) {
-            assertEquals("clear",AppearancePolicy.effectiveMaterial(id,true,false,30))
+            assertEquals(id,AppearancePolicy.effectiveMaterial(id,true,false,30))
+            assertEquals("clear",AppearancePolicy.effectiveMaterial(id,true,false,29))
             assertEquals("clear",AppearancePolicy.effectiveMaterial(id,true,false,36,false))
         }
         assertEquals("clear",AppearancePolicy.material("unknown"))

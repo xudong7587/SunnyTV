@@ -54,7 +54,11 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                         bitmap.getPixels(pixels,0,160,0,0,160,90)
                         lights.frame(owner,EdgeColors.sample(pixels,160,90,config.vivid),SystemClock.elapsedRealtime()-began)
                         failures=0
-                    } else if(++failures>=5) {lights.idle(owner);lights.note("视频层暂时无法取色（$result），等待画面恢复")}
+                    } else if(++failures==5) {
+                        // Keep the last stable color. Alternating PixelCopy failures/successes must
+                        // never switch the strip between fixed color and video color repeatedly.
+                        lights.note("视频层暂时无法取色（$result），保持当前颜色并等待画面恢复")
+                    }
                 }
                 main.post {inFlight=false;if(closed)dispose()}
             }

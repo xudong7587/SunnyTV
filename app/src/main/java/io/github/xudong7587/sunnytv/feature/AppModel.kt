@@ -499,8 +499,15 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
         }
     }
     private fun subtitlePreference(item:MediaEntry):String {
-        val library=mediaLibraries[item.key] ?: stack.filterIsInstance<Route.Library>().lastOrNull()?.item?.key
+        val library=mediaLibraries[item.key] ?: (route as? Route.Library)?.item?.key ?: stack.filterIsInstance<Route.Library>().lastOrNull()?.item?.key
         return settings.librarySubtitlePreferences[library] ?: settings.subtitlePreference
+    }
+    private fun audioScope(item:MediaEntry,container:MediaEntry):String {
+        container.takeIf {it.type in setOf("Series","Season")}?.let {return it.key}
+        val series=item.seriesId.takeIf {it.isNotBlank()} ?: return ""
+        val detail=(route as? Route.Detail)?.item?.takeIf {it.sourceId==item.sourceId &&
+            ((it.type=="Series" && it.id==series) || (it.type=="Season" && it.seriesId==series && it.season==item.season))}
+        return detail?.key ?: "${item.sourceId}:$series"
     }
     fun loadFolder(id: String, path: String) {
         launchLoad("folder:$id:$path", replace = true) { folders["$id:$path"] = app.dav(source(id)).list(path) }
@@ -537,7 +544,13 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
             try {
                 val config = source(item.sourceId)
                 val playable=if(config.kind==SourceKind.EMBY && item.type in setOf("Series","Season")) app.emby(config).playableEpisode(item,fromStart) else item
-                val selectedAudioTrack=selectedAudio[playable.key] ?: selectedAudio[item.key]
+                val explicitAudioTrack=selectedAudio[playable.key] ?: selectedAudio[item.key]
+                val audioScope=audioScope(playable,item)
+                val preferredAudio=AudioPreference.forMedia(settings.mediaAudioPreferences,playable,audioScope)
+                val knownAudio=details[playable.key]?.let {detail->
+                    detail.versions.firstOrNull {it.id==selectedVersion[playable.key]}?.tracks ?: detail.tracks
+                } ?: playable.tracks
+                val selectedAudioTrack=explicitAudioTrack ?: AudioPreference.choose(knownAudio,preferredAudio)
                 if(config.kind==SourceKind.EMBY && selectedSubtitleTrack[playable.key]==null && selectedSubtitle[playable.key]!="none") {
                     app.store.seriesSubtitle(config.id,playable.seriesId)?.let {choice->
                         try {withTimeout(15_000) {app.emby(config).ensureSeriesSubtitle(playable,choice,selectedVersion[playable.key].orEmpty())}
@@ -554,8 +567,9 @@ class AppModel @JvmOverloads constructor(application: Application, private val r
                 val chosenSubtitle=selectedSubtitleTrack[playable.key]
                 val version=details[playable.key]?.versions?.firstOrNull {it.id==request.mediaSourceId}
                 val embedded=(version?.tracks ?: details[playable.key]?.tracks ?: playable.tracks).filter {it.type=="Subtitle" && !it.external}
-                ready(request.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),
-                    audioLanguage=selectedAudioTrack?.language.orEmpty(),audioTitle=selectedAudioTrack?.title.orEmpty(),
+                val audioRequest=if(explicitAudioTrack!=null) request.copy(audioLanguage=explicitAudioTrack.language,
+                    audioTitle=explicitAudioTrack.title,audioPreference=preferredAudio) else AudioPreference.apply(request,preferredAudio)
+                ready(audioRequest.copy(requestedAtMs = requestedAt, sourceReadyAtMs = SystemClock.elapsedRealtime(),audioPreferenceScope=audioScope,
                     subtitlePreference=if(selectedSubtitle[playable.key]=="none") "none" else subtitlePreference(item),
                     subtitleTitle=chosenSubtitle?.title.orEmpty(),
                     explicitSubtitle=chosenSubtitle!=null,

@@ -29,6 +29,8 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
     private var mode=-1
     private var level=-1
     private var began=0L
+    private var stateTicket=0
+    private var queriedAt=0L
     private data class Target(val rgb:Int?,val slots:ByteArray?,val brightness:Int,val created:Long=SystemClock.elapsedRealtime())
     private fun uuid(short:String)=UUID.fromString("0000$short-0000-1000-8000-00805f9b34fb")
     private fun current(g:BluetoothGatt)=!closed && g===gatt
@@ -98,11 +100,23 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
     }
     private fun readState(packet:ByteArray) {
         val bytes=decoder.accept(packet,SystemClock.elapsedRealtime())?:return
-        if(bytes.size<82 || configured)return
+        if(bytes.size<82)return
+        stateTicket++
+        if(configured)return
         if(String(bytes,11,8,Charsets.US_ASCII)!="V4023.21" || bytes[19]!=6.toByte()) {fail("此版本仅验证 SP658E / V4023.21 / SPI RGB");return}
         if(bytes[29]!=1.toByte()) {fail("请先开启灯带电源，再连接");return}
         configured=true;status("SP658E 已连接")
-        ready(gatt!!.device.address);drain()
+        ready(gatt!!.device.address);drain();scheduleHealthCheck()
+    }
+    private fun scheduleHealthCheck() {
+        worker.postDelayed({
+            if(closed || !configured)return@postDelayed
+            // A stack write callback alone cannot prove the remote controller is still alive.
+            val serial=stateTicket
+            writes.add(Sp658eProtocol.query);drain()
+            worker.postDelayed({if(!closed && stateTicket==serial)fail("灯带状态响应超时，正在重新连接")},6000)
+            scheduleHealthCheck()
+        },15_000)
     }
     fun fixed(rgb:Int,brightness:Int) {if(!closed){pending=Target(rgb,null,brightness);drain()}}
     fun custom(slots:ByteArray,brightness:Int) {if(!closed){pending=Target(null,slots.clone(),brightness);drain()}}
@@ -118,7 +132,11 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
             else {
                 if(mode!=7 || level!=next.brightness) writes.add(Sp658eProtocol.frame(0x52,byteArrayOf(0,0,0,next.brightness.toByte())))
                 writes.add(Sp658eProtocol.frame(0x63,requireNotNull(next.slots)))
-                if(mode!=7)writes.add(Sp658eProtocol.frame(0x53,byteArrayOf(7,1)))
+                // Periodically reassert the *static* custom effect. A controller restart or another
+                // client's effect change must not leave our color slots playing a dynamic effect.
+                if(mode!=7 || SystemClock.elapsedRealtime()-queriedAt>=1500) {
+                    writes.add(Sp658eProtocol.frame(0x53,byteArrayOf(7,1)));queriedAt=SystemClock.elapsedRealtime()
+                }
             }
         }
         if(writes.isEmpty())return

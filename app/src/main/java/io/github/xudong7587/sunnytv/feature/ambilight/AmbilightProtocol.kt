@@ -126,7 +126,82 @@ object EdgeColors {
             }
             return (rgb[0] shl 16) or (rgb[1] shl 8) or rgb[2]
         }
-        return intArrayOf(mean(left,top,right,top+dy),mean(right-dx,top,right,bottom),
+        val edges=intArrayOf(mean(left,top,right,top+dy),mean(right-dx,top,right,bottom),
             mean(left,bottom-dy,right,bottom),mean(left,top,left+dx,bottom))
+        // A dark edge expands into its own triangular sector, never into an unrelated opposite edge.
+        // Ignore near-black pixels here: their varying area must not modulate the strip's brightness.
+        fun value(c:Int)=maxOf(c shr 16 and 255,c shr 8 and 255,c and 255)
+        if((0 until width*height).none {value(pixels[it])>=12})return edges
+        for(side in 0..3) if(value(edges[side])<12) {
+            for(depth in listOf(.15f,.30f,.50f,1f)) {
+                var r=0L;var g=0L;var b=0L;var count=0
+                for(y in top until bottom) for(x in left until right) {
+                    val nx=(x-left+.5f)/(right-left);val ny=(y-top+.5f)/(bottom-top)
+                    val distance=when(side) {0->ny;1->1-nx;2->1-ny;else->nx}
+                    if(distance>depth || distance>minOf(ny,1-nx,1-ny,nx)+.001f)continue
+                    val c=pixels[y*width+x]
+                    if(value(c)<12)continue
+                    r+=c shr 16 and 255;g+=c shr 8 and 255;b+=c and 255;count++
+                }
+                if(count>=maxOf(4,(right-left)*(bottom-top)/500)) {
+                    edges[side]=((r/count).toInt() shl 16) or ((g/count).toInt() shl 8) or (b/count).toInt()
+                    break
+                }
+            }
+        }
+        return edges
     }
+}
+
+/** Brightness is the user's hardware level, not the movie's exposure. Black holds the last hue.
+ * Three-frame median rejects isolated flashes; time-based interpolation cannot oscillate by itself.
+ */
+internal class StableLightColors(fallback:Int) {
+    private var current=IntArray(4) {normalize(fallback).takeIf {it!=0} ?: 0xffffff}
+    private val history=java.util.ArrayDeque<IntArray>()
+    private var lastAt=0L
+    fun next(colors:IntArray,nowMs:Long):IntArray {
+        require(colors.size==4)
+        history.addLast(colors.map(::normalize).toIntArray())
+        if(history.size>3)history.removeFirst()
+        val alpha=(1-kotlin.math.exp(-(if(lastAt==0L)100L else (nowMs-lastAt).coerceIn(1,250)).toDouble()/450)).toFloat()
+        lastAt=nowMs
+        if(history.size<3)return current.clone()
+        val frames=history.toList()
+        current=IntArray(4) {side->
+            var target=0
+            for(shift in listOf(16,8,0)) {
+                val channels=frames.map {it[side] shr shift and 255}.sorted()
+                target=target or (channels[1] shl shift)
+            }
+            target=normalize(target)
+            if(target==0)current[side] else {
+                var mixed=0
+                for(shift in listOf(16,8,0)) {
+                    val before=current[side] shr shift and 255;val after=target shr shift and 255
+                    val step=if(kotlin.math.abs(after-before)<=3)after else
+                        (before+(after-before)*alpha).toInt().coerceIn(0,255)
+                    mixed=mixed or (step shl shift)
+                }
+                normalize(mixed)
+            }
+        }
+        return current.clone()
+    }
+    private fun normalize(c:Int):Int {
+        val high=maxOf(c shr 16 and 255,c shr 8 and 255,c and 255)
+        if(high<12)return 0
+        return ((c shr 16 and 255)*255/high shl 16) or ((c shr 8 and 255)*255/high shl 8) or ((c and 255)*255/high)
+    }
+}
+
+/** A finite reconnect budget per outage; explicit disconnect cancels scheduled attempts. */
+internal class LightReconnect {
+    private var attempts=0
+    var cancelled=false
+        private set
+    fun reset() {attempts=0;cancelled=false}
+    fun cancel() {cancelled=true}
+    fun nextDelay():Long? = if(cancelled || attempts>=10)null else
+        (1500L shl (attempts++).coerceAtMost(4)).coerceAtMost(30_000L)
 }

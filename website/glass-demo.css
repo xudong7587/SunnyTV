@@ -1,0 +1,23 @@
+/* Host layout for the same Sunny UI 2.1 component. Website theme remains white / black. */
+.web-glass-preview{margin:0 0 34px;border-radius:24px;overflow:hidden;background:var(--soft)}
+.web-glass-scene{position:relative;display:grid;place-items:center;min-height:340px;padding:35px 16px}
+.web-glass-scene>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.web-glass-scene>.sunny-glass-toolbar{border-radius:40px;--sunny-glass-opacity:8%;--text:var(--web-glass-ink,#141416);padding:7px;gap:12px;max-width:100%;color:var(--text)}
+.web-glass-scene .sunny-glass-toolbar a{display:flex;align-items:center;justify-content:center;gap:12px;padding:13px 18px;font-size:16px}
+.web-glass-scene svg{width:27px;height:27px;flex:none}
+.web-glass-preview figcaption{padding:17px 20px}
+.web-glass-tools{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:35px}
+.web-glass-choices{display:flex;gap:8px;flex-wrap:wrap}
+.web-glass-choices button{padding:9px 15px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--text);font:inherit;font-size:12px;cursor:pointer}
+.web-glass-choices button[aria-pressed=true]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.web-glass-tools .text-link{background:none;border:0;color:var(--text);font:inherit;font-size:12px;cursor:pointer}
+.web-glass-info{width:min(520px,calc(100% - 36px));max-height:calc(100dvh - 48px);padding:10px;margin:auto;position:fixed}
+.web-glass-info>.sunny-glass-reading{padding:20px}
+.web-glass-info[data-sunny-glass]{--sunny-glass-opacity:21%}
+.web-glass-info h3{font-size:24px;letter-spacing:-.5px;margin-bottom:20px}
+.web-glass-info p{font-size:14px;line-height:1.9;margin-bottom:16px}
+.web-glass-info a{text-decoration:underline;text-underline-offset:4px}
+.web-glass-info button{font:inherit;color:var(--text);background:color-mix(in srgb,var(--surface) 50%,transparent);border:1px solid var(--line);border-radius:12px;padding:10px 18px;cursor:pointer}
+.testing-note{font-size:12px;line-height:1.9;color:var(--muted);margin-top:16px}
+.compatibility .testing-note{font-size:11px}
+@media(max-width:600px){.web-glass-scene{min-height:240px}.web-glass-scene>.sunny-glass-toolbar{gap:4px;padding:6px}.web-glass-scene .sunny-glass-toolbar a{padding:12px 10px;gap:0}.web-glass-scene .sunny-glass-toolbar span{display:none}.web-glass-preview{border-radius:14px}.web-glass-info>.sunny-glass-reading{padding:14px}.web-glass-info h3{font-size:21px}}

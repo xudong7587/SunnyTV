@@ -749,11 +749,12 @@ import coil.request.ImageRequest
         }
         if(model.carouselRefreshing) SunnyBrandLoading(true,Modifier.matchParentSize(),scopeTag="library:loading",scrim=true)
     }
-    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"字幕优先级（未匹配时跟随媒体默认）";else->"展现方式"},
+    if(chooser.isNotEmpty()) ChoiceDialog(when(chooser) {"sort"->"排序";"subtitle"->"默认字幕";else->"展现方式"},
         when(chooser) {"sort"->(if(green) MediaLogic.ugreenSorts else Presentation.sorts).map {(key,label)->key to
-            (if(key==sort && key!="Random") "$label · ${if(ascending) "升序" else "降序"}（再点切换）" else label)+if(green && key!="SortName") " · 本地" else ""};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
+            when(key) {"CommunityRating"->"IMDb 评分";else->label}};"subtitle"->listOf("default" to "跟随媒体默认")+Presentation.subtitles
             else->listOf("Poster" to "海报 · Poster","Thumb" to "背景 · Thumb","Banner" to "横幅 · Banner")},
         when(chooser) {"sort"->sort;"subtitle"->subtitlePreference;else->mode},onDismiss={chooser=""},
+        description=when(chooser) {"sort"->"当前${if(ascending) "升序" else "降序"} · 再次选择同一项可切换顺序${if(green) "。此排序仅在本机生效。" else "。"}";"subtitle"->"优先使用所选字幕，未匹配时跟随媒体默认。";else->""},
         // Twelve sort keys fit three to a row, so every option is reachable without scrolling.
         columns=if(chooser=="sort") 3 else 1) {value->
         when(chooser) {"sort"->{ascending=if(sort==value) !ascending else value=="SortName";sort=value;model.loadLibrary(library,sort,ascending=ascending)}

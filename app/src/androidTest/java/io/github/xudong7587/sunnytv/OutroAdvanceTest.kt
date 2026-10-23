@@ -23,6 +23,7 @@ class OutroAdvanceTest {
   val context=instrument.targetContext
   val bytes=instrument.context.assets.open("quality/original.mp4").use {it.readBytes()}
   val store=ConfigStore(context);val old=store.sources()
+  val oldSettings=store.settings()
   val requests=AtomicInteger()
   val server=MockWebServer()
   server.start()
@@ -46,14 +47,16 @@ class OutroAdvanceTest {
   val monitor=instrument.addMonitor(PlayerActivity::class.java.name,null,false)
   try {
    store.saveSources(listOf(SourceConfig("outro-fixture",SourceKind.EMBY,"Fixture",server.url("/").toString(),"fixture-user")))
-   ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,PlaybackRequest("outro-fixture",server.url("current.mp4").toString(),"第一集"))).use {scenario->
+   store.saveSettings(oldSettings.copy(mediaAudioPreferences=mapOf("outro-fixture:series" to "ja","outro-fixture:current" to "en","outro-fixture:next" to "yue")))
+   ActivityScenario.launch<PlayerActivity>(PlayerActivity.intent(context,PlaybackRequest("outro-fixture",server.url("current.mp4").toString(),"第一集",
+    audioPreference="en",audioPreferenceScope="outro-fixture:series"))).use {scenario->
     rule.waitUntil(15_000) {var ready=false;scenario.onActivity {ready=player(it).isPlaying};ready}
     // Consume the first launch; the next monitor hit must be the adjacent episode.
     monitor.waitForActivityWithTimeout(100)
     scenario.onActivity {a->
      player(a).pause()
-     val current=MediaEntry("current","outro-fixture","第一集","Episode")
-     val next=MediaEntry("next","outro-fixture","第二集","Episode")
+     val current=MediaEntry("current","outro-fixture","第一集","Episode",seriesId="series")
+     val next=MediaEntry("next","outro-fixture","第二集","Episode",seriesId="series")
      // Metadata duration deliberately differs from the decoder duration. The skip must not
      // rely on a seek hitting either end exactly or on a subsequent STATE_ENDED callback.
      val pc=PlayerMediaContext(current,next=next,skipSegments=listOf(SkipSegment("outro","outro",0,50_000)))
@@ -66,10 +69,17 @@ class OutroAdvanceTest {
     var title=""
     instrument.runOnMainSync {title=PlayerActivity::class.java.getDeclaredField("request").apply {isAccessible=true}.get(launched).let {(it as PlaybackRequest).title}}
     assertEquals("第二集",title)
+    instrument.runOnMainSync {
+     val nextRequest=PlayerActivity::class.java.getDeclaredField("request").apply {isAccessible=true}.get(launched) as PlaybackRequest
+     assertEquals("Single-episode defaults must not override the series language", "ja",nextRequest.audioPreference)
+     assertEquals("outro-fixture:series",nextRequest.audioPreferenceScope)
+    }
    }
   } finally {
    instrument.runOnMainSync {launched?.finish()}
-   instrument.removeMonitor(monitor);store.saveSources(old);server.shutdown()
+   instrument.removeMonitor(monitor);store.saveSources(old)
+   context.getSharedPreferences("sunny-config",0).edit().remove("mediaAudio:outro-fixture:series").remove("mediaAudio:outro-fixture:current").remove("mediaAudio:outro-fixture:next").commit()
+   store.saveSettings(oldSettings);server.shutdown()
   }
  }
 }

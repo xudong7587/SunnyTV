@@ -35,6 +35,10 @@ dist/
 /app/src/androidTest/assets/tone.dts
 # Generated synthetic lamp-test pattern, never a release asset.
 /app/src/androidTest/assets/ambilight.mp4
+/app/src/androidTest/assets/quality/framing.mp4
+/app/src/androidTest/assets/quality/multi-audio.mkv
+/app/src/androidTest/assets/quality/pce.m3u8
+/app/src/androidTest/assets/quality/pce-*.ts
 
 # User supplied cinema artwork is prepared only for website screenshot tests.
 /app/src/androidTest/assets/showcase-seven/

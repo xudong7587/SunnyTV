@@ -1,7 +1,6 @@
 package io.github.xudong7587.sunnytv
 
 import android.os.Build
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -33,7 +32,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class GlassCompositingTest {
- @get:Rule val rule=createAndroidComposeRule<ComponentActivity>()
+ @get:Rule val rule=createAndroidComposeRule<MainActivity>()
  @Test fun scrollingLayerPreservesGlassTransparencyInBothThemes() {
   assumeTrue(Build.VERSION.SDK_INT>=33)
   lateinit var model:AppModel

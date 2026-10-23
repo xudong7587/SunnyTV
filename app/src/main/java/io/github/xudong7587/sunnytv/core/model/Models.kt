@@ -75,7 +75,8 @@ data class PlaybackRequest(
     /** Server-provided remote source retained when playback prefers Emby's route. */
     val sourceMediaUrl:String? = null,
     /** Known source duration for progress reporting; zero means unknown. */
-    val durationMs:Long = 0
+    val durationMs:Long = 0,
+    val audioPreference:String = "default", val audioPreferenceScope:String = ""
 ) : Serializable
 
 data class RemoteSubtitle(val id:String,val name:String,val provider:String,val language:String,val format:String,val hashMatch:Boolean)
@@ -120,4 +121,5 @@ data class AppSettings(
     , val monetEnabled:Boolean = false
     , val monetSource:String = "system"
     , val monetStyle:String = "tonal_spot"
+    , val mediaAudioPreferences:Map<String,String> = emptyMap()
 )

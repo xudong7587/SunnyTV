@@ -1,7 +1,6 @@
 package io.github.xudong7587.sunnytv
 
 import android.graphics.Bitmap
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -30,7 +29,7 @@ import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class GlassMaterialRevisionTest {
- @get:Rule val rule=createAndroidComposeRule<ComponentActivity>()
+ @get:Rule val rule=createAndroidComposeRule<MainActivity>()
  private fun save(bitmap:Bitmap,name:String) {File(rule.activity.cacheDir,name).outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}
  @Test fun liquidControlCenterAddsAtMostTenPercentTintWhileFocusStaysVisible() {
   assumeTrue(android.os.Build.VERSION.SDK_INT>=33)

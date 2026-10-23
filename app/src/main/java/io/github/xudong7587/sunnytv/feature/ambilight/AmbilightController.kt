@@ -27,10 +27,13 @@ class AmbilightController(context:Context) {
     private var settingsOpen=false
     private val presence=LightPresence()
     private var preview=false
-    private var retries=0
+    private val reconnect=LightReconnect()
+    private var connectionSerial=0
     private var cleanup=0
     private var lastColors:IntArray?=null
     private var lastFrameAt=0L
+    private var lastSentAt=0L
+    private var colorFilter=StableLightColors(_config.value.fixedColor)
     private var metricAt=0L
     private var sentCount=0
     private var totalSendMs=0L
@@ -54,7 +57,7 @@ class AmbilightController(context:Context) {
             .putInt("tl",next.layout.topLeft).putInt("tr",next.layout.topRight).putInt("br",next.layout.bottomRight)
             .putInt("bl",next.layout.bottomLeft).putString("device",next.deviceAddress).apply()
         worker.post {
-            lastColors=null
+            lastColors=null;colorFilter=StableLightColors(next.fixedColor);reconnect.reset()
             if(!next.enabled) {restore();scheduleClose(force=true)}
             else {cleanup++;ensureConnected();if(!preview)restore()}
         }
@@ -63,7 +66,7 @@ class AmbilightController(context:Context) {
         val wasForeground=presence.foreground
         presence.started(activity);cleanup++
         if(!wasForeground) {
-            retries=0;preview=false;lastColors=null
+            reconnect.reset();preview=false;lastColors=null
             ensureConnected();restore()
         }
     }}
@@ -77,25 +80,29 @@ class AmbilightController(context:Context) {
             _metrics.value="SunnyTV 已退出，灯带已熄灭"
         }},350)
     }}
-    fun enterSettings() {worker.post {settingsOpen=true;cleanup++;retries=0;if(config.value.enabled)ensureConnected()}}
+    fun enterSettings() {worker.post {settingsOpen=true;cleanup++;reconnect.reset();if(config.value.enabled)ensureConnected()}}
     fun leaveSettings() {worker.post {settingsOpen=false;preview=false;if(presence.player==null || !presence.foreground)restore();scheduleClose()}}
     fun connect(forget:Boolean=false) {
         if(forget)save(config.value.copy(deviceAddress=""))
-        worker.post {cleanup++;retries=0;link?.close();link=null;_connected.value=false;ensureConnected()}
+        worker.post {cleanup++;connectionSerial++;reconnect.reset();link?.close();link=null;_connected.value=false;ensureConnected()}
     }
-    fun disconnect() {worker.post {retries=2;_connected.value=false;restore();scheduleClose(force=true)}}
+    fun disconnect() {worker.post {connectionSerial++;reconnect.cancel();_connected.value=false;restore();scheduleClose(force=true)}}
     private fun wanted()=config.value.enabled && presence.foreground
     private fun ensureConnected() {
-        if(link!=null || !wanted())return
+        if(link!=null || !wanted() || reconnect.cancelled)return
         if(!hasPermissions()) {_status.value="请在灯带设置中授权蓝牙";return}
         cleanup++
         val next=Sp658eLink(context,worker,config.value.deviceAddress,{_status.value=it},{address->
-            _connected.value=true;retries=0
+            _connected.value=true;reconnect.reset()
             val c=config.value
             if(c.deviceAddress!=address) {
                 _config.value=c.copy(deviceAddress=address);prefs.edit().putString("device",address).apply()
             }
-            restore();if(!wanted())scheduleClose()
+            val colors=lastColors
+            if(presence.player!=null && c.sync && colors!=null) {
+                link?.custom(Sp658eProtocol.edges(c.layout,colors),c.brightness);lastSentAt=SystemClock.elapsedRealtime()
+            } else restore()
+            if(!wanted())scheduleClose()
         },{elapsed->
             sentCount++;totalSendMs+=elapsed
             val now=SystemClock.elapsedRealtime()
@@ -106,13 +113,18 @@ class AmbilightController(context:Context) {
                 metricAt=now;sentCount=0;totalSendMs=0
             }
         },{
-            link=null;_connected.value=false;lastColors=null
-            if(wanted() && retries<2) {retries++;worker.postDelayed({ensureConnected()},1500)}
+            link=null;_connected.value=false
+            val delay=if(wanted())reconnect.nextDelay() else null
+            if(delay!=null) {
+                val serial=connectionSerial
+                worker.postDelayed({if(serial==connectionSerial)ensureConnected()},delay)
+            } else if(wanted() && !reconnect.cancelled) _status.value="灯带重连未成功，请检查电源后在设置中重新连接"
         })
         link=next;next.start()
     }
     fun startPlayback(owner:Any) {worker.post {
-        presence.play(owner);preview=false;cleanup++;retries=0;lastColors=null
+        presence.play(owner);preview=false;cleanup++;reconnect.reset();lastColors=null
+        colorFilter=StableLightColors(config.value.fixedColor)
         if(config.value.enabled)ensureConnected()
     }}
     fun stopPlayback(owner:Any) {worker.post {
@@ -123,8 +135,10 @@ class AmbilightController(context:Context) {
         val c=config.value
         if(!presence.acceptsFrame(owner,c,preview) || !_connected.value)return@post
         captureMs=costMs;lastFrameAt=SystemClock.elapsedRealtime()
-        if(lastColors?.contentEquals(colors)==true)return@post
-        try {link?.custom(Sp658eProtocol.edges(c.layout,colors),c.brightness);lastColors=colors.clone()}
+        val stable=colorFilter.next(colors,lastFrameAt)
+        // Refresh a static picture too; do not let a lost packet or controller reset persist forever.
+        if(lastColors?.contentEquals(stable)==true && lastFrameAt-lastSentAt<1500)return@post
+        try {link?.custom(Sp658eProtocol.edges(c.layout,stable),c.brightness);lastColors=stable;lastSentAt=lastFrameAt}
         catch(_:IllegalArgumentException) {_status.value="定位超出七段限制，请重新设定四角";restore()}
     }}
     fun idle(owner:Any,reason:String="暂停或等待视频，已恢复固定色") {worker.post {
