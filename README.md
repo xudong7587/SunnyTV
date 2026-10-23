@@ -60,7 +60,7 @@ SunnyTV 是基于 Kotlin、Compose for TV 与 Media3 的原生 Android 客户端
 
 ## 液态玻璃源码
 
-液态玻璃是 SunnyTV 的组成部分，随主项目继续开源，使用根目录 [GPL-3.0 许可证](LICENSE)。1.0.4 在 Android 11–12L 增加真实页面背景的玻璃兼容模式，Android 13 及以上使用 RuntimeShader；仍需硬件加速、允许高开销主题及非低负载模式，更低版本按能力回退。
+液态玻璃是 SunnyTV 的组成部分，随主项目继续开源，使用根目录 [GPL-3.0 许可证](LICENSE)。Android 11–12L 提供真实页面背景的玻璃兼容模式；1.0.5 对电视改用实时图层及轻量边缘折射，手机保持原实现。Android 13 及以上使用 RuntimeShader；仍需硬件加速、允许高开销主题及非低负载模式，更低版本按能力回退。
 
 源码入口：[LiquidGlass.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/LiquidGlass.kt)、[GlassShaders.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/GlassShaders.kt) 和 [NativeAppearance.kt](app/src/main/java/io/github/xudong7587/sunnytv/feature/ui/NativeAppearance.kt)。接入方式、透明度参数、性能边界和上游声明见 [液态玻璃说明](docs/LIQUID-GLASS.md)。上游 shader 摘录的 Apache-2.0 许可和版权声明保留在 [third_party/miuix-glass](third_party/miuix-glass)。
 

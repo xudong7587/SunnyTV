@@ -25,3 +25,7 @@
 独立诊断包（不同applicationId、本机已有调试密钥）被电视安装校验拒绝：INSTALL_FAILED_VERIFICATION_FAILURE。未关闭系统校验、未卸载正式版、未执行实体设备Android测试。普通file URI安装入口也不支持。不能把编译或单测当作实机通过。
 
 准备了分支候选CI：沿用现有签名Secret、原有单测/lint/包身份/签名检查及API30回归，再对最终release运行玻璃与裁切测试；只上传构建附件，不创建GitHub Release、不更新latest。
+
+## CI回归跟进
+
+候选CI [39962596711](https://github.com/xudong7587/SunnyTV/actions/runs/39962596711) 的构建/签名/既有Android回归及普通Android正式包5项定向测试通过。新增真正Android TV镜像回归中，4K完整缓冲、玻璃实时滚动和模式/生命周期测试通过，编码黑边圆形比例测试超时，未发布该候选。保留原画面断言；补上暂停切换解码缩放模式时同位置重投帧，并增加失败截图与FramingQA日志留存，等待重新验证。

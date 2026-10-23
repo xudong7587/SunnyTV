@@ -958,8 +958,13 @@ class PlayerActivity: ComponentActivity() {
             view.scaleX=1f;view.scaleY=1f
             val scaling=if(tvPlayback && activeResizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
                 C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING else C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            if(activePlayer!=null && activePlayer.videoScalingMode!=scaling)activePlayer.videoScalingMode=scaling
+            val scalingChanged=activePlayer!=null && activePlayer.videoScalingMode!=scaling
+            if(scalingChanged)activePlayer!!.videoScalingMode=scaling
             applyVideoGeometry(view)
+            // NativeWindow's scaling mode travels with queued decoder buffers. While paused,
+            // enqueue the same frame again so changing crop mode also updates the visible buffer.
+            if(tvPlayback && scalingChanged && activePlayer!=null && !activePlayer.playWhenReady &&
+                activePlayer.isCurrentMediaItemSeekable)activePlayer.seekTo(activePlayer.currentPosition)
             val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                 settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
             if(appliedSubtitle[0]!=key) {

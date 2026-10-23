@@ -1,3 +1,9 @@
+# 2026-10-23 SunnyTV 1.0.5 /78 发行准备
+
+用户明确要求先修复并发布GitHub新版，稍后自行安装复测。当前工作区为 `/Users/sunnydunn/Documents/ChatGPT/SunnyTV 2`，从GitHub main `8893c09`克隆，修复分支 `codex/tv-1.0.5-fixes`。已停止操作用户电视，不覆盖其安装或配置。此前版本/日志/图层来自1.0.4现场；新代码不能标作实体TV验收。
+
+修复包括统一灯带RGB限载及避免重复选灯效、完整4K缓冲取色和读回退避、TV解码器等比裁切，以及仅API30–32电视的实时玻璃图层。手机LegacyGlass与API33+shader未改。具体证据、已知限制及复测项见 [TV-REPAIR-1.0.5.md](TV-REPAIR-1.0.5.md)，发布说明见 [RELEASE-1.0.5.md](RELEASE-1.0.5.md)。本地212单测通过、编译通过、debug/release lint零错误；GitHub沿用现有签名Secret并运行Android与Android TV系统镜像回归，完成后才发布。以下为历史记录。
+
 # 2026-10-23 SunnyTV 1.0.4 与 SunnyUI 2.1.0 已发布
 
 [SunnyTV 1.0.4](https://github.com/xudong7587/SunnyTV/releases/tag/v1.0.4) /77 已公开并设置 latest，非草稿/非预发行。源码标签 051732dce295ab25be8b6b8f0703f5dcce693f64，[稳定发行 CI](https://github.com/xudong7587/SunnyTV/actions/runs/39940136128) 成功，含四 ABI 解码构建、单测、完整 lint、签名/内容检查、API30 debug 回归及最终原 APK 的46项 release 回归。此前一致性失败保留：完整 Windows/Linux 构建291项条目一致，原增量包仅 classes2.dex 有已审阅的 Compose 差异，严格绑定 APK 与两份 DEX 哈希，另290项一致；见 release-evidence/1.0.4-dex-variance.json。没有替换 APK 或跳过 Android 门禁。
