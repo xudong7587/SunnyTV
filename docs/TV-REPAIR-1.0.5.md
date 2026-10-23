@@ -29,3 +29,5 @@
 ## CI回归跟进
 
 候选CI [39962596711](https://github.com/xudong7587/SunnyTV/actions/runs/39962596711) 的构建/签名/既有Android回归及普通Android正式包5项定向测试通过。新增真正Android TV镜像回归中，4K完整缓冲、玻璃实时滚动和模式/生命周期测试通过，编码黑边圆形比例测试超时，未发布该候选。保留原画面断言；补上暂停切换解码缩放模式时1ms微调以重投帧（Media3 1.9.4源码明确忽略精确同位置seek），并增加失败截图与FramingQA日志留存，等待重新验证。
+
+候选CI [39965226918](https://github.com/xudong7587/SunnyTV/actions/runs/39965226918) 的普通Android50项及正式包5项通过，TV仍在编码黑边裁切失败。FramingQA明确显示圆形从304×303变为303×412，发生在pictureArea确定、Surface从1920×1080变为1920×1473后；仅切换模式时刷新不够。补上SurfaceHolder尺寸更新后重新提交解码缩放与暂停帧，保留全部断言继续验证。

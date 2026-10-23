@@ -229,9 +229,35 @@ class PlayerActivity: ComponentActivity() {
         isFocusable=false;isFocusableInTouchMode=false
         descendantFocusability=android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
         clipChildren=true
+        if(tvPlayback) {
+            val owner=this
+            (videoSurfaceView as? android.view.SurfaceView)?.holder?.addCallback(object:android.view.SurfaceHolder.Callback {
+                override fun surfaceCreated(holder:android.view.SurfaceHolder) {}
+                override fun surfaceDestroyed(holder:android.view.SurfaceHolder) {}
+                override fun surfaceChanged(holder:android.view.SurfaceHolder,format:Int,width:Int,height:Int) {
+                    // Queued buffers can retain the previous scaling geometry. Run after all
+                    // holder callbacks, then reapply the mode and refresh the resized surface.
+                    owner.post {if(lightPlayerView===owner && holder.surface.isValid)refreshTvVideoScaling(true)}
+                }
+            })
+        }
         addOnLayoutChangeListener {view,_,_,_,_,_,_,_,_->applyVideoGeometry(view as PlayerView)}
         findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
             .addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->applyVideoGeometry(this)}
+    }
+
+    private fun refreshTvVideoScaling(force:Boolean=false) {
+        val active=player ?: return
+        val scaling=if(resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING else C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        if(!force && active.videoScalingMode==scaling)return
+        active.videoScalingMode=scaling
+        // NativeWindow's scaling mode travels with queued decoder buffers. ExoPlayer ignores
+        // a seek to the exact current millisecond; a 1ms nudge queues a fresh paused frame.
+        if(rendered && !active.playWhenReady && active.isCurrentMediaItemSeekable) {
+            val at=active.currentPosition
+            active.seekTo(if(at>0)at-1 else 1)
+        }
     }
 
     private fun applyVideoGeometry(view:PlayerView) {
@@ -956,18 +982,10 @@ class PlayerActivity: ComponentActivity() {
             // Media3 calculates fit/zoom from the decoded size and pixel aspect ratio.
             // Avoid an additional view scale, which would crop a second time.
             view.scaleX=1f;view.scaleY=1f
-            val scaling=if(tvPlayback && activeResizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
-                C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING else C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            val scalingChanged=activePlayer!=null && activePlayer.videoScalingMode!=scaling
-            if(scalingChanged)activePlayer!!.videoScalingMode=scaling
+            if(tvPlayback)refreshTvVideoScaling()
+            else if(activePlayer!=null && activePlayer.videoScalingMode!=C.VIDEO_SCALING_MODE_SCALE_TO_FIT)
+                activePlayer.videoScalingMode=C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             applyVideoGeometry(view)
-            // NativeWindow's scaling mode travels with queued decoder buffers. ExoPlayer ignores
-            // a seek to the exact current millisecond; a 1ms nudge queues a fresh paused frame.
-            if(tvPlayback && scalingChanged && activePlayer!=null && !activePlayer.playWhenReady &&
-                activePlayer.isCurrentMediaItemSeekable) {
-                val at=activePlayer.currentPosition
-                activePlayer.seekTo(if(at>0)at-1 else 1)
-            }
             val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                 settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
             if(appliedSubtitle[0]!=key) {
