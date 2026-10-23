@@ -961,10 +961,13 @@ class PlayerActivity: ComponentActivity() {
             val scalingChanged=activePlayer!=null && activePlayer.videoScalingMode!=scaling
             if(scalingChanged)activePlayer!!.videoScalingMode=scaling
             applyVideoGeometry(view)
-            // NativeWindow's scaling mode travels with queued decoder buffers. While paused,
-            // enqueue the same frame again so changing crop mode also updates the visible buffer.
+            // NativeWindow's scaling mode travels with queued decoder buffers. ExoPlayer ignores
+            // a seek to the exact current millisecond; a 1ms nudge queues a fresh paused frame.
             if(tvPlayback && scalingChanged && activePlayer!=null && !activePlayer.playWhenReady &&
-                activePlayer.isCurrentMediaItemSeekable)activePlayer.seekTo(activePlayer.currentPosition)
+                activePlayer.isCurrentMediaItemSeekable) {
+                val at=activePlayer.currentPosition
+                activePlayer.seekTo(if(at>0)at-1 else 1)
+            }
             val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                 settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)
             if(appliedSubtitle[0]!=key) {
