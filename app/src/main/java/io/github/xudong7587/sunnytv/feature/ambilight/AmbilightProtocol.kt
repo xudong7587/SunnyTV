@@ -35,6 +35,22 @@ object Sp658eProtocol {
     fun fixed(rgb:Int,brightness:Int)=listOf(frame(0x53,byteArrayOf(1,1)),
         frame(0x52,byteArrayOf((rgb shr 16).toByte(),(rgb shr 8).toByte(),rgb.toByte(),brightness.coerceIn(1,255).toByte())))
 
+    /** Select an effect only on a real mode change. Re-selecting a static effect can restart
+     * the controller output even when its RGB target has not changed. */
+    fun update(rgb:Int?,slots:ByteArray?,brightness:Int,previousMode:Int,previousBrightness:Int):List<ByteArray> {
+        val level=brightness.coerceIn(1,255)
+        return buildList {
+            if(rgb!=null) {
+                if(previousMode!=1)add(frame(0x53,byteArrayOf(1,1)))
+                add(frame(0x52,byteArrayOf((rgb shr 16).toByte(),(rgb shr 8).toByte(),rgb.toByte(),level.toByte())))
+            } else {
+                if(previousMode!=7 || previousBrightness!=level)add(frame(0x52,byteArrayOf(0,0,0,level.toByte())))
+                add(frame(0x63,requireNotNull(slots)))
+                if(previousMode!=7)add(frame(0x53,byteArrayOf(7,1)))
+            }
+        }
+    }
+
     /** Seven run-length slots are a hardware constraint; never silently truncate a layout. */
     fun runs(colors:IntArray):ByteArray {
         require(colors.isNotEmpty() && colors.size<=600)
@@ -62,7 +78,43 @@ object Sp658eProtocol {
     fun marker(count:Int,address:Int)=runs(IntArray(count) {if(it==address) 0xffffff else 0})
 }
 
+/** Empirical RGB load envelope: this installation is stable at 24% full-strip white.
+ * Scale all channels together, including static previews, without changing the hardware level
+ * on every video frame. This is a conservative channel-load proxy, not a current measurement.
+ */
+internal object LightOutputLimit {
+    private const val CHANNEL_BUDGET=183 // 3 * 61 (24% of 255, rounded down)
+    private fun sum(rgb:Int)=(rgb shr 16 and 255)+(rgb shr 8 and 255)+(rgb and 255)
+    private fun scale(rgb:Int,factor:Double):Int =
+        (((rgb shr 16 and 255)*factor).toInt() shl 16) or
+        (((rgb shr 8 and 255)*factor).toInt() shl 8) or ((rgb and 255)*factor).toInt()
+    private fun factor(average:Double,brightness:Int)=if(average<=0)1.0 else
+        (CHANNEL_BUDGET*255.0/(average*brightness.coerceIn(1,255))).coerceAtMost(1.0)
+    fun fixed(rgb:Int,brightness:Int)=scale(rgb,factor(sum(rgb).toDouble(),brightness))
+    fun slots(slots:ByteArray,brightness:Int):ByteArray {
+        require(slots.size==29)
+        var units=0;var load=0L
+        for(k in 1 until slots.size step 4) {
+            val n=slots[k].toInt() and 255
+            units+=n
+            load+=n*((slots[k+1].toInt() and 255)+(slots[k+2].toInt() and 255)+(slots[k+3].toInt() and 255))
+        }
+        val factor=factor(if(units==0)0.0 else load.toDouble()/units,brightness)
+        return slots.clone().also {result->
+            for(k in 1 until result.size step 4)for(channel in 1..3)
+                result[k+channel]=((result[k+channel].toInt() and 255)*factor).toInt().toByte()
+        }
+    }
+}
+
 object VideoCrop {
+    fun visiblePixels(input:IntArray,output:IntArray,width:Int,height:Int,bounds:IntArray) {
+        require(input.size>=width*height && output.size>=width*height && bounds.size==4)
+        val left=bounds[0].coerceIn(0,width-1);val top=bounds[1].coerceIn(0,height-1)
+        val right=bounds[2].coerceIn(left+1,width);val bottom=bounds[3].coerceIn(top+1,height)
+        for(y in 0 until height)for(x in 0 until width)
+            output[y*width+x]=input[(top+y*(bottom-top)/height)*width+left+x*(right-left)/width]
+    }
     /** PixelCopy uses buffer pixels, which need not equal SurfaceView layout pixels. */
     fun bufferRect(viewWidth:Int,viewHeight:Int,left:Int,top:Int,right:Int,bottom:Int,bufferWidth:Int,bufferHeight:Int):IntArray {
         require(viewWidth>0 && viewHeight>0 && bufferWidth>0 && bufferHeight>0)
@@ -204,4 +256,10 @@ internal class LightReconnect {
     fun cancel() {cancelled=true}
     fun nextDelay():Long? = if(cancelled || attempts>=10)null else
         (1500L shl (attempts++).coerceAtMost(4)).coerceAtMost(30_000L)
+}
+
+/** Keep expensive vendor readbacks below about 10% duty cycle, with a bounded retry interval. */
+internal object VideoReadbackPacing {
+    fun cooldown(costMs:Long,fps:Int):Long = maxOf((1000L/fps.coerceAtLeast(1)-costMs).coerceAtLeast(0),
+        if(costMs>50)(costMs*9).coerceAtMost(5000) else 0)
 }

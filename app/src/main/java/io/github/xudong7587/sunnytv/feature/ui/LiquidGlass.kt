@@ -1,6 +1,8 @@
 package io.github.xudong7587.sunnytv.feature.ui
 
 import android.os.Build
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.*
 import androidx.compose.foundation.background
@@ -70,7 +72,8 @@ val LocalGlassButtonScene=staticCompositionLocalOf<GlassButtonSceneState?> {null
     if(!enabled || Build.VERSION.SDK_INT<30) return null
     val layer=rememberGraphicsLayer()
     val source=remember(layer) {GlassBackdrop(layer)}
-    if(Build.VERSION.SDK_INT<33) {
+    val television=(LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK)==Configuration.UI_MODE_TYPE_TELEVISION
+    if(Build.VERSION.SDK_INT<33 && !television) {
         val snapshot=rememberGraphicsLayer()
         SideEffect {source.legacyLayer=snapshot}
         LaunchedEffect(source) {
@@ -101,7 +104,11 @@ fun Modifier.captureGlassBackdrop(source:GlassBackdrop?):Modifier = if(source==n
 
 /** Local padded crop only. Text/icons are drawn afterwards and never enter the shader. */
 @Composable fun Modifier.liquidGlass(source:GlassBackdrop,shape:Shape,radius:Dp,material:String,surfaceAlpha:()->Float={.04f}):Modifier {
-    if(Build.VERSION.SDK_INT<33) return legacyLiquidGlass(source,shape,radius,material,surfaceAlpha)
+    if(Build.VERSION.SDK_INT<33) {
+        val television=(LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK)==Configuration.UI_MODE_TYPE_TELEVISION
+        return if(television) legacyTvLiquidGlass(source,shape,radius,material,surfaceAlpha)
+            else legacyLiquidGlass(source,shape,radius,material,surfaceAlpha)
+    }
     return liquidGlass33(source,shape,radius,material,surfaceAlpha)
 }
 private class GlassEffectCache {var size=Size.Zero;var effect:RenderEffect?=null}

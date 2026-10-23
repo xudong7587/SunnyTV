@@ -26,6 +26,37 @@ import java.io.File
 @SdkSuppress(minSdkVersion=30)
 class LegacyGlassTest {
     @get:Rule val rule=createAndroidComposeRule<MainActivity>()
+    @Test fun childLayerScrollUpdatesStationaryLens() {
+        var scroll by mutableFloatStateOf(0f)
+        rule.activityRule.scenario.onActivity {a->
+            a.setContent {
+                val configuration=android.content.res.Configuration(androidx.compose.ui.platform.LocalConfiguration.current).apply {
+                    uiMode=(uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK.inv()) or android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+                }
+                CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides configuration) {SunnyTheme(AppSettings()) {
+                val source=rememberGlassBackdrop(true)!!
+                Box(Modifier.size(320.dp,180.dp)) {
+                    Box(Modifier.fillMaxSize().captureGlassBackdrop(source)) {
+                        Canvas(Modifier.fillMaxSize().graphicsLayer {translationX=scroll}) {
+                            drawRect(Color.Red)
+                            drawRect(Color.Blue,Offset(size.width/2,0f),Size(size.width/2,size.height))
+                        }
+                    }
+                    Box(Modifier.fillMaxSize().background(Color.Gray))
+                    Box(Modifier.offset(24.dp,24.dp).size(100.dp,100.dp)
+                        .liquidGlass(source,RoundedCornerShape(12.dp),12.dp,"glass").testTag("scroll:lens"))
+                }
+            }}}
+        }
+        fun center():Int {
+            val bitmap=rule.onNodeWithTag("scroll:lens").captureToImage().asAndroidBitmap()
+            return bitmap.getPixel(bitmap.width/2,bitmap.height/2)
+        }
+        rule.waitUntil(10_000) {val c=center();(c shr 16 and 255)>180 && (c and 255)<80}
+        // Only a child's layer property changes; the capture parent draw need not run again.
+        rule.runOnIdle {scroll=-160*rule.activity.resources.displayMetrics.density}
+        rule.waitUntil(10_000) {val c=center();(c and 255)>180 && (c shr 16 and 255)<80}
+    }
     @Test fun realArtworkPassesThroughLensAndUpdatesWithoutTouchingForegroundGlyphs() {
         var shifted by mutableStateOf(false)
         rule.activityRule.scenario.onActivity {a->

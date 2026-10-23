@@ -30,11 +30,10 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
     private var level=-1
     private var began=0L
     private var stateTicket=0
-    private var queriedAt=0L
     private data class Target(val rgb:Int?,val slots:ByteArray?,val brightness:Int,val created:Long=SystemClock.elapsedRealtime())
     private fun uuid(short:String)=UUID.fromString("0000$short-0000-1000-8000-00805f9b34fb")
     private fun current(g:BluetoothGatt)=!closed && g===gatt
-    private fun fail(message:String) {if(closed)return;status(message);close();failed()}
+    private fun fail(message:String) {if(closed)return;android.util.Log.w("SunnyAmbilight",message);status(message);close();failed()}
 
     fun start() {
         try {
@@ -118,8 +117,8 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
             scheduleHealthCheck()
         },15_000)
     }
-    fun fixed(rgb:Int,brightness:Int) {if(!closed){pending=Target(rgb,null,brightness);drain()}}
-    fun custom(slots:ByteArray,brightness:Int) {if(!closed){pending=Target(null,slots.clone(),brightness);drain()}}
+    fun fixed(rgb:Int,brightness:Int) {if(!closed){pending=Target(LightOutputLimit.fixed(rgb,brightness),null,brightness);drain()}}
+    fun custom(slots:ByteArray,brightness:Int) {if(!closed){pending=Target(null,LightOutputLimit.slots(slots,brightness),brightness);drain()}}
     private fun drain() {
         if(closed || writing)return
         if(writes.isEmpty() && active!=null) {
@@ -128,16 +127,7 @@ internal class Sp658eLink(private val context:Context,private val worker:Handler
         }
         if(writes.isEmpty() && configured) {
             val next=pending?:return;pending=null;active=next;began=SystemClock.elapsedRealtime()
-            if(next.rgb!=null) writes.addAll(Sp658eProtocol.fixed(next.rgb,next.brightness))
-            else {
-                if(mode!=7 || level!=next.brightness) writes.add(Sp658eProtocol.frame(0x52,byteArrayOf(0,0,0,next.brightness.toByte())))
-                writes.add(Sp658eProtocol.frame(0x63,requireNotNull(next.slots)))
-                // Periodically reassert the *static* custom effect. A controller restart or another
-                // client's effect change must not leave our color slots playing a dynamic effect.
-                if(mode!=7 || SystemClock.elapsedRealtime()-queriedAt>=1500) {
-                    writes.add(Sp658eProtocol.frame(0x53,byteArrayOf(7,1)));queriedAt=SystemClock.elapsedRealtime()
-                }
-            }
+            writes.addAll(Sp658eProtocol.update(next.rgb,next.slots,next.brightness,mode,level))
         }
         if(writes.isEmpty())return
         val c=characteristic?:return

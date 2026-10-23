@@ -113,6 +113,11 @@ jobs:
           disable-animations: true
           script: |
             ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.AboutProjectsTest,io.github.xudong7587.sunnytv.AmbilightLifecycleTest,io.github.xudong7587.sunnytv.AmbilightSettingsTest,io.github.xudong7587.sunnytv.AmbilightSurfaceTest,androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+            ./gradlew --no-daemon --console=plain -PsunnytvTestBuildType=release assembleReleaseAndroidTest
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
+            python3 -c 'from pathlib import Path; s=Path("build-logs/tv-repair-android.txt").read_text(); assert "OK (" in s and "FAILURES" not in s and "INSTRUMENTATION_FAILED" not in s, s'
             if [ -n "$CANDIDATE_APK_SHA256" ]; then bash scripts/verify-stable-candidate-android.sh; fi
       - name: Publish a new immutable release
         env:

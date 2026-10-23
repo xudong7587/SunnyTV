@@ -89,6 +89,7 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
             if(color.length==6) {lights.save(config.copy(fixedColor=color.toInt(16)));lights.fixed();message=""}
             else message="请输入六位颜色，例如 FF4D05。"
         }
+        Text("白色负载保护：高负载颜色会自动降低输出，保留色相。",color=SunnyColors.Secondary,fontSize=14.sp)
         Text("灯带亮度：${(config.brightness*100/255)}%",color=SunnyColors.Text,fontSize=17.sp)
         Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Action("降低亮度",id="lights:dim",alwaysShowLabel=true) {lights.save(config.copy(brightness=(config.brightness-16).coerceAtLeast(1)))}

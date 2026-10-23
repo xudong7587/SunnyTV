@@ -56,7 +56,10 @@ class PlayerResizeTest {
        val frame=v.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
        applied=v.resizeMode==mode && frame.width>0 && frame.height>0 && when(mode) {
         AspectRatioFrameLayout.RESIZE_MODE_FILL->abs(frame.width-v.width)<=2 && abs(frame.height-v.height)<=2
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM->frame.width>=v.width-2 && frame.height>=v.height-2 && abs(frame.width.toFloat()/frame.height-aspect)<.02f
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM->frame.width>=v.width-2 && frame.height>=v.height-2 &&
+            if((a.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK)==android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+                player(a).videoScalingMode==androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            else abs(frame.width.toFloat()/frame.height-aspect)<.02f
         else->frame.width<=v.width+2 && frame.height<=v.height+2 && abs(frame.width.toFloat()/frame.height-aspect)<.02f
        }
        assertSame("Resize must keep the playing surface/player session",original,player(a))

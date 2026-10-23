@@ -237,11 +237,14 @@ class PlayerActivity: ComponentActivity() {
     private fun applyVideoGeometry(view:PlayerView) {
         val size=view.player?.videoSize ?: return
         if(size.width<=0 || size.height<=0 || view.width<=0 || view.height<=0)return
+        val nativeCrop=tvPlayback && resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         val bounds=VideoGeometry.bounds(view.width,view.height,size.width*size.pixelWidthHeightRatio/size.height,
-            resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM,resizeMode==AspectRatioFrameLayout.RESIZE_MODE_FILL,pictureArea)
+            resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM && !nativeCrop,
+            resizeMode==AspectRatioFrameLayout.RESIZE_MODE_FILL || nativeCrop,pictureArea)
         val frame=view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
-        // Explicit native dimensions survive EXACT measure constraints and TV compositor quirks.
-        // The decoder always sees a surface with the original aspect in FIT/ZOOM, never FILL's shape.
+        // On TV, let the decoder crop proportionally into the target surface. Some vendor video
+        // planes stretch an oversized SurfaceView's entire buffer despite SurfaceFlinger's crop.
+        // Encoded bars still expand the viewport; OSD remains outside this video frame.
         frame.setAspectRatio(0f)
         val params=frame.layoutParams as FrameLayout.LayoutParams
         if(params.width!=bounds.width || params.height!=bounds.height) {
@@ -275,7 +278,15 @@ class PlayerActivity: ComponentActivity() {
         if(app.ambilight.config.value.enabled && edgeSampler==null) {
             edgeSampler=io.github.xudong7587.sunnytv.feature.ambilight.VideoEdgeSampler(app.ambilight,{
                 lightPlayerView?.let {view->(view.videoSurfaceView as? android.view.SurfaceView)?.let {it to view}}
-            },{rendered && player?.let {it.playWhenReady && it.playbackState!=Player.STATE_ENDED}==true && error.isBlank()}).also {it.start()}
+            },{rendered && player?.let {it.playWhenReady && it.playbackState!=Player.STATE_ENDED}==true && error.isBlank()}, {
+                if(tvPlayback && resizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM) {
+                    val view=lightPlayerView;val size=player?.videoSize
+                    if(view!=null && size!=null && size.height>0) {
+                        val bounds=VideoGeometry.bounds(view.width,view.height,size.width*size.pixelWidthHeightRatio/size.height,true,false,pictureArea)
+                        VideoGeometry.visibleFraction(view.width,view.height,bounds)
+                    } else null
+                } else null
+            }).also {it.start()}
         }
     }
     override fun onResume() {
@@ -945,7 +956,9 @@ class PlayerActivity: ComponentActivity() {
             // Media3 calculates fit/zoom from the decoded size and pixel aspect ratio.
             // Avoid an additional view scale, which would crop a second time.
             view.scaleX=1f;view.scaleY=1f
-            activePlayer?.videoScalingMode=C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            val scaling=if(tvPlayback && activeResizeMode==AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+                C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING else C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            if(activePlayer!=null && activePlayer.videoScalingMode!=scaling)activePlayer.videoScalingMode=scaling
             applyVideoGeometry(view)
             val key=listOf(settings.subtitleEdge,settings.subtitlePosition,settings.subtitleBackground,
                 settings.subtitleScaleLevel,settings.subtitleFontChoice,subtitleInk,subtitleAccent,resolvedSubtitleFont)

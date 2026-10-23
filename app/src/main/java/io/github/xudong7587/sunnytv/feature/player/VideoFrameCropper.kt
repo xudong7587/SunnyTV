@@ -1,15 +1,16 @@
 package io.github.xudong7587.sunnytv.feature.player
 
 import android.graphics.Bitmap
-import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
+import io.github.xudong7587.sunnytv.feature.ambilight.VideoReadbackPacing
 import android.view.PixelCopy
 import android.view.SurfaceView
 import io.github.xudong7587.sunnytv.feature.ambilight.copyVideoPixels
 
-/** Low-rate full-buffer inspection only in crop mode; three matching samples prevent scene flashes
+/** Bounded full-buffer inspection in crop/stretch modes; three matching samples prevent scene flashes
  * from changing framing. Closing waits for PixelCopy before releasing its reusable buffer. */
 internal class VideoFrameCropper(private val surface:()->SurfaceView?,private val changed:(PictureArea)->Unit) {
     private val main=Handler(Looper.getMainLooper())
@@ -22,24 +23,32 @@ internal class VideoFrameCropper(private val surface:()->SurfaceView?,private va
     private var candidate=PictureArea()
     private var repeats=0
     private var applied=PictureArea()
+    private var samples=0
+    private var settled=false
+    private var nextCaptureAt=0L
     private val tick=object:Runnable {
         override fun run() {
-            if(closed)return
+            if(closed || settled)return
             main.postDelayed(this,750)
+            if(SystemClock.elapsedRealtime()<nextCaptureAt)return
             val view=surface() ?: return
             if(inFlight || !view.holder.surface.isValid)return
-            val rect=Rect(view.holder.surfaceFrame)
-            if(rect.isEmpty)return
             inFlight=true
-            copyVideoPixels(view.holder.surface,rect,bitmap,worker) {result->
+            val began=SystemClock.elapsedRealtime()
+            copyVideoPixels(view.holder.surface,null,bitmap,worker) {result->
                 val next=if(!closed && result==PixelCopy.SUCCESS) {
                     bitmap.getPixels(pixels,0,160,0,0,160,90);VideoGeometry.picture(pixels,160,90)
                 } else null
                 main.post {
                     inFlight=false
+                    nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(SystemClock.elapsedRealtime()-began,1)
                     if(closed)dispose() else if(next!=null) {
+                        samples++
                         if(next==candidate)repeats++ else {candidate=next;repeats=1}
                         if(repeats>=3 && applied!=candidate) {applied=candidate;changed(applied)}
+                        // Once bars are measured, framing need not keep reading the 4K decoder.
+                        // A fresh mode selection or player recreates this detector.
+                        if((repeats>=3 && applied!=PictureArea()) || samples>=12)settled=true
                     }
                 }
             }

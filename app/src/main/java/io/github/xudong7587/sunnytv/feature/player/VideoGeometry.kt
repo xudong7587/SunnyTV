@@ -6,6 +6,12 @@ import kotlin.math.*
 internal data class PictureArea(val left:Float=0f,val top:Float=0f,val right:Float=1f,val bottom:Float=1f)
 internal data class VideoBounds(val width:Int,val height:Int,val x:Float,val y:Float)
 internal object VideoGeometry {
+    fun visibleFraction(width:Int,height:Int,bounds:VideoBounds):FloatArray {
+        if(bounds.width<=0 || bounds.height<=0)return floatArrayOf(0f,0f,1f,1f)
+        val left=(width-bounds.width)/2f+bounds.x;val top=(height-bounds.height)/2f+bounds.y
+        return floatArrayOf((-left/bounds.width).coerceIn(0f,1f),(-top/bounds.height).coerceIn(0f,1f),
+            ((width-left)/bounds.width).coerceIn(0f,1f),((height-top)/bounds.height).coerceIn(0f,1f))
+    }
     fun bounds(width:Int,height:Int,aspect:Float,zoom:Boolean,stretch:Boolean,area:PictureArea=PictureArea()):VideoBounds {
         if(width<=0 || height<=0 || !aspect.isFinite() || aspect<=0)return VideoBounds(width,height,0f,0f)
         if(stretch) {
