@@ -119,6 +119,20 @@ jobs:
             adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
             python3 -c 'from pathlib import Path; s=Path("build-logs/tv-repair-android.txt").read_text(); assert "OK (" in s and "FAILURES" not in s and "INSTRUMENTATION_FAILED" not in s, s'
             if [ -n "$CANDIDATE_APK_SHA256" ]; then bash scripts/verify-stable-candidate-android.sh; fi
+      - name: Verify final release on Android TV system image
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          avd-name: sunnytv-tv
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
+            python3 -c 'from pathlib import Path; s=Path("build-logs/tv-system-android.txt").read_text(); assert "OK (" in s and "FAILURES" not in s and "INSTRUMENTATION_FAILED" not in s, s'
       - name: Publish a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}

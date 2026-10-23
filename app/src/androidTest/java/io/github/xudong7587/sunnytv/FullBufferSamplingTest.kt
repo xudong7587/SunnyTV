@@ -21,6 +21,11 @@ import java.util.concurrent.atomic.AtomicInteger
 class FullBufferSamplingTest {
     @Test fun fourKBufferKeepsBottomAndRightEdgesInSmallerView() {
         val instrument=InstrumentationRegistry.getInstrumentation()
+        if(InstrumentationRegistry.getArguments().getString("requireTv")=="true") {
+            assertEquals("TV regression must exercise the television implementation",
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+                instrument.targetContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK)
+        }
         val ready=CountDownLatch(1)
         lateinit var view:SurfaceView
         ActivityScenario.launch(MainActivity::class.java).use {scenario->
