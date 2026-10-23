@@ -1,0 +1,392 @@
+{
+  "version": "1.0.4",
+  "candidateApkSha256": "1131a9e6c08b306d6dfe81b070f1a0842238ee293d5c2255543142f15c684b99",
+  "entry": "classes2.dex",
+  "candidateEntrySha256": "18535435adb3b72b03173e3f15c0158c8bdff1bcdd0106cb7f166ee40f823627",
+  "cleanEntrySha256": "28bce63c94a5cec0925ce724d18aa867e82717b9fc37cf83d9661df1fe9781cd",
+  "reason": "The already distributed incremental Compose build emits runtime stability reads, different strong-skipping branches and synthetic capture parameter ordering. A full non-incremental Windows build and a clean GitHub Linux build have all 291 application entries byte-identical. This record approves only this exact APK and DEX pair.",
+  "scope": "All other 290 application DEX/Manifest/resource/normalized-license entries require byte identity. Native source must remain unchanged from the verified baseline. Both ordinary debug gates and actual candidate release Android tests remain mandatory.",
+  "cleanBuildRun": "https://github.com/xudong7587/SunnyTV/actions/runs/39938009453",
+  "cleanSourceCommit": "b44454f31312930a2db19c0de6cec1294e04c47f",
+  "cleanPlatformComparison": {
+    "applicationEntries": 291,
+    "allEqual": true,
+    "windowsApkSha256": "7da55d817935b2e75252ba649997a3bd40dff043da73dac76a368df61e6faa56",
+    "linuxApkSha256": "4ad86b9b39c1b12dcc11e37133aca10b3e4a4b8940cca4729095c69fba9efa8c",
+    "dex": {
+      "classes.dex": "b5bdf31b4e012b8aab955f9bccfcc979b20b6aa848b3bcf8df9ef0b92543b94d",
+      "classes2.dex": "28bce63c94a5cec0925ce724d18aa867e82717b9fc37cf83d9661df1fe9781cd",
+      "classes3.dex": "38bf19f30a614459b1c3c1cf2dde1f793eefc1eb7c49019c603bde4673e7407c"
+    }
+  },
+  "disassemblyTool": "Android SDK 35.0.0 dexdump -d; normalize only absolute file offsets and symbolic pool indexes; retain instruction offsets, registers, literals, signatures and debug locals",
+  "disassemblyReview": {
+    "invokeRemoved": [
+      [
+        [
+          "Landroidx/compose/runtime/Composer;",
+          "getSkipping"
+        ],
+        2
+      ],
+      [
+        [
+          "Landroidx/compose/runtime/Composer;",
+          "skipToGroupEnd"
+        ],
+        2
+      ],
+      [
+        [
+          "Landroidx/compose/runtime/Composer;",
+          "changedInstance"
+        ],
+        2
+      ],
+      [
+        [
+          "Landroidx/compose/runtime/Composer;",
+          "changed"
+        ],
+        25
+      ]
+    ],
+    "invokeAdded": [],
+    "stringsEqual": false
+  },
+  "observations": [
+    "The 65 changed classes are in MainActivity, UI/player UI lambdas and Route.Library/Detail. No network, source adapter, storage, lamp algorithm or video geometry/cropper class differs in normalized disassembly.",
+    "Business invoke target/name occurrence counts are identical. Differences remove only Composer.getSkipping (2), skipToGroupEnd (2), changedInstance (2), changed (25) and one Compose Box source-information string. This static inventory is not a general proof of runtime equivalence.",
+    "Route.Library/Detail fold MediaEntry.$stable=8 into a constant; composable calls fold stable flags or select generated comparison branches. MediaDetailContent synthetic captures reorder its float argument alongside the corresponding register bindings.",
+    "Actual original candidate passed 13 API30 TV and 13 API34 tests locally; the broader stable candidate suite must additionally pass in CI before publishing. REA inspected the package metadata; instruction comparisons use SDK dexdump because JADX hides some generated class names."
+  ],
+  "changedClassCount": 65,
+  "changedClasses": [
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivity$onCreate$2$3$1;",
+      "candidateSha256": "c289cf40bc5a5ec58594c21000b34118e3b10be4877e781d1171e1a19843f3b9",
+      "cleanSha256": "5603915128e7a9fbd7a3d99ecceccfe5242ab1c352f2fc976ab6203be4fe695f"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivity$onCreate$2$3;",
+      "candidateSha256": "51f05b6c1863a1f443953db8760d828b707ad910c50a0b170fcc90dab3515130",
+      "cleanSha256": "4f9a14b4622fb0316ea08f245c6fc6466e18878e4bbfbe39ad9c0e644c356897"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3$3$2$3$1$1$1$1;",
+      "candidateSha256": "63f190ecf0094cea3f1692f991bdc0b0c79f84bbfa88f3d1375e0e1f548872a8",
+      "cleanSha256": "7ffd8167453a2f6fa9b1efd6c82632019e1e90f86725d1fba02e163687e000c1"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3$3$3$1;",
+      "candidateSha256": "4621652e3da34a45a71b7e9bbeddb0c7d90e20ffacbe8123c70d298a7e603149",
+      "cleanSha256": "7d409ae7ca2361f92951618fac0c9f88cc8f207092db6279325671f55754457d"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivityKt$SunnyRoot$3;",
+      "candidateSha256": "0f58a6ed4cf337d3357d7de089f186a663fda9b106cd57d10bff46609ea88b79",
+      "cleanSha256": "e5ea3fb777a440a3e217c9c1252f7d6a8ed3d0f0268c7e04f29ac2eaf0f930c5"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/MainActivityKt;",
+      "candidateSha256": "0029a7a41391017a0169af69f8952956e8d894e366779c1b9fc503ce25dee952",
+      "cleanSha256": "9d6fda44f8e08d41c050b8f1b076623fdf9d2d8da18cbaa41bf223b8a90f6ff9"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/Route$Detail;",
+      "candidateSha256": "d81c64c278c4c796e7c43dcdaae04bf64fc91ca837e9a32d73a7058706ee36ac",
+      "cleanSha256": "e03db454305d4c961340daab34b69b221f2f50ab0b79ec3c4382a3d46af888d4"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/Route$Library;",
+      "candidateSha256": "8fa20a5765a9185cffcf097034c6949cc7d07873719dbb2961d127c589b5293a",
+      "cleanSha256": "8e98790ff38e88c63fb7efd58a9121af9b0d8144dd3703089277c49814db0358"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$4$1;",
+      "candidateSha256": "1effe76439f97f8eb0ddaa755a7d10ee12907687194b2ccede7a685471effd6e",
+      "cleanSha256": "cfbaaff28afa31227710ce42e151ec0f57518f78b855eccf577f0788c7dc391a"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$4;",
+      "candidateSha256": "f0e56fbff2e365dc980f09374ccab378e77febe93de357bff7dd8ddd5339a0a3",
+      "cleanSha256": "9e986299dadbc8f845f401ec0dd7bcc7de84d5da420e198e385e145415708b57"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$chrome$1$1$1;",
+      "candidateSha256": "b3150b83d5e4f0b4d811c648fc47c1f26a5c53293947ed17b2641cee59c07d54",
+      "cleanSha256": "9804a005036dc44cb4042fb376a37e0201572091c53a85f6b65bd172080b0e51"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/player/PlayerActivity$onCreate$chrome$1$1;",
+      "candidateSha256": "f6b5634e55fe788dd8f52570c652a88e0a1b1ebcb7282d8fab04f88251a763c0",
+      "cleanSha256": "fc89ba59189e055ca4b17f7dbd7f262149b1bc38d0eba6c68e8525786fae71bb"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/player/PlayerActivity;",
+      "candidateSha256": "a5a0ee1969eb2766d784b0656c1251ae376af4c690ecfda2da1b8ded2c19d161",
+      "cleanSha256": "933a5ff06c203a6d75bc61bb45e58a6343a96458c79f0423f439960255b8867d"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/AmbilightSettingsKt;",
+      "candidateSha256": "dcdc0ee7ac7682a8cfbde23be5fd88407bd532a2392a513c6d42843f141f0fc1",
+      "cleanSha256": "270b4815c072be5b29321e81c2a97c31a5f6b59e155a7cf296a05032257f0a2e"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/AppearancePickerKt$MaterialPreviewCard$1$3;",
+      "candidateSha256": "a8f7e986c682937edeb9a7d0366c88ded1749c0013b1268adb2567e65c901842",
+      "cleanSha256": "386bff3ba34ffc04bc00b9a23bbe6c46dcbad53c64182d7133867623fb1f65b5"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/AppearancePickerKt;",
+      "candidateSha256": "6009066e8ace20dfc6f7a8da194a07b2313f66ba77ff0827c28c19767db4cab7",
+      "cleanSha256": "df031b991935f17c126add5cb981f8523617def0f7bf37312c323c1f7a512c39"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$FolderScreen$lambda$195$lambda$194$lambda$193$$inlined$items$default$4;",
+      "candidateSha256": "50b95443180469943882fd77b8e58a72130f82baf53aaf33cddcf99f75a67097",
+      "cleanSha256": "2de3aa03c412831cc78f76357fc9b0cde707b855b99a0b95354b6bb59ecb8801"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$Hero$lambda$13$lambda$12$lambda$11$$inlined$items$default$4;",
+      "candidateSha256": "861966c404f9c5e458e52d11a565cd7eb947c090e96210f0e87731c4d28288f7",
+      "cleanSha256": "90a4f9369b29c1fb59bfc956a6d1af726c2cd02d6ee4dd1bf37c181a39b3502c"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$Hero$lambda$29$lambda$28$lambda$27$lambda$26$$inlined$items$default$4;",
+      "candidateSha256": "3fd178df02de3b6e4961f7832422b87c006efe7ac0629abf2e06961ac9a5533a",
+      "cleanSha256": "84f326a13c770b8a5423db9ecc511375a371e95f1267d69202ebe96585f5d44a"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HeroPane$1;",
+      "candidateSha256": "ae5522885af4e04179a9e02db9237f551d32c3fdbf2e5602736171c3bd0040d1",
+      "cleanSha256": "064fb9a64d9d0f7236239ed4e8544f2dab281dae095cf5f05e136dbfa5525d1a"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$3$1$invoke$lambda$9$lambda$8$lambda$7$$inlined$itemsIndexed$default$3;",
+      "candidateSha256": "0e4e73cb6589281e528fd7f842abf849b93c14d8a410e70d5be4e4a3f4290003",
+      "cleanSha256": "645eddca7a9a7da9eaad2b30c70ddc5139a44538dfeb41c96e5acf17c7e1b568"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$4$1;",
+      "candidateSha256": "323e2302d53314661f0da5229085b961b35d50673ae25e703d072d078eea0520",
+      "cleanSha256": "d314832c107b3efd353d40eddf681b9e833095155b402539976bdfe99fd2c05c"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$HomeScreen$8$HomeFeed$2$4$1$6$1;",
+      "candidateSha256": "f43b7c9c555b2b4e4a375683fac9964005995a53774d6f4ff4fa74a5ba6a3a19",
+      "cleanSha256": "e5127779d8466daef5c78d770d2163c4eab365948152e4cefcb1fa9e0a0c7a40"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibrariesScreen$2$invoke$lambda$6$lambda$5$$inlined$itemsIndexed$default$4;",
+      "candidateSha256": "c2e71143fcc656b684a8fb49fa69ba9c18a4b23b163336ab47c52dba54789da6",
+      "cleanSha256": "687a2a3128f41fa017adbdb2d7838687231d9920ea4fa776a0132f5105e0db69"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$18;",
+      "candidateSha256": "7bbb39d51b1f56f3216a203f927058a7a067abc1d1d24a034d93007a0f5403c5",
+      "cleanSha256": "2a80ca81bfa3d8d15ffc0d5807b57beb46c36c9b5aee2e674b0f67f12dead250"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$20;",
+      "candidateSha256": "2b9cde04ab446dc44340cf79d0073e14fb9a6a5b30b495fddd053225161fd189",
+      "cleanSha256": "0530a2c47e701ffc5ad83eb706ab9b98a5e3648b07f6dc7b0bd73219ded0d77c"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$2;",
+      "candidateSha256": "9f5854c4da0082102a8698ba494cf789472f9013c16629bb9193b086dc7fa3b7",
+      "cleanSha256": "49590abaeef91915992a077b697e126f65b4802edfb0576e89e9b396f0c74f84"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$4$1$2$4$1$3;",
+      "candidateSha256": "cc85fffc784d4dca139b41f0b5cd4eac5c36c26328515b132b5b4af53fb0da6c",
+      "cleanSha256": "4a44c6ec554d08a94785562cb41d646bcb36133aafd3805e0cd9c2cf7ca1fad3"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$3$1$4;",
+      "candidateSha256": "5d319e1075ccbfe8b01a0814da466e6698cebaa3ae65d46d5811656a95973faf",
+      "cleanSha256": "cc66f115684122c68e9249bfedb512ee45ee6dbc292d153e38ec970ca720a5d6"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$12;",
+      "candidateSha256": "6290212d389a2c01bdcc0767642b34282f0e759cb6f4e4382c4445aabbe0455c",
+      "cleanSha256": "55d7a02032f06e1bb85b8fb5ba6f256e86f8897963c19ce15b1d5cacff4c8ad5"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$4;",
+      "candidateSha256": "98e8d844fb6a3d01d1d1d81db2b96f8a635990a290c032d8759d6b1c98d70c64",
+      "cleanSha256": "8a526414c633acb81c1de0f2afb0d04b2af195d8803210760f539dd978d5083a"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8$2$invoke$lambda$27$lambda$26$$inlined$itemsIndexed$default$8;",
+      "candidateSha256": "8cee2e069c2ebf3b514074e58d38c06759c5a977ebe81ffb81ffb204ce0935b2",
+      "cleanSha256": "ef00af2bbc39e873aa8940d6edce19aa7beb160d26b996cc518c02cfd97326da"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt$LibraryScreen$8;",
+      "candidateSha256": "7eeb07e91684ddce4c31fe6db1d5104dbf8abf5ff3c4baf9dfc9b330377b9409",
+      "cleanSha256": "ee7329ee234ae98d5c109f7cf7ed3f638ab14de54c89ebf0d61d96603a831632"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/BrowseScreensKt;",
+      "candidateSha256": "debee3d2039bb372706169b49a33517394ca9836f5882589c4904b08e2b6b203",
+      "cleanSha256": "ef3dab9f60422ab9e64d08147afe3b6034e2fa98161b172961214b0c5e2e33a3"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt$AccordionCards$5$Card$5;",
+      "candidateSha256": "21bcbddc2fd40d9dc61fa18f6401109057c184d8dd1dc76efabd8e9ab43b6c43",
+      "cleanSha256": "7bf8329d7528380a168949e8453cb9271c74f1bdf039e5460942ed0a38e977f3"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt$CinemaBackdrop$1$1;",
+      "candidateSha256": "6c19194aad58b32c53d621afb4b485e0fe77df5b52686fcf7f37611ee31db3df",
+      "cleanSha256": "1bda5d439eac39dda9e22feae603959855969950cacf6dde8ac6aebefbc50233"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/CinemaComponentsKt;",
+      "candidateSha256": "2099999aa05b52e0bcafb877fafad07197b217f63857414fdb16e4136eab130f",
+      "cleanSha256": "5a43083d0b23f5cb253f8bcf74bee07932c4939cf896b96de3c4c263231ec7dc"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ComponentsKt$Backdrop$1$1;",
+      "candidateSha256": "e0218004109f14852e427e2f7764d9fd3248bdd95701a3256152686522f4fd85",
+      "cleanSha256": "54d01b1280cf2f9655c51769ec826250ece94086a5137df0c23fd3eb253f4f3f"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ComponentsKt$LibraryCard$1$1;",
+      "candidateSha256": "8eedb2f64d6fcf452707def9e449c4c5f02d6513570bd30cba7b69393f9192c8",
+      "cleanSha256": "e9323802d085dcf4f299db99d6788d72074164a96a0f1fc46e365576be2b5de0"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ComponentsKt$MediaCard$2$1;",
+      "candidateSha256": "5ff647e51a98d16e812c32f8e961155e8846cc1c6077d07eb994e42d7ea8ddc5",
+      "cleanSha256": "79ff8be37939feca9b1c45b0ddcf34a15ab0f0981ceb9d8803768065f1c02d00"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ComponentsKt$MediaShelf_au3_HiA$lambda$75$lambda$74$lambda$73$$inlined$itemsIndexed$default$3;",
+      "candidateSha256": "060132a86ea6f22eb25a4984d88962903aa88182924c32663557c979a17a44e2",
+      "cleanSha256": "075fd359dda1b33b578d8a29f9455fc71c898e3f76de38e39b3f34b0da6950ea"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ComponentsKt;",
+      "candidateSha256": "7718cfbd3f002030fa5303d73b794192d737266a66cf14ffa8e7f87b2eed6fa0",
+      "cleanSha256": "1ceb973f4f4e42ca4bdb672695755c6d461ffd8fb50291a2849478ee334ed107"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt$EpisodeHorizontal__jt2gSs$lambda$21$lambda$20$$inlined$itemsIndexed$default$3;",
+      "candidateSha256": "126e35ce1c2a9b3c6039e483a8f65362592f77066497f3aec9cd97b99d41876f",
+      "cleanSha256": "2269f52309acd35548c5cd2970fbbae88bda49faf45b32b724a3fad0722530a8"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt$EpisodeListCard$3;",
+      "candidateSha256": "14ec5de26617e10c0ba20207c0d0ed0a66de6da238afac03d4eb4d10ad8cc9b4",
+      "cleanSha256": "3622645b37770246b4601ca9ffd7e9ed1ed4f39735c2b26cd5d7656f36f86bc1"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/EpisodeLayoutsKt;",
+      "candidateSha256": "65190e722bacc5aaf39c52907e204f11b11893dbba9adae18eb448fb3811e330",
+      "cleanSha256": "9f87d8ddc97b19c94cb63b117d9a3d5f1e5001ce159a99a905b1ed774caa7269"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/ItemActionsKt;",
+      "candidateSha256": "ea5f2756a7315263d4fe17030650a5ee6aff2e25e6a6a59add5d164962641a4c",
+      "cleanSha256": "527cbbcd54440fd11ba29f49553b93b27754cdd148abc3fccc315f6b02eada90"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$11;",
+      "candidateSha256": "a047707bafc04209e93ec31b9bb25a341fc463b36331e2a355399911d35fd17c",
+      "cleanSha256": "1793d2000db68419e80e699d0c23f9dedbb7ec90b099ca8256f1127565093356"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$13$1$3$1$2$1$2;",
+      "candidateSha256": "a3c306fe91ab5ea326a181eb7cd2766268b4aaa65cd6cd7ec9f112ddd054cccc",
+      "cleanSha256": "35a9fabce2a83fd1b80e1246063dbef642a3569bddcd63c5b60c0c9ad7e7d2c2"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$14;",
+      "candidateSha256": "c58ceaeb42c60341d179db2232439721de1acf80444a09433a438f5fbf3af340",
+      "cleanSha256": "f3920b1b4567d71cc8caf1b3669562a58cc7544ab1bbd132fcee39cd2a29c4e5"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$1;",
+      "candidateSha256": "8f3cdc53a8e123d4a2f998bbf0ab8ce25126f848f79af2558e24d37d59db81e5",
+      "cleanSha256": "90f7bcf07a316fb99d98ee90f94232816ed999c41e9aedb57d9041900487e68f"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$4$invoke$lambda$6$lambda$5$lambda$4$$inlined$itemsIndexed$default$3;",
+      "candidateSha256": "ed79e2f9e0896b963cbee1b2669589e59a69c1ca75c8a35efbc66346303c1c6a",
+      "cleanSha256": "f6a37c234edbbe2da6b17aa97dd02932ef12b5f4ad26312e0d0a331ec302e47f"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$4;",
+      "candidateSha256": "67928733c03593585ba5a98ef2bc6190c6bf0115d9d73c1d9d368dc24a596d73",
+      "cleanSha256": "f94187d978d680f6272ba1848550d1817056cfc508559698a1c8f6d8bc28d08c"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$1$1$6;",
+      "candidateSha256": "a7ae3669f9ac27acd77936bde81030b358047a9ab8ecfdbdfe0e167c4c7bf53a",
+      "cleanSha256": "4a850fff7b0c32510aea9be079c54b7eae6899d08d39d6bb02787be5032ca9d6"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$invoke$lambda$13$lambda$12$$inlined$items$default$4;",
+      "candidateSha256": "8c01b811f34257e375e784cb7362e580007fe49260ab56f9a489e56621569146",
+      "cleanSha256": "78de6cf26784d549a0f014dc47fd4a823ba723336e468bfb75a563b555c92ea4"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2$invoke$lambda$13$lambda$12$$inlined$items$default$8;",
+      "candidateSha256": "d939009a7ee8bacceae03437d0574d5ba94bb28b4577b0156605bc3c7e07b747",
+      "cleanSha256": "5f955bcb3cc16733252498db04a4df97ed7371f582195fe4d7671c25c3d81593"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1$2;",
+      "candidateSha256": "9d53695e91db0e041a7aca9a4f3ad9880eb7ac240b5f29bac17614f121c0f996",
+      "cleanSha256": "6d0431f7d15834656706d62904fd7a1bbb3739232c3aa7d086b08b36b434772c"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2$1;",
+      "candidateSha256": "7e3ea408e15b6ef98f6cc5c67dee215fecb4b3412d1c9f342dd0c0687f64d389",
+      "cleanSha256": "3cd76b071bfe769bdab3784817a44550f32e7d13438569e5ebd7b641a49c3022"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt$MediaDetailContent$2;",
+      "candidateSha256": "ec52080091409172c8dae54b84bf65687f8394b8992d42ddda49b42c58274301",
+      "cleanSha256": "bed098606b315c5760434edcc33597beda89d1d7af7572c3f064f91811510310"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/MediaDetailContentKt;",
+      "candidateSha256": "1b2ec38a64343b64a854a22c7edf17d5460c6baa638a8307575efe893a3dd9e9",
+      "cleanSha256": "3f110e73ba7b98b163df39710d88e58233c33ff0454a3dbe3e4e9d3b9c887d73"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/PersonScreenKt$PersonScreen$1$1$1$11;",
+      "candidateSha256": "8256f113830564520e190532914f5e717cc9194bf447e31f5849c2770a72ba91",
+      "cleanSha256": "4b3361c15cbc8d9848f82c1b9ff75cea41d1479f2122fdf77a162ed7e3a45806"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/PersonScreenKt$PersonScreen$1$1$1$2;",
+      "candidateSha256": "6f3d3df9bb35bc878818a8e5e7569a7c7ac54a5fd89760c156eaeae5a6b3a97b",
+      "cleanSha256": "df86f771d2802f6d8cc17484a4fe95d75289874e8a60bf84436f57d640d5c7a7"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/PersonScreenKt$PersonScreen$1$1$1$4;",
+      "candidateSha256": "fef12e1555986982eab7e67187c4b2f6c42272ab45eef3709f299d93109ab8f1",
+      "cleanSha256": "a757dd22ea8b1fe92339b3e0629ffe7e8f88cc04f901d2ed8a805f63bdfa162b"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/PersonScreenKt$PersonScreen$1$invoke$lambda$13$lambda$12$$inlined$itemsIndexed$default$4;",
+      "candidateSha256": "33624f8cbec57b703aec41f99eb9e458b3f83517b175b64bed10d26b2fed13af",
+      "cleanSha256": "638c90544b36caa5b931548dada69947080837c5297df256109c5da7066a5ce9"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/PersonScreenKt;",
+      "candidateSha256": "3f33ff2adcb25942462ab5739250697a2fd56de848f19c2034046be63e0b667c",
+      "cleanSha256": "cf6bd90d5f7d282bd93c8701829f704b230766f8996e3c8c77acdf78246cc1c7"
+    },
+    {
+      "class": "Lio/github/xudong7587/sunnytv/feature/ui/SettingsScreenKt$SettingsScreen$3$1$1$26;",
+      "candidateSha256": "06c6908ff3a4ba64e5962926e4421e299118eb22ec6c60d7482db276b4f186c0",
+      "cleanSha256": "dd9696087903fe7d860dccb4fb4012c76a8aed316abc33494f5e0d3216bebc99"
+    }
+  ],
+  "normalizedDiffSha256": "2be67044adfe68255ba40f8c77160f7962c8c5dccb663e601452c15d19417ee5"
+}

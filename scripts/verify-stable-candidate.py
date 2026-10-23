@@ -34,22 +34,25 @@ def validate_draft(release, version, commit, digest):
 
 
 def approved_dex_variance(different, original, fresh, candidate_sha):
-    # This is a reviewed, immutable build pair, not a generic DEX comparison bypass.
-    path = Path(__file__).resolve().parent.parent / 'docs/release-evidence/0.3.8-dex-variance.json'
-    record = json.loads(path.read_text())
-    name = record['entry']
-    if (different == [name] and candidate_sha == record['candidateApkSha256']
-            and original[name] == record['candidateEntrySha256']
-            and fresh[name] == record['cleanEntrySha256']):
-        return path.relative_to(Path(__file__).resolve().parent.parent).as_posix()
+    # Each reviewed record binds one immutable APK to one exact clean DEX.
+    # All other entries still require byte identity; this never accepts arbitrary builds.
+    root = Path(__file__).resolve().parent.parent
+    for version in ('0.3.8', '1.0.4'):
+        path = root / f'docs/release-evidence/{version}-dex-variance.json'
+        record = json.loads(path.read_text())
+        name = record['entry']
+        if (different == [name] and candidate_sha == record['candidateApkSha256']
+                and original[name] == record['candidateEntrySha256']
+                and fresh[name] == record['cleanEntrySha256']):
+            return path.relative_to(root).as_posix()
     return None
 
 
 def compare_application(candidate, rebuilt, variance_report=None):
     # Signing/ZIP metadata and unchanged native decoders are checked separately.
     # DEX, manifest and compiled resources must match the fresh release build
-    # byte for byte, apart from the explicitly reviewed 0.3.8 incremental Compose
-    # build pair. License text permits only Git's Windows/Linux newline change.
+    # byte for byte, apart from explicitly reviewed, hash-bound incremental Compose
+    # build pairs. License text permits only Git's Windows/Linux newline change.
     def contents(path):
         with zipfile.ZipFile(path) as apk:
             return {name: hashlib.sha256(apk.read(name).replace(b'\r\n', b'\n')

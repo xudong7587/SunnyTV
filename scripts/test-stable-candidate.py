@@ -44,12 +44,13 @@ class StableCandidateTest(unittest.TestCase):
 
     def test_reviewed_compose_pair_rejects_any_other_bytes_or_extra_difference(self):
         import json
-        record=json.loads((Path(__file__).resolve().parent.parent/'docs/release-evidence/0.3.8-dex-variance.json').read_text())
-        name=record['entry'];a={name:record['candidateEntrySha256']};b={name:record['cleanEntrySha256']}
-        self.assertTrue(candidate.approved_dex_variance([name],a,b,record['candidateApkSha256']))
-        for different,old,new,digest in [([name],a,b,'0'*64),([name],a,{name:'0'*64},record['candidateApkSha256']),
-            ([name],{name:'0'*64},b,record['candidateApkSha256']),([name,'resources.arsc'],a,b,record['candidateApkSha256'])]:
-            self.assertIsNone(candidate.approved_dex_variance(different,old,new,digest))
+        for version in ('0.3.8','1.0.4'):
+            record=json.loads((Path(__file__).resolve().parent.parent/f'docs/release-evidence/{version}-dex-variance.json').read_text())
+            name=record['entry'];a={name:record['candidateEntrySha256']};b={name:record['cleanEntrySha256']}
+            self.assertTrue(candidate.approved_dex_variance([name],a,b,record['candidateApkSha256']))
+            for different,old,new,digest in [([name],a,b,'0'*64),([name],a,{name:'0'*64},record['candidateApkSha256']),
+                ([name],{name:'0'*64},b,record['candidateApkSha256']),([name,'resources.arsc'],a,b,record['candidateApkSha256'])]:
+                self.assertIsNone(candidate.approved_dex_variance(different,old,new,digest))
 
     def test_application_changes_and_missing_entries_block_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
