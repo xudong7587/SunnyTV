@@ -89,8 +89,8 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
     val liquidButton=material=="glass" && !artwork
     val glassControls=material in setOf("glass","frosted","aurora") && !artwork
     val monochrome=if(model.settings.darkTheme) Color.White else Color.Black
-    val contentPalette=if(liquidButton) base.copy(text=monochrome,accent=monochrome,focusContent=monochrome,
-        secondary=monochrome.copy(alpha=.72f)) else base
+    val contentPalette=if(liquidButton) base.copy(text=if(focused) base.accent else monochrome,
+        focusContent=base.accent,secondary=monochrome.copy(alpha=.72f)) else base
     val flatGlass=LocalGlassControls.current
     val choiceGlass=LocalChoiceControls.current && liquidButton
     val choiceFrost=animateFloatAsState(if(focused || pressed) .66f else if(active) .42f else .10f,
@@ -132,9 +132,9 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
                 // Navigation communicates focus through its expanded label, keeping one clear lens.
                 if(choiceGlass) {
                     drawOutline(edge,base.surface.copy(alpha=choiceFrost.value))
-                    if(focused || active) drawOutline(focusEdge,monochrome.copy(alpha=if(focused) .20f else .10f),style=Stroke(1.dp.toPx()))
+                    if(focused || active) drawOutline(focusEdge,base.accent.copy(alpha=if(focused) .20f else .10f),style=Stroke(1.dp.toPx()))
                 }
-                else if(liquidButton && flatGlass && !id.startsWith("nav:")) drawOutline(edge,monochrome.copy(alpha=liquidFocus.value))
+                else if(liquidButton && flatGlass && !id.startsWith("nav:")) drawOutline(edge,base.accent.copy(alpha=liquidFocus.value))
                 else if(glassControls && !liquidButton && (selected || emphasized)) drawOutline(edge,base.accent.copy(alpha=.10f))
                 if(focusOutline && !showOutline && !liquidButton && (!glassControls || emphasized)) drawOutline(focusEdge,if(emphasized) base.accent else base.controlEdge,style=Stroke(1.dp.toPx()))
                 drawContent()

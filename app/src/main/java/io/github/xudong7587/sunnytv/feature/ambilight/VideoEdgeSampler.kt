@@ -11,81 +11,124 @@ import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.Surface
 import android.view.View
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 
 /** Samples the app's own video surface; no MediaProjection and no full-screen recording. */
 class VideoEdgeSampler(private val lights:AmbilightController,private val surface:()->Pair<SurfaceView,View>?,
-    private val playing:()->Boolean,private val visibleFraction:()->FloatArray?={null}) {
+    private val playing:()->Boolean,private val visibleFraction:()->FloatArray?={null},
+    private val readPixels:(Surface,Rect?,Bitmap,Handler,(Int)->Unit)->Unit=::copyVideoPixels) {
     private val main=Handler(Looper.getMainLooper())
     private val thread=HandlerThread("sunnytv-edge-colors").apply {start()}
     private val worker=Handler(thread.looper)
     private val owner=Any()
-    private val bitmap=Bitmap.createBitmap(160,90,Bitmap.Config.ARGB_8888)
-    private val pixels=IntArray(160*90)
-    private val visiblePixels=IntArray(160*90)
+    private val configScope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
+    private val width=VideoSampleGrid.WIDTH
+    private val height=VideoSampleGrid.HEIGHT
+    private val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+    private val pixels=IntArray(width*height)
+    private val visiblePixels=IntArray(width*height)
     private var nextCaptureAt=0L
     private var diagnosticAt=0L
     @Volatile private var closed=false
     private var inFlight=false
     private var failures=0
+    private var syncActive=false
+    private var suspended=false
     private var lastPlayingAt=SystemClock.elapsedRealtime()
     private val tick=object:Runnable {
         override fun run() {
             if(closed)return
             val config=lights.config.value
-            main.postDelayed(this,1000L/config.fps)
-            if(!config.enabled || !config.sync || !lights.connected.value)return
-            if(!playing()) {
-                if(SystemClock.elapsedRealtime()-lastPlayingAt>700)lights.idle(owner)
-                return
-            }
-            lastPlayingAt=SystemClock.elapsedRealtime()
-            if(inFlight || SystemClock.elapsedRealtime()<nextCaptureAt)return
-            val (video,container)=surface()?:return
-            if(!video.holder.surface.isValid || video.width<=0 || video.height<=0)return
-            // Media3 FIT uses the video-sized surface; ZOOM extends it beyond the visible player.
-            val a=IntArray(2);val b=IntArray(2);video.getLocationInWindow(a);container.getLocationInWindow(b)
-            val rect=Rect(0,0,video.width,video.height)
-            if(!rect.intersect(b[0]-a[0],b[1]-a[1],b[0]-a[0]+container.width,b[1]-a[1]+container.height))return
-            // The holder's surfaceFrame is a layout size, not necessarily the decoder buffer.
-            // Copy the whole buffer, then map the visible view region into our small bitmap.
-            val bounds=visibleFraction()?.let {area->
-                intArrayOf(kotlin.math.floor(area[0]*160).toInt(),kotlin.math.floor(area[1]*90).toInt(),
-                    kotlin.math.ceil(area[2]*160).toInt(),kotlin.math.ceil(area[3]*90).toInt())
-            } ?: VideoCrop.bufferRect(video.width,video.height,rect.left,rect.top,rect.right,rect.bottom,160,90)
-            val source=video.holder.surface
-            val began=SystemClock.elapsedRealtime();inFlight=true
-            val callback:(Int)->Unit={result->
-                if(!closed) {
-                    if(result==PixelCopy.SUCCESS) {
-                        bitmap.getPixels(pixels,0,160,0,0,160,90)
-                        VideoCrop.visiblePixels(pixels,visiblePixels,160,90,bounds)
-                        val colors=EdgeColors.sample(visiblePixels,160,90,config.vivid)
-                        val now=SystemClock.elapsedRealtime()
-                        if(now-diagnosticAt>=5000) {
-                            android.util.Log.i("SunnyAmbilight","full-buffer copy=${now-began}ms region=${bounds.joinToString()} edges=${colors.joinToString {"%06x".format(it)}}")
-                            diagnosticAt=now
+            try {
+                val active=config.enabled && config.sync
+                if(!active || !lights.connected.value)return
+                if(!playing()) {
+                    if(SystemClock.elapsedRealtime()-lastPlayingAt>700)lights.idle(owner)
+                    nextCaptureAt=maxOf(nextCaptureAt,SystemClock.elapsedRealtime()+250)
+                    return
+                }
+                lastPlayingAt=SystemClock.elapsedRealtime()
+                if(suspended || inFlight || SystemClock.elapsedRealtime()<nextCaptureAt)return
+                val (video,container)=surface()?:return
+                if(!video.holder.surface.isValid || video.width<=0 || video.height<=0)return
+                // Media3 FIT uses the video-sized surface; ZOOM extends it beyond the visible player.
+                val a=IntArray(2);val b=IntArray(2);video.getLocationInWindow(a);container.getLocationInWindow(b)
+                val rect=Rect(0,0,video.width,video.height)
+                if(!rect.intersect(b[0]-a[0],b[1]-a[1],b[0]-a[0]+container.width,b[1]-a[1]+container.height))return
+                // The holder's surfaceFrame is a layout size, not necessarily the decoder buffer.
+                // Copy the whole buffer, then map the visible view region into our small bitmap.
+                val bounds=visibleFraction()?.let {area->
+                    intArrayOf(kotlin.math.floor(area[0]*width).toInt(),kotlin.math.floor(area[1]*height).toInt(),
+                        kotlin.math.ceil(area[2]*width).toInt(),kotlin.math.ceil(area[3]*height).toInt())
+                } ?: VideoCrop.bufferRect(video.width,video.height,rect.left,rect.top,rect.right,rect.bottom,width,height)
+                val source=video.holder.surface
+                val began=SystemClock.elapsedRealtime();inFlight=true
+                val callback:(Int)->Unit={result->
+                    // Measure on the worker, before waiting for the UI queue to handle completion.
+                    val cost=SystemClock.elapsedRealtime()-began
+                    val tooSlow=result!=VIDEO_COPY_BUSY && VideoReadbackPacing.blocksPlayback(cost)
+                    if(!closed && !tooSlow) {
+                        if(result==PixelCopy.SUCCESS) {
+                            bitmap.getPixels(pixels,0,width,0,0,width,height)
+                            VideoCrop.visiblePixels(pixels,visiblePixels,width,height,bounds)
+                            val colors=EdgeColors.sample(visiblePixels,width,height,config.vivid)
+                            val now=SystemClock.elapsedRealtime()
+                            if(now-diagnosticAt>=5000) {
+                                android.util.Log.i("SunnyAmbilight","grid=${width}x${height} full-buffer copy=${now-began}ms region=${bounds.joinToString()} edges=${colors.joinToString {"%06x".format(it)}}")
+                                diagnosticAt=now
+                            }
+                            lights.frame(owner,colors,now-began)
+                            failures=0
+                        } else if(result!=VIDEO_COPY_BUSY && ++failures==5) {
+                            // Keep the last stable color. Alternating PixelCopy failures/successes must
+                            // never switch the strip between fixed color and video color repeatedly.
+                            lights.note("视频层暂时无法取色（$result），保持当前颜色并等待画面恢复")
                         }
-                        lights.frame(owner,colors,now-began)
-                        failures=0
-                    } else if(result!=VIDEO_COPY_BUSY && ++failures==5) {
-                        // Keep the last stable color. Alternating PixelCopy failures/successes must
-                        // never switch the strip between fixed color and video color repeatedly.
-                        lights.note("视频层暂时无法取色（$result），保持当前颜色并等待画面恢复")
+                    }
+                    main.post {
+                        inFlight=false
+                        if(closed)dispose() else {
+                            if(tooSlow) {
+                                suspended=true
+                                lights.note("当前视频取色过慢（${cost}ms），已暂停画面同步以优先播放；重新开关画面同步可重试")
+                                android.util.Log.w("SunnyAmbilight","readback suspended for this playback: copy=${cost}ms")
+                            }
+                            nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,config.fps)
+                            scheduleTick()
+                        }
                     }
                 }
-                main.post {
-                    inFlight=false
-                    val cost=SystemClock.elapsedRealtime()-began
-                    nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,config.fps)
-                    if(closed)dispose()
-                }
-            }
-            copyVideoPixels(source,null,bitmap,worker,callback)
+                readPixels(source,null,bitmap,worker,callback)
+            } finally {if(!closed && !inFlight)scheduleTick()}
         }
     }
-    fun start() {lights.startPlayback(owner);main.post(tick)}
+    private fun scheduleTick() {
+        if(closed)return
+        val config=lights.config.value
+        val now=SystemClock.elapsedRealtime()
+        val delay=when {
+            !config.enabled || !config.sync || !lights.connected.value -> 500L
+            suspended -> 1000L
+            nextCaptureAt>now -> (nextCaptureAt-now).coerceAtMost(1000L)
+            else -> 1000L/config.fps
+        }
+        main.postDelayed(tick,delay)
+    }
+    fun start() {
+        lights.startPlayback(owner)
+        configScope.launch {
+            lights.config.collect {config->
+                val active=config.enabled && config.sync
+                // Observe the switch itself, rather than miss a quick off/on between polling ticks.
+                if(active && !syncActive) {suspended=false;nextCaptureAt=0L}
+                syncActive=active
+            }
+        }
+        main.post(tick)
+    }
     fun stop() {
-        if(closed)return;closed=true;main.removeCallbacks(tick);lights.stopPlayback(owner)
+        if(closed)return;closed=true;configScope.cancel();main.removeCallbacks(tick);lights.stopPlayback(owner)
         if(!inFlight)dispose()
     }
     private fun dispose() {if(!bitmap.isRecycled)bitmap.recycle();thread.quitSafely()}

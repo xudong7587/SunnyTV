@@ -75,7 +75,7 @@ import kotlinx.coroutines.*
                 imeAction=if(password || next==null) ImeAction.Done else ImeAction.Next),
             keyboardActions=KeyboardActions(onAny={confirm()}),
             visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
-            cursorBrush=SolidColor(if(liquid) fieldInk else SunnyColors.Accent),textStyle=TextStyle(color=fieldInk,fontSize=15.sp,fontFamily=androidx.tv.material3.LocalTextStyle.current.fontFamily),
+            cursorBrush=SolidColor(SunnyColors.Accent),textStyle=TextStyle(color=fieldInk,fontSize=15.sp,fontFamily=androidx.tv.material3.LocalTextStyle.current.fontFamily),
             modifier=Modifier.fillMaxWidth().testTag(tag).focusRequester(focusRequester)
                 .focusProperties {if(next!=null) down=confirmRequester; if(previous!=null) up=previous}
                 .onPreviewKeyEvent {event->
@@ -88,7 +88,7 @@ import kotlinx.coroutines.*
                 }
                 .onFocusChanged {focused=it.isFocused}
                 .materialSurface(sunnyShape(9.dp),control=true,focused=focused)
-                .then(if(liquid) Modifier else Modifier.border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.ControlEdge,sunnyShape(9.dp)))
+                .then(if(liquid && !focused) Modifier else Modifier.border(if(focused) 2.dp else 1.dp,if(focused) SunnyColors.Accent else SunnyColors.ControlEdge,sunnyShape(9.dp)))
                 .padding(14.dp))
         if(next!=null) FocusTile("$tag:confirm",Modifier.focusRequester(confirmRequester).focusProperties {down=next; up=focusRequester},onClick=confirm) {
             Text(confirmText,color=SunnyColors.Accent,fontSize=13.sp,modifier=Modifier.padding(horizontal=18.dp,vertical=10.dp))
@@ -226,7 +226,7 @@ import kotlinx.coroutines.*
                                     if(system.available) "跟随设备的系统动态色；更换系统配色后自动更新。"
                                     else "设备未提供系统动态色，使用柔和紫色回退；也可改用当前主题色。"
                                 } else "使用上方选中的单色或自定义颜色生成整套色阶。"
-                                Text(note+(if(model.settings.appearanceMaterial=="glass") " 液态玻璃按钮文字随深浅模式切换，海报聚焦沿用主题色。" else ""),
+                                Text(note+(if(model.settings.appearanceMaterial=="glass") " 液态玻璃未聚焦文字随深浅模式切换，聚焦沿用系统/主题强调色。" else ""),
                                     color=SunnyColors.Secondary,fontSize=12.sp)
                                 val tones=LocalSunnyPalette.current
                                 Row(Modifier.fillMaxWidth().height(28.dp).testTag("monet:tones"),horizontalArrangement=Arrangement.spacedBy(5.dp)) {

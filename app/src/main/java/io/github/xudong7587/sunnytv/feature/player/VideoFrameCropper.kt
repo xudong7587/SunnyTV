@@ -36,13 +36,18 @@ internal class VideoFrameCropper(private val surface:()->SurfaceView?,private va
             inFlight=true
             val began=SystemClock.elapsedRealtime()
             copyVideoPixels(view.holder.surface,null,bitmap,worker) {result->
-                val next=if(!closed && result==PixelCopy.SUCCESS) {
+                val cost=SystemClock.elapsedRealtime()-began
+                val tooSlow=result!=io.github.xudong7587.sunnytv.feature.ambilight.VIDEO_COPY_BUSY && VideoReadbackPacing.blocksPlayback(cost)
+                val next=if(!closed && !tooSlow && result==PixelCopy.SUCCESS) {
                     bitmap.getPixels(pixels,0,160,0,0,160,90);VideoGeometry.picture(pixels,160,90)
                 } else null
                 main.post {
                     inFlight=false
-                    nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(SystemClock.elapsedRealtime()-began,1)
-                    if(closed)dispose() else if(next!=null) {
+                    nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,1)
+                    if(closed)dispose() else if(tooSlow) {
+                        settled=true
+                        android.util.Log.w("SunnyVideo","black-bar readback suspended: copy=${cost}ms; keeping current framing")
+                    } else if(next!=null) {
                         samples++
                         if(next==candidate)repeats++ else {candidate=next;repeats=1}
                         if(repeats>=3 && applied!=candidate) {applied=candidate;changed(applied)}

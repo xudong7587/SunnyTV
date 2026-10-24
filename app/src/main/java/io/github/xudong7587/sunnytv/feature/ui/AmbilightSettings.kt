@@ -75,6 +75,7 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
         Action(if(config.vivid) "色彩增强：开启" else "色彩增强：自然",id="lights:vivid",alwaysShowLabel=true) {
             lights.save(config.copy(vivid=!config.vivid))
         }
+        Text("播放优先：按取色耗时自动降低刷新；读取过慢时保持当前灯色，暂停本次同步。",color=SunnyColors.Secondary,fontSize=14.sp)
         Text("固定颜色",color=SunnyColors.Text,fontSize=20.sp)
         Action("打开色板",id="lights:palette",alwaysShowLabel=true) {palette=true}
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -94,7 +95,7 @@ import io.github.xudong7587.sunnytv.feature.ambilight.*
         Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Action("降低亮度",id="lights:dim",alwaysShowLabel=true) {lights.save(config.copy(brightness=(config.brightness-16).coerceAtLeast(1)))}
             Action("提高亮度",id="lights:bright",alwaysShowLabel=true) {lights.save(config.copy(brightness=(config.brightness+16).coerceAtMost(255)))}
-            Action("刷新：${config.fps} 次/秒",id="lights:fps",alwaysShowLabel=true) {
+            Action("刷新上限：${config.fps} 次/秒",id="lights:fps",alwaysShowLabel=true) {
                 lights.save(config.copy(fps=when(config.fps){5->10;10->15;else->5}))
             }
         }

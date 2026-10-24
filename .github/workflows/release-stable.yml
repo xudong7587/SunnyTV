@@ -116,7 +116,7 @@ jobs:
             ./gradlew --no-daemon --console=plain -PsunnytvTestBuildType=release assembleReleaseAndroidTest
             adb install -r app/build/outputs/apk/release/app-release.apk
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
-            adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
+            adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-repair-logcat.txt
             adb root || true
             adb wait-for-device
@@ -135,7 +135,7 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/release/app-release.apk
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
-            adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
+            adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-system-logcat.txt
             adb root || true
             adb wait-for-device

@@ -259,7 +259,20 @@ internal class LightReconnect {
 }
 
 /** Keep expensive vendor readbacks below about 10% duty cycle, with a bounded retry interval. */
+/** A tiny colour grid, not a screen-sized bitmap. One GPU read supplies all strip sections. */
+internal object VideoSampleGrid {
+    const val WIDTH=32
+    const val HEIGHT=18
+}
+
 internal object VideoReadbackPacing {
-    fun cooldown(costMs:Long,fps:Int):Long = maxOf((1000L/fps.coerceAtLeast(1)-costMs).coerceAtLeast(0),
-        if(costMs>50)(costMs*9).coerceAtMost(5000) else 0)
+    // Surface readback can occupy Android's RenderThread even when requested on our worker.
+    // Spend at most 10% of wall time copying; the configured FPS is an upper limit.
+    fun cooldown(costMs:Long,fps:Int):Long {
+        val cost=costMs.coerceIn(0,10_000)
+        return maxOf((1000L/fps.coerceAtLeast(1)-cost).coerceAtLeast(0),cost*9)
+    }
+    // A quarter-second copy already stalls several video/UI frames. Repeating it cannot
+    // produce useful ambient animation; hold the last colour until a new playback or retry.
+    fun blocksPlayback(costMs:Long)=costMs>=250
 }
