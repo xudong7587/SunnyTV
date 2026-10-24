@@ -2,10 +2,54 @@ package io.github.xudong7587.sunnytv
 
 import io.github.xudong7587.sunnytv.feature.ambilight.VideoCrop
 import io.github.xudong7587.sunnytv.feature.ambilight.VideoReadbackPacing
+import io.github.xudong7587.sunnytv.feature.ambilight.VideoReadbackQuality
 import org.junit.Assert.*
 import org.junit.Test
 
 class VideoReadbackTest {
+    @Test fun affordableReadbackRestoresDetailAfterOneCheapProbe() {
+        val quality=VideoReadbackQuality()
+        assertFalse(quality.fine)
+        quality.complete(10,10)
+        assertTrue(quality.fine)
+        repeat(20) {quality.complete(25,100L+it*100)}
+        assertTrue(quality.fine);assertFalse(quality.suspended)
+    }
+    @Test fun expensiveDetailFallsBackAndRecoveryRequiresSustainedHeadroom() {
+        val quality=VideoReadbackQuality()
+        quality.complete(10,10);quality.complete(80,100)
+        assertFalse(quality.fine)
+        repeat(6) {quality.complete(10,1000L+it*100)}
+        assertFalse("Do not alternate quality every frame",quality.fine)
+        quality.complete(10,30_100)
+        assertTrue(quality.fine)
+        quality.complete(80,30_200)
+        repeat(6) {quality.complete(10,31_000L+it*100)}
+        quality.complete(20,60_200)
+        assertFalse("One slower coarse copy breaks the recovery streak",quality.fine)
+        repeat(6) {quality.complete(10,60_300L+it*100)}
+        assertTrue(quality.fine)
+    }
+    @Test fun slowProbeKeepsCoarseAndSevereDetailedStallIsNeverRepeated() {
+        val quality=VideoReadbackQuality()
+        quality.complete(70,70)
+        assertFalse(quality.fine);assertFalse(quality.suspended)
+        quality.reset();quality.complete(10,100);quality.complete(300,500)
+        assertFalse(quality.fine);assertFalse("Try the cheaper grid before giving up",quality.suspended)
+        repeat(20) {quality.complete(5,100_000L+it*100)}
+        assertFalse("Never probe the stalling detailed path again in this playback",quality.fine)
+        quality.complete(300,200_000)
+        assertTrue(quality.suspended)
+        quality.reset();quality.complete(10,210_000)
+        assertTrue(quality.fine);assertFalse(quality.suspended)
+    }
+    @Test fun severeCoarseStallHoldsUntilNewPlaybackOrExplicitRetry() {
+        val quality=VideoReadbackQuality()
+        quality.complete(250,250);quality.complete(1,100_000)
+        assertTrue(quality.suspended);assertFalse(quality.fine)
+        quality.reset();quality.complete(1,100_100)
+        assertTrue(quality.fine);assertFalse(quality.suspended)
+    }
     @Test fun nativeDecoderCropSamplesOnlyTheVisibleSourceCenter() {
         val geometry=io.github.xudong7587.sunnytv.feature.player.VideoGeometry
         val bounds=geometry.bounds(1920,1080,2.4f,true,false)

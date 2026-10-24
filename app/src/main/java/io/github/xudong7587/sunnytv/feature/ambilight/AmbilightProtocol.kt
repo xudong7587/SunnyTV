@@ -258,11 +258,43 @@ internal class LightReconnect {
         (1500L shl (attempts++).coerceAtMost(4)).coerceAtMost(30_000L)
 }
 
-/** Keep expensive vendor readbacks below about 10% duty cycle, with a bounded retry interval. */
-/** A tiny colour grid, not a screen-sized bitmap. One GPU read supplies all strip sections. */
+/** One GPU read supplies all strip sections; the smaller grid is a performance fallback. */
 internal object VideoSampleGrid {
     const val WIDTH=32
     const val HEIGHT=18
+    const val FINE_WIDTH=160
+    const val FINE_HEIGHT=90
+}
+
+/** Probe cheaply, retain detail when affordable, and recover without alternating every frame. */
+internal class VideoReadbackQuality {
+    var fine=false; private set
+    var suspended=false; private set
+    private var probing=true
+    private var fineBlocked=false
+    private var retryAt=0L
+    private var fastSamples=0
+    fun reset() {
+        fine=false;suspended=false;probing=true;fineBlocked=false;retryAt=0L;fastSamples=0
+    }
+    fun complete(costMs:Long,nowMs:Long) {
+        if(suspended)return
+        if(VideoReadbackPacing.blocksPlayback(costMs)) {
+            // A costly detailed copy may still have an affordable coarse alternative.
+            // Never repeat that detailed stall during this playback.
+            if(fine) {fine=false;fineBlocked=true} else suspended=true
+            probing=false;fastSamples=0
+        } else if(fine) {
+            if(costMs>60) {fine=false;retryAt=nowMs+30_000;fastSamples=0}
+        } else if(probing) {
+            probing=false;fine=costMs<=25;retryAt=nowMs+30_000
+        } else {
+            fastSamples=if(costMs<=16)(fastSamples+1).coerceAtMost(6) else 0
+            if(!fineBlocked && fastSamples>=6 && nowMs>=retryAt) {
+                fine=true;fastSamples=0
+            }
+        }
+    }
 }
 
 internal object VideoReadbackPacing {

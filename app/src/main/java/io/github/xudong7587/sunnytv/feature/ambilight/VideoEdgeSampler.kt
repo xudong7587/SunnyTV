@@ -23,18 +23,21 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
     private val worker=Handler(thread.looper)
     private val owner=Any()
     private val configScope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
-    private val width=VideoSampleGrid.WIDTH
-    private val height=VideoSampleGrid.HEIGHT
-    private val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
-    private val pixels=IntArray(width*height)
-    private val visiblePixels=IntArray(width*height)
+    private class Sample(val width:Int,val height:Int) {
+        val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+        val pixels=IntArray(width*height)
+        val visiblePixels=IntArray(width*height)
+    }
+    private val coarse=Sample(VideoSampleGrid.WIDTH,VideoSampleGrid.HEIGHT)
+    private val detailed=Sample(VideoSampleGrid.FINE_WIDTH,VideoSampleGrid.FINE_HEIGHT)
+    private val quality=VideoReadbackQuality()
+    private var generation=0L
     private var nextCaptureAt=0L
     private var diagnosticAt=0L
     @Volatile private var closed=false
     private var inFlight=false
     private var failures=0
     private var syncActive=false
-    private var suspended=false
     private var lastPlayingAt=SystemClock.elapsedRealtime()
     private val tick=object:Runnable {
         override fun run() {
@@ -49,13 +52,18 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                     return
                 }
                 lastPlayingAt=SystemClock.elapsedRealtime()
-                if(suspended || inFlight || SystemClock.elapsedRealtime()<nextCaptureAt)return
+                if(quality.suspended || inFlight || SystemClock.elapsedRealtime()<nextCaptureAt)return
                 val (video,container)=surface()?:return
                 if(!video.holder.surface.isValid || video.width<=0 || video.height<=0)return
                 // Media3 FIT uses the video-sized surface; ZOOM extends it beyond the visible player.
                 val a=IntArray(2);val b=IntArray(2);video.getLocationInWindow(a);container.getLocationInWindow(b)
                 val rect=Rect(0,0,video.width,video.height)
                 if(!rect.intersect(b[0]-a[0],b[1]-a[1],b[0]-a[0]+container.width,b[1]-a[1]+container.height))return
+                val wasFine=quality.fine
+                val sample=if(wasFine)detailed else coarse
+                val width=sample.width;val height=sample.height
+                val bitmap=sample.bitmap;val pixels=sample.pixels;val visiblePixels=sample.visiblePixels
+                val captureGeneration=generation
                 // The holder's surfaceFrame is a layout size, not necessarily the decoder buffer.
                 // Copy the whole buffer, then map the visible view region into our small bitmap.
                 val bounds=visibleFraction()?.let {area->
@@ -89,12 +97,18 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                     main.post {
                         inFlight=false
                         if(closed)dispose() else {
-                            if(tooSlow) {
-                                suspended=true
+                            if((result==PixelCopy.SUCCESS || tooSlow) && captureGeneration==generation) {
+                                quality.complete(cost,SystemClock.elapsedRealtime())
+                            }
+                            if(quality.suspended) {
                                 lights.note("当前视频取色过慢（${cost}ms），已暂停画面同步以优先播放；重新开关画面同步可重试")
                                 android.util.Log.w("SunnyAmbilight","readback suspended for this playback: copy=${cost}ms")
+                            } else if(wasFine && !quality.fine && captureGeneration==generation) {
+                                lights.note("当前视频取色较慢（${cost}ms），已切换轻量取色以优先播放")
+                                android.util.Log.i("SunnyAmbilight","using coarse color grid: detailed copy=${cost}ms")
                             }
-                            nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,config.fps)
+                            if(captureGeneration==generation)
+                                nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,config.fps)
                             scheduleTick()
                         }
                     }
@@ -109,7 +123,7 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
         val now=SystemClock.elapsedRealtime()
         val delay=when {
             !config.enabled || !config.sync || !lights.connected.value -> 500L
-            suspended -> 1000L
+            quality.suspended -> 1000L
             nextCaptureAt>now -> (nextCaptureAt-now).coerceAtMost(1000L)
             else -> 1000L/config.fps
         }
@@ -121,7 +135,7 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
             lights.config.collect {config->
                 val active=config.enabled && config.sync
                 // Observe the switch itself, rather than miss a quick off/on between polling ticks.
-                if(active && !syncActive) {suspended=false;nextCaptureAt=0L}
+                if(active && !syncActive) {quality.reset();generation++;nextCaptureAt=0L}
                 syncActive=active
             }
         }
@@ -131,7 +145,10 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
         if(closed)return;closed=true;configScope.cancel();main.removeCallbacks(tick);lights.stopPlayback(owner)
         if(!inFlight)dispose()
     }
-    private fun dispose() {if(!bitmap.isRecycled)bitmap.recycle();thread.quitSafely()}
+    private fun dispose() {
+        for(sample in listOf(coarse,detailed))if(!sample.bitmap.isRecycled)sample.bitmap.recycle()
+        thread.quitSafely()
+    }
 }
 
 /** Android 11 performs the native copy synchronously before posting its callback.

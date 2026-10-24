@@ -54,17 +54,21 @@ class FullBufferSamplingTest {
             assertTrue("4K buffer must be drawn",ready.await(10,TimeUnit.SECONDS))
             instrument.waitForIdleSync()
             val thread=HandlerThread("full-buffer-test").apply {start()}
-            val w=VideoSampleGrid.WIDTH;val h=VideoSampleGrid.HEIGHT
-            val image=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
-            val copied=CountDownLatch(1);val result=AtomicInteger(-99)
             try {
-                copyVideoPixels(view.holder.surface,null,image,Handler(thread.looper)) {code->result.set(code);copied.countDown()}
-                assertTrue(copied.await(10,TimeUnit.SECONDS));assertEquals(PixelCopy.SUCCESS,result.get())
-                val pixels=IntArray(w*h);image.getPixels(pixels,0,w,0,0,w,h)
-                val colors=EdgeColors.sample(pixels,w,h)
-                assertTrue("bottom blue must not be lost",(colors[2] and 255)>220 && (colors[2] shr 16 and 255)<30)
-                assertTrue("right green must not sample the centre",(colors[1] shr 8 and 255)>180 && (colors[1] shr 16 and 255)<50)
-            } finally {thread.quitSafely();thread.join(2000);image.recycle()}
+                for((w,h) in listOf(VideoSampleGrid.WIDTH to VideoSampleGrid.HEIGHT,
+                    VideoSampleGrid.FINE_WIDTH to VideoSampleGrid.FINE_HEIGHT)) {
+                    val image=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
+                    val copied=CountDownLatch(1);val result=AtomicInteger(-99)
+                    try {
+                        copyVideoPixels(view.holder.surface,null,image,Handler(thread.looper)) {code->result.set(code);copied.countDown()}
+                        assertTrue(copied.await(10,TimeUnit.SECONDS));assertEquals(PixelCopy.SUCCESS,result.get())
+                        val pixels=IntArray(w*h);image.getPixels(pixels,0,w,0,0,w,h)
+                        val colors=EdgeColors.sample(pixels,w,h)
+                        assertTrue("$w x $h bottom blue must not be lost",(colors[2] and 255)>220 && (colors[2] shr 16 and 255)<30)
+                        assertTrue("$w x $h right green must not sample the centre",(colors[1] shr 8 and 255)>180 && (colors[1] shr 16 and 255)<50)
+                    } finally {image.recycle()}
+                }
+            } finally {thread.quitSafely();thread.join(2000)}
         }
     }
 }
