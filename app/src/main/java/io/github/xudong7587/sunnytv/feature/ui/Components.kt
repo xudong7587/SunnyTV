@@ -99,10 +99,9 @@ fun Modifier.flatShadow(shape:Shape,enabled:Boolean):Modifier = softFocusShadow(
         motion.fade(150),label="glass-flat-focus")
     val textured=(glassControls || button || emphasized || id.startsWith("setting:") || id.startsWith("toggle:")) && material!="clear"
     val materialModifier=if(textured) Modifier.materialSurface(shape,control=true,pressed=pressed,focused=selected) else Modifier
-    val dark=model.settings.darkTheme
-    val outline=if(emphasized) base.text else base.accent
-    val outlineWidth=if(dark) 1.67.dp else 2.dp
-    val showOutline=focused && focusOutline && !liquidButton
+    val outline=base.accent
+    val outlineWidth=if(artwork) 3.dp else 2.5.dp
+    val showOutline=focused && focusOutline
     LaunchedEffect(page,id,pageActive) {
         if(pageActive && homeNavigator?.moving!=true && ((restoreFocus && model.focusMemory[page]==id) || (autoFocus && (model.focusMemory[page]==null || id.startsWith("dialog:"))))) {
             delay(45)

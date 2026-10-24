@@ -167,15 +167,6 @@ object EdgeColors {
                 r+=cr*weight;g+=cg*weight;b+=cb*weight;n+=weight
             }
             val rgb=intArrayOf((r/n).toInt(),(g/n).toInt(),(b/n).toInt())
-            if(vivid) {
-                val high=rgb.max();val low=rgb.min();val delta=high-low
-                // Neutral/black content stays neutral/black. Preserve hue while increasing chroma.
-                if(delta>high*0.02) {
-                    val value=(high*1.20).coerceAtMost(255.0)
-                    val saturation=(delta.toDouble()/high*1.60).coerceAtMost(1.0)
-                    for(i in rgb.indices)rgb[i]=(value*(1.0-saturation*(high-rgb[i])/delta)).toInt().coerceIn(0,255)
-                }
-            }
             return (rgb[0] shl 16) or (rgb[1] shl 8) or rgb[2]
         }
         val edges=intArrayOf(mean(left,top,right,top+dy),mean(right-dx,top,right,bottom),
@@ -201,7 +192,18 @@ object EdgeColors {
                 }
             }
         }
-        return edges
+        return if(vivid) edges.map(::vividColor).toIntArray() else edges
+    }
+    /** Keep neutrals neutral and hue constant; reflected wall light needs more chroma than pixels.
+     * Apply after sector fallback too. Hardware RGB load/brightness limits remain independent. */
+    private fun vividColor(color:Int):Int {
+        val rgb=intArrayOf(color shr 16 and 255,color shr 8 and 255,color and 255)
+        val high=rgb.max();val delta=high-rgb.min()
+        if(delta<=high*.02)return color
+        val value=(high*1.20).coerceAtMost(255.0)
+        val saturation=(delta.toDouble()/high*2.4).coerceIn(.70,1.0)
+        for(i in rgb.indices)rgb[i]=(value*(1.0-saturation*(high-rgb[i])/delta)).toInt().coerceIn(0,255)
+        return (rgb[0] shl 16) or (rgb[1] shl 8) or rgb[2]
     }
 }
 
@@ -214,6 +216,16 @@ internal class StableLightColors(fallback:Int) {
     private var lastAt=0L
     fun next(colors:IntArray,nowMs:Long):IntArray {
         require(colors.size==4)
+        // At a multi-second capture interval, a three-frame median is stale by the time it is
+        // available. Show this sample now; keep median filtering for normal-rate flash rejection.
+        if(lastAt==0L || nowMs-lastAt>=1000) {
+            history.clear()
+            val fresh=colors.map(::normalize).toIntArray()
+            history.addLast(fresh)
+            current=IntArray(4) {fresh[it].takeIf {c->c!=0} ?: current[it]}
+            lastAt=nowMs
+            return current.clone()
+        }
         history.addLast(colors.map(::normalize).toIntArray())
         if(history.size>3)history.removeFirst()
         val alpha=(1-kotlin.math.exp(-(if(lastAt==0L)100L else (nowMs-lastAt).coerceIn(1,250)).toDouble()/450)).toFloat()
@@ -270,31 +282,37 @@ internal object VideoSampleGrid {
 internal class VideoReadbackQuality {
     var fine=false; private set
     var suspended=false; private set
+    var lowFrequency=false; private set
     private var probing=true
     private var fineBlocked=false
     private var retryAt=0L
     private var fastSamples=0
     fun reset() {
-        fine=false;suspended=false;probing=true;fineBlocked=false;retryAt=0L;fastSamples=0
+        fine=false;suspended=false;lowFrequency=false;probing=true;fineBlocked=false;retryAt=0L;fastSamples=0
     }
     fun complete(costMs:Long,nowMs:Long) {
         if(suspended)return
-        if(VideoReadbackPacing.blocksPlayback(costMs)) {
+        if(costMs>=2000) {
+            suspended=true;fine=false
+        } else if(VideoReadbackPacing.blocksPlayback(costMs)) {
             // A costly detailed copy may still have an affordable coarse alternative.
             // Never repeat that detailed stall during this playback.
-            if(fine) {fine=false;fineBlocked=true} else suspended=true
-            probing=false;fastSamples=0
+            if(!fine)lowFrequency=true
+            fine=false;fineBlocked=true
+            probing=false;fastSamples=0;retryAt=nowMs+30_000
         } else if(fine) {
             if(costMs>60) {fine=false;retryAt=nowMs+30_000;fastSamples=0}
         } else if(probing) {
             probing=false;fine=costMs<=25;retryAt=nowMs+30_000
         } else {
             fastSamples=if(costMs<=16)(fastSamples+1).coerceAtMost(6) else 0
+            if(fastSamples>=6 && nowMs>=retryAt)lowFrequency=false
             if(!fineBlocked && fastSamples>=6 && nowMs>=retryAt) {
                 fine=true;fastSamples=0
             }
         }
     }
+    fun cooldown(costMs:Long,fps:Int)=maxOf(VideoReadbackPacing.cooldown(costMs,fps),if(lowFrequency)5000L else 0L)
 }
 
 internal object VideoReadbackPacing {
@@ -304,7 +322,7 @@ internal object VideoReadbackPacing {
         val cost=costMs.coerceIn(0,10_000)
         return maxOf((1000L/fps.coerceAtLeast(1)-cost).coerceAtLeast(0),cost*9)
     }
-    // A quarter-second copy already stalls several video/UI frames. Repeating it cannot
-    // produce useful ambient animation; hold the last colour until a new playback or retry.
+    // A quarter-second copy calls for a cheaper path or sparse updates. Framing scans still
+    // stop here; unlike ambient color they have no ongoing output that needs refreshing.
     fun blocksPlayback(costMs:Long)=costMs>=250
 }

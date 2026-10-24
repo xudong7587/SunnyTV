@@ -112,11 +112,12 @@ jobs:
           profile: tv_1080p
           disable-animations: true
           script: |
-            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.AboutProjectsTest,io.github.xudong7587.sunnytv.AmbilightLifecycleTest,io.github.xudong7587.sunnytv.AmbilightSettingsTest,io.github.xudong7587.sunnytv.AmbilightSurfaceTest,androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest
+            adb shell settings put secure immersive_mode_confirmations confirmed
+            ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.xudong7587.sunnytv.AboutProjectsTest,io.github.xudong7587.sunnytv.AmbilightLifecycleTest,io.github.xudong7587.sunnytv.AmbilightSettingsTest,io.github.xudong7587.sunnytv.AmbilightSurfaceTest,androidx.media3.decoder.ffmpeg.LocalAudioDecoderTest,io.github.xudong7587.sunnytv.GithubUpdatePanelTest,io.github.xudong7587.sunnytv.PlayerPanelFocusTest,io.github.xudong7587.sunnytv.CloudQualityPlaybackTest,io.github.xudong7587.sunnytv.PlayerQualityBadgeTest,io.github.xudong7587.sunnytv.CloudSubtitleContinuityTest,io.github.xudong7587.sunnytv.HomeBannerCacheTest,io.github.xudong7587.sunnytv.StartupCacheTest,io.github.xudong7587.sunnytv.UgreenConnectionUiTest,io.github.xudong7587.sunnytv.HomeNavigationEntryTest,io.github.xudong7587.sunnytv.ExperimentalUpdateTest,io.github.xudong7587.sunnytv.ExperimentalUpdateUiTest,io.github.xudong7587.sunnytv.AutomaticUpdateStartupTest,io.github.xudong7587.sunnytv.GlassFocusRepairTest,io.github.xudong7587.sunnytv.SkipPromptFocusTest
             ./gradlew --no-daemon --console=plain -PsunnytvTestBuildType=release assembleReleaseAndroidTest
             adb install -r app/build/outputs/apk/release/app-release.apk
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
-            adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
+            adb shell am instrument -w -r -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest,io.github.xudong7587.sunnytv.GlassFocusRepairTest,io.github.xudong7587.sunnytv.SkipPromptFocusTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-repair-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-repair-logcat.txt
             adb root || true
             adb wait-for-device
@@ -133,9 +134,10 @@ jobs:
           avd-name: sunnytv-tv
           disable-animations: true
           script: |
+            adb shell settings put secure immersive_mode_confirmations confirmed
             adb install -r app/build/outputs/apk/release/app-release.apk
             adb install -r app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
-            adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
+            adb shell am instrument -w -r -e requireTv true -e class io.github.xudong7587.sunnytv.VideoReadbackSafetyTest,io.github.xudong7587.sunnytv.FullBufferSamplingTest,io.github.xudong7587.sunnytv.LegacyGlassTest,io.github.xudong7587.sunnytv.PlayerFramingTest,io.github.xudong7587.sunnytv.PlayerResizeTest,io.github.xudong7587.sunnytv.GlassFocusRepairTest,io.github.xudong7587.sunnytv.SkipPromptFocusTest io.github.xudong7587.sunnytv.debug.test/androidx.test.runner.AndroidJUnitRunner | tee build-logs/tv-system-android.txt
             adb logcat -d -s FramingQA:I SunnyAmbilight:I AndroidRuntime:E '*:S' > build-logs/tv-system-logcat.txt
             adb root || true
             adb wait-for-device

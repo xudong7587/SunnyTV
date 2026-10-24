@@ -31,7 +31,7 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
     private val coarse=Sample(VideoSampleGrid.WIDTH,VideoSampleGrid.HEIGHT)
     private val detailed=Sample(VideoSampleGrid.FINE_WIDTH,VideoSampleGrid.FINE_HEIGHT)
     private val quality=VideoReadbackQuality()
-    private var generation=0L
+    @Volatile private var generation=0L
     private var nextCaptureAt=0L
     private var diagnosticAt=0L
     @Volatile private var closed=false
@@ -76,7 +76,7 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                     // Measure on the worker, before waiting for the UI queue to handle completion.
                     val cost=SystemClock.elapsedRealtime()-began
                     val tooSlow=result!=VIDEO_COPY_BUSY && VideoReadbackPacing.blocksPlayback(cost)
-                    if(!closed && !tooSlow) {
+                    if(!closed && cost<2000 && captureGeneration==generation) {
                         if(result==PixelCopy.SUCCESS) {
                             bitmap.getPixels(pixels,0,width,0,0,width,height)
                             VideoCrop.visiblePixels(pixels,visiblePixels,width,height,bounds)
@@ -103,12 +103,15 @@ class VideoEdgeSampler(private val lights:AmbilightController,private val surfac
                             if(quality.suspended) {
                                 lights.note("当前视频取色过慢（${cost}ms），已暂停画面同步以优先播放；重新开关画面同步可重试")
                                 android.util.Log.w("SunnyAmbilight","readback suspended for this playback: copy=${cost}ms")
+                            } else if(quality.lowFrequency) {
+                                lights.note("当前视频取色较慢（${cost}ms），使用低频四边同步，优先保证播放")
+                                android.util.Log.i("SunnyAmbilight","sparse four-edge sync: copy=${cost}ms cooldown=${quality.cooldown(cost,config.fps)}ms")
                             } else if(wasFine && !quality.fine && captureGeneration==generation) {
                                 lights.note("当前视频取色较慢（${cost}ms），已切换轻量取色以优先播放")
                                 android.util.Log.i("SunnyAmbilight","using coarse color grid: detailed copy=${cost}ms")
                             }
                             if(captureGeneration==generation)
-                                nextCaptureAt=SystemClock.elapsedRealtime()+VideoReadbackPacing.cooldown(cost,config.fps)
+                                nextCaptureAt=SystemClock.elapsedRealtime()+quality.cooldown(cost,config.fps)
                             scheduleTick()
                         }
                     }

@@ -7,6 +7,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -39,12 +40,13 @@ import io.github.xudong7587.sunnytv.feature.ui.LocalSunnyPalette
 
 /**
  * Lightweight player chrome for TV: no blur and no large shadow layer. The focused control gets
- * one crisp accent ring, a restrained glass fill and a small scale animation. Transport icons are
+ * one crisp accent ring; liquid controls keep the video visible with no focus face. Transport icons are
  * kept optically heavier than utility icons without changing the D-pad hit target.
  */
 @Composable internal fun PlayerControl(label:String,icon:String,modifier:Modifier=Modifier,
     initial:Boolean=false,emphasis:Boolean=false,badge:String?=null,selected:Boolean=false,showFocusLabel:Boolean=true,labelBelow:Boolean=false,onClick:()->Unit) {
     val requester=remember {FocusRequester()}
+    val interaction=remember {MutableInteractionSource()}
     var focused by remember {mutableStateOf(false)}
     val motion=LocalMotion.current
     val liquid=LocalNativeAppearance.current.material=="glass"
@@ -63,22 +65,26 @@ import io.github.xudong7587.sunnytv.feature.ui.LocalSunnyPalette
         emphasis -> Color.White.copy(.20f)
         else -> Color.White.copy(.08f)
     }
-    val glyph=if(liquid) monochrome else if(focused || selected) SunnyColors.Accent else Color.White.copy(if(emphasis) .96f else .84f)
+    val glyph=if(focused || selected) SunnyColors.Accent else if(liquid) monochrome else Color.White.copy(if(emphasis) .96f else .84f)
     LaunchedEffect(initial) {if(initial) {withFrameNanos {};requester.requestFocus()}}
     Box(modifier.size(size).testTag("player:$icon").semantics {contentDescription=label}
         .graphicsLayer {scaleX=scale;scaleY=scale}
         .focusRequester(requester).onFocusChanged {focused=it.isFocused}
-        .glassButtonFace(CircleShape,focused || selected)
+        // The video Surface is not a page backdrop. Keep glass chrome flat here; focus uses
+        // the theme accent, without introducing a grey frosted face over the playing picture.
+        .then(if(liquid) Modifier else Modifier.glassButtonFace(CircleShape,focused || selected))
         .drawWithCache {
-            val stroke=if(focused) 2.dp.toPx() else 1.dp.toPx()
+            val stroke=if(focused) 2.5.dp.toPx() else 1.dp.toPx()
             onDrawBehind {
                 if(!liquid) {
                     drawCircle(fill)
                     drawCircle(ring,style=Stroke(stroke))
+                } else if(focused || selected) {
+                    drawCircle(ring,radius=(this.size.minDimension-stroke)/2,style=Stroke(stroke))
                 }
             }
         }
-        .clickable(onClick=onClick),contentAlignment=Alignment.Center) {
+        .clickable(interactionSource=interaction,indication=null,onClick=onClick),contentAlignment=Alignment.Center) {
         PlayerGlyph(icon,glyph,badge,emphasis)
         AnimatedVisibility((focused || icon=="subtitle-timing") && showFocusLabel,
             enter=fadeIn(motion.fade(150))+scaleIn(motion.spring(),initialScale=.94f),
@@ -120,13 +126,14 @@ import io.github.xudong7587.sunnytv.feature.ui.LocalSunnyPalette
 @Composable internal fun PlayerOption(label:String,selected:Boolean=false,initial:Boolean=false,onClick:()->Unit) {
     var focused by remember {mutableStateOf(false)}
     val requester=remember {FocusRequester()}
+    val interaction=remember {MutableInteractionSource()}
     val motion=LocalMotion.current
     val scale by animateFloatAsState(if(focused) 1.012f else 1f,motion.spring(),label="player-option-scale")
     LaunchedEffect(Unit) {if(initial) {withFrameNanos {};requester.requestFocus()}}
     Row(Modifier.fillMaxWidth().graphicsLayer {scaleX=scale;scaleY=scale}.focusRequester(requester).onFocusChanged {focused=it.isFocused}
-        .background(when {focused->Color.White.copy(.14f);selected->SunnyColors.Accent.copy(.10f);else->Color.White.copy(.045f)},RoundedCornerShape(14.dp))
-        .border(if(focused) 1.5.dp else 1.dp,when {focused->SunnyColors.Accent;selected->SunnyColors.Accent.copy(.55f);else->Color.White.copy(.08f)},RoundedCornerShape(14.dp))
-        .glassButtonFace(RoundedCornerShape(12.dp)).clickable(onClick=onClick).padding(horizontal=16.dp,vertical=14.dp),verticalAlignment=Alignment.CenterVertically,
+        .background(when {focused||selected->SunnyColors.Accent.copy(.10f);else->Color.White.copy(.045f)},RoundedCornerShape(14.dp))
+        .border(if(focused) 2.5.dp else 1.dp,when {focused->SunnyColors.Accent;selected->SunnyColors.Accent.copy(.55f);else->Color.White.copy(.08f)},RoundedCornerShape(14.dp))
+        .clickable(interactionSource=interaction,indication=null,onClick=onClick).padding(horizontal=16.dp,vertical=14.dp),verticalAlignment=Alignment.CenterVertically,
         horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(30.dp).background(if(selected) SunnyColors.Accent.copy(.14f) else Color.White.copy(.05f),CircleShape),contentAlignment=Alignment.Center) {
             LineIcon(if(selected) "check" else "audio",if(selected) SunnyColors.Accent else Color.White.copy(.62f),Modifier.size(17.dp))

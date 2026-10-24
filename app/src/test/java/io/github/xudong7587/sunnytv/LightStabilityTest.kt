@@ -7,6 +7,14 @@ import org.junit.Test
 
 class LightStabilityTest {
     private fun high(c:Int)=maxOf(c shr 16 and 255,c shr 8 and 255,c and 255)
+    @Test fun sparseSamplesShowTheCurrentFourEdgesWithoutWaitingForThreeMoreCaptures() {
+        val filter=StableLightColors(0xff8000)
+        val first=intArrayOf(0xff0000,0x00ff00,0x0000ff,0xffff00)
+        assertArrayEquals(first,filter.next(first,1000))
+        val changed=intArrayOf(0x0000ff,0xffff00,0xff0000,0x00ff00)
+        assertArrayEquals(changed,filter.next(changed,6300))
+        assertArrayEquals(changed,filter.next(IntArray(4),12_000))
+    }
     @Test fun exposureChangesDoNotChangeBrightnessOrHue() {
         val filter=StableLightColors(0xff8000)
         var t=1000L

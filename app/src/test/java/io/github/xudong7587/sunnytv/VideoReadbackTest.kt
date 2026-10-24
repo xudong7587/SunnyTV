@@ -38,14 +38,25 @@ class VideoReadbackTest {
         assertFalse(quality.fine);assertFalse("Try the cheaper grid before giving up",quality.suspended)
         repeat(20) {quality.complete(5,100_000L+it*100)}
         assertFalse("Never probe the stalling detailed path again in this playback",quality.fine)
-        quality.complete(300,200_000)
+        quality.complete(2000,200_000)
         assertTrue(quality.suspended)
         quality.reset();quality.complete(10,210_000)
         assertTrue(quality.fine);assertFalse(quality.suspended)
     }
-    @Test fun severeCoarseStallHoldsUntilNewPlaybackOrExplicitRetry() {
+    @Test fun slowCoarseCopyKeepsFourEdgesAtLowFrequencyRatherThanFreezing() {
         val quality=VideoReadbackQuality()
-        quality.complete(250,250);quality.complete(1,100_000)
+        quality.complete(300,300)
+        assertFalse(quality.suspended);assertFalse(quality.fine);assertTrue(quality.lowFrequency)
+        assertEquals(5000L,quality.cooldown(300,10))
+        quality.complete(950,6250)
+        assertFalse(quality.suspended);assertEquals(8550L,quality.cooldown(950,10))
+        repeat(6) {quality.complete(10,40_000L+it*100)}
+        assertFalse(quality.lowFrequency)
+        assertFalse("Never re-probe a path that stalled",quality.fine)
+    }
+    @Test fun multiSecondDriverStallStillHoldsUntilNewPlaybackOrExplicitRetry() {
+        val quality=VideoReadbackQuality()
+        quality.complete(2000,2000);quality.complete(1,100_000)
         assertTrue(quality.suspended);assertFalse(quality.fine)
         quality.reset();quality.complete(1,100_100)
         assertTrue(quality.fine);assertFalse(quality.suspended)

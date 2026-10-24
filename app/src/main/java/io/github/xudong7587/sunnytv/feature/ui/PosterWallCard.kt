@@ -24,7 +24,7 @@ import io.github.xudong7587.sunnytv.core.model.*
     LaunchedEffect(item,focusId,loadGeneration) {if(item==null) onNeedContent()}
     val model=LocalAppModel.current
     Column {
-        FocusTile(focusId,modifier.fillMaxWidth().aspectRatio(ratio),onFocus={if(item==null) onNeedContent()},
+        FocusTile(focusId,modifier.fillMaxWidth().aspectRatio(ratio),artwork=true,onFocus={if(item==null) onNeedContent()},
             onLongPress=item?.let {{model.showItemActions(it)}},
             onClick={if(item==null) onNeedContent() else onClick(item)}) {
             if(item!=null) ArtworkView(item,when(mode) {"Thumb"->MediaLogic.wideArtwork(item);"Banner"->item.banner ?: item.thumb ?: item.backdrop;else->item.primary},

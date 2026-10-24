@@ -3,6 +3,7 @@ package io.github.xudong7587.sunnytv.feature.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -21,7 +22,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.tv.material3.Text
 import io.github.xudong7587.sunnytv.feature.ui.SunnyColors
-import io.github.xudong7587.sunnytv.feature.ui.glassButtonFace
 
 /** One translucent row; no scrim, picture resizing or pause on open. */
 @Composable internal fun SubtitleTimingOverlay(progressMs:Long,enabled:Boolean,onAdjust:(Long)->Unit,onClose:()->Unit) {
@@ -43,12 +43,12 @@ import io.github.xudong7587.sunnytv.feature.ui.glassButtonFace
     modifier:Modifier=Modifier,initial:Boolean=false) {
     var focused by remember {mutableStateOf(false)}
     val focus=remember {FocusRequester()}
+    val interaction=remember {MutableInteractionSource()}
     LaunchedEffect(Unit) {if(initial) {withFrameNanos {};focus.requestFocus()}}
     Box(modifier.heightIn(min=44.dp).focusRequester(focus).onFocusChanged {focused=it.isFocused}
         .background(if(focused) SunnyColors.Accent.copy(alpha=.22f) else Color.White.copy(alpha=.08f),RoundedCornerShape(8.dp))
-        .glassButtonFace(RoundedCornerShape(8.dp))
-        .border(1.dp,if(focused) SunnyColors.Accent else Color.Transparent,RoundedCornerShape(8.dp))
-        .clickable(enabled=enabled,onClick=onClick).testTag(tag).semantics {contentDescription=label}
+        .border(if(focused) 2.5.dp else 1.dp,if(focused) SunnyColors.Accent else Color.Transparent,RoundedCornerShape(8.dp))
+        .clickable(interactionSource=interaction,indication=null,enabled=enabled,onClick=onClick).testTag(tag).semantics {contentDescription=label}
         .padding(horizontal=8.dp,vertical=6.dp),contentAlignment=Alignment.Center) {
         Text(label,color=Color.White.copy(alpha=if(enabled) 1f else .4f),fontSize=12.sp,maxLines=1)
     }

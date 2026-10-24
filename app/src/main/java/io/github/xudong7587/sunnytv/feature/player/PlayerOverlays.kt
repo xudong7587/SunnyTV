@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -141,14 +142,23 @@ internal fun playerClock(ms:Long):String {
     }
 }
 
-@Composable internal fun SkipSegmentPrompt(segment:SkipSegment,onSkip:()->Unit,onDismiss:()->Unit,modifier:Modifier=Modifier) {
+@Composable internal fun SkipSegmentPrompt(segment:SkipSegment,onSkip:()->Unit,onDismiss:()->Unit,modifier:Modifier=Modifier,
+    actionFocus:FocusRequester?=null,upFocus:FocusRequester=FocusRequester.Default,downFocus:FocusRequester=FocusRequester.Default) {
     val label=if(segment.type=="outro") "跳过片尾" else "跳过片头"
+    val navigation=Modifier.focusProperties {up=upFocus;down=downFocus}
+    fun activate(action:()->Unit) {
+        // Give focus to a surviving control before skipping/dismissing removes this prompt.
+        if(downFocus!==FocusRequester.Default)downFocus.requestFocus()
+        action()
+    }
     Row(modifier.testTag("player:skip-prompt").background(Color.Black.copy(.82f),RoundedCornerShape(18.dp))
         .border(1.dp,Color.White.copy(.18f),RoundedCornerShape(18.dp)).padding(12.dp),
         horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
-        PlayerControl(label,"skip",initial=true,onClick=onSkip)
+        PlayerControl(label,"skip",initial=true,
+            modifier=(if(actionFocus!=null)Modifier.focusRequester(actionFocus) else Modifier).then(navigation),
+            onClick={activate(onSkip)})
         Text(label,color=Color.White,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
-        PlayerControl("暂不","close",onClick=onDismiss)
+        PlayerControl("暂不","close",modifier=navigation,onClick={activate(onDismiss)})
     }
 }
 

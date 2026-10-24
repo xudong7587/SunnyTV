@@ -960,6 +960,7 @@ class PlayerActivity: ComponentActivity() {
         val context=mediaContext
         val progressFocus=remember {FocusRequester()}
         val audioOutputFocus=remember {FocusRequester()}
+        val skipFocus=remember {FocusRequester()}
         val subtitleInk=SunnyColors.Text.toArgb()
         val subtitleAccent=SunnyColors.Accent.toArgb()
         val resolvedSubtitleFont by produceState<android.graphics.Typeface?>(null,settings.subtitleFontChoice,settings.customFontFile) {
@@ -994,6 +995,7 @@ class PlayerActivity: ComponentActivity() {
             }
         }
         val activeSkip=SegmentLogic.active(context?.skipSegments.orEmpty(),position,dismissedSegments)
+        val showSkipPrompt=activeSkip!=null && rendered && error.isBlank() && panel.isBlank()
         val remainingMs=(duration-position).coerceAtLeast(0)
         val showNextUp=context?.next!=null && !nextUpDismissed && rendered && duration>0 &&
             remainingMs in 1..90_000 && activeSkip==null
@@ -1079,8 +1081,8 @@ class PlayerActivity: ComponentActivity() {
             if(settings.diagnostics && !realtimeInfo) Text("点击至首帧 ${millis(totalStartupMs)}  ·  源解析 ${millis(sourceStartupMs)}\n引擎首帧 ${millis(firstFrameMs)}  ·  首个响应头 ${millis(headerMs)}  ·  回报失败 $reportFailures\n${request.playMethod} · Media3",
                 color=SunnyColors.Accent,fontSize=12.sp,modifier=Modifier.align(Alignment.TopEnd).padding(top=85.dp,end=25.dp).background(Color.Black.copy(.62f),RoundedCornerShape(10.dp)).padding(12.dp))
 
-            if(activeSkip!=null && rendered && error.isBlank() && panel.isBlank()) {
-                SkipSegmentPrompt(activeSkip,onSkip={
+            if(showSkipPrompt) {
+                SkipSegmentPrompt(requireNotNull(activeSkip),onSkip={
                     if(SegmentLogic.opensNextEpisode(activeSkip,context?.next!=null)) {
                         switchEpisode(requireNotNull(context?.next))
                     } else {
@@ -1088,7 +1090,9 @@ class PlayerActivity: ComponentActivity() {
                         dismissedSegments=dismissedSegments+activeSkip.id
                     }
                 },onDismiss={dismissedSegments=dismissedSegments+activeSkip.id},
-                    modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp))
+                    modifier=Modifier.align(Alignment.BottomEnd).padding(end=40.dp,bottom=if(controls) 190.dp else 42.dp),
+                    actionFocus=skipFocus,upFocus=if(controls)audioOutputFocus else FocusRequester.Default,
+                    downFocus=if(controls)progressFocus else FocusRequester.Default)
             } else if(showNextUp && panel.isBlank() && error.isBlank()) {
                 val next=context?.next
                 if(next!=null) NextEpisodePrompt(next.title,(remainingMs/1000).coerceAtLeast(1),
@@ -1100,11 +1104,11 @@ class PlayerActivity: ComponentActivity() {
             if(controls && panel.isBlank() && error.isBlank()) {
                 Row(Modifier.align(Alignment.TopEnd).padding(24.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     PlayerControl("实时信息","stats",selected=realtimeInfo,labelBelow=true,
-                        modifier=Modifier.focusProperties {down=progressFocus}.semantics {
+                        modifier=Modifier.focusProperties {down=if(showSkipPrompt)skipFocus else progressFocus}.semantics {
                             role=Role.Switch;toggleableState=if(realtimeInfo) ToggleableState.On else ToggleableState.Off
                             stateDescription=if(realtimeInfo) "开启" else "关闭"
                         }) {realtimeInfo=!realtimeInfo;app.store.setRealtimePlaybackInfo(realtimeInfo)}
-                    PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=progressFocus},
+                    PlayerControl("音频输出","audio",modifier=Modifier.focusRequester(audioOutputFocus).focusProperties {down=if(showSkipPrompt)skipFocus else progressFocus},
                         initial=returnControl=="audio-output",labelBelow=true) {returnControl="audio-output";panel="audio-output"}
                     if(!tvPlayback) PlayerControl(if(orientationLocked) "解锁自动旋转" else "锁定当前方向",if(orientationLocked) "lock" else "unlock",selected=orientationLocked,labelBelow=true) {
                         orientationLocked=!orientationLocked
@@ -1125,7 +1129,7 @@ class PlayerActivity: ComponentActivity() {
                     if(bufferNotice.isNotBlank()) Text(bufferNotice,color=Color.White.copy(.85f),fontSize=12.sp)
                     if(clientNetworkNotice.isNotBlank()) Text(clientNetworkNotice,color=Color.White.copy(.85f),fontSize=12.sp)
 
-                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus).focusProperties {up=audioOutputFocus},
+                    PlayerProgress(position,duration,settings.seekStepSeconds*1000L,Modifier.focusRequester(progressFocus).focusProperties {up=if(showSkipPrompt)skipFocus else audioOutputFocus},
                         onSeekBy={seek(it)},onSeekTo={target->seekToAbsolute(target)})
 
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {

@@ -46,6 +46,11 @@ Git/GitHub 发布流程照旧；本次绿联内网 HTTPS 修复先留在本地�
 此次仅调整 APK 投放方式，不要求修改应用内已有升级功能。
 以公开 dev29（`543b25d`）为历史基线，dev28 Carlink 已由用户于 2026-09-30 放弃，源码归档在 `.local-tests/dev28-archive`，不进入构建。
 
+### Git 与电视安装目录配套交付（2026-10-24）
+
+用户要求以后 CI 通过后的 Git/GitHub 同步交付，同时向电视可直接访问的 `V3 Download/tv apk` 放置一份同版本 APK，不能只推源码而遗漏安装包。Mac 当前实际挂载路径为 `/Volumes/4900/V3 Download/tv apk`（用户口述为 `/volumes/V3 Download/tv apk`）；每轮先核实挂载，不在挂载缺失时创建同名本地目录冒充分发。
+沿用现有签名和发行检查，只复制 CI/发行验证通过且与所交付源码版本对应的原始签名 APK，复制后完整回读核对大小与 SHA-256；目录只放 APK，不写 JSON、不覆盖同版本不同内容、不删除历史包。未通过检查或挂载不可用时明确报告未投放。此约定不等于授权在每次修复后自动发布；提交/推送/发行仍按该轮任务已有授权执行。
+
 ## GitHub stable releases from 0.2.2
 
 官网、README 和应用内 GitHub 网页下载默认指向 `/releases/latest`；原生更新读取官方 latest 下载元数据。纯数字正式版使用 `release-stable.yml` 并设置 latest，不发布为 prerelease，不覆盖已有标签或资产。同版本 APK 一经本地目录或 GitHub 分发即保持不变，客户端变更须递增数字版本及 versionCode。

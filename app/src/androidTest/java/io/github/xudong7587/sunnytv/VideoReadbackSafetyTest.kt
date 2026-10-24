@@ -18,13 +18,15 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Slow driver completion must stop recurring reads without changing saved user preferences. */
+/** Sparse success must keep updating; multi-second stalls must stop, without changing preferences. */
 class VideoReadbackSafetyTest {
     @Suppress("UNCHECKED_CAST")
     private fun <T> state(controller:AmbilightController,name:String)=
         AmbilightController::class.java.getDeclaredField(name).apply {isAccessible=true}.get(controller) as MutableStateFlow<T>
 
-    @Test fun slowReadStopsUntilExplicitRetryAndCloseIgnoresLateCompletion() {
+    @Test fun slowReadStopsUntilExplicitRetryAndCloseIgnoresLateCompletion()=exercise(2000,false)
+    @Test fun slowSuccessfulReadContinuesWithSparseFourEdgeUpdates()=exercise(300,true)
+    private fun exercise(copyMs:Long,sparse:Boolean) {
         val input=InstrumentationRegistry.getInstrumentation()
         val context=input.targetContext
         assertFalse("Fixture must not use a physical radio",(context.applicationContext as SunnyApp).ambilight.config.value.enabled)
@@ -39,7 +41,7 @@ class VideoReadbackSafetyTest {
         lateinit var view:SurfaceView
         var sampler:VideoEdgeSampler?=null
         fun waitFor(message:String,condition:()->Boolean) {
-            val deadline=SystemClock.elapsedRealtime()+5000
+            val deadline=SystemClock.elapsedRealtime()+8000
             while(!condition() && SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
             assertTrue(message,condition())
         }
@@ -63,12 +65,16 @@ class VideoReadbackSafetyTest {
                 input.runOnMainSync {
                     sampler=VideoEdgeSampler(lights,{view to view},{true},readPixels={_,_,_,worker,callback->
                         copies.incrementAndGet()
-                        worker.postDelayed({callback(PixelCopy.SUCCESS);callbacks.incrementAndGet()},300)
+                        worker.postDelayed({callback(PixelCopy.SUCCESS);callbacks.incrementAndGet()},copyMs)
                     }).also {it.start()}
                 }
-                waitFor("Slow copy must suspend this playback") {lights.metrics.value.contains("已暂停画面同步")}
+                waitFor("Slow copy must report the correct fallback") {
+                    lights.metrics.value.contains(if(sparse) "低频四边同步" else "已暂停画面同步")
+                }
                 Thread.sleep(1200)
                 assertEquals("A stalled driver must not be read in a loop",1,copies.get())
+                if(sparse)waitFor("Successful slow read must eventually update again") {copies.get()==2}
+                val beforeRetry=copies.get()
                 assertTrue("Protection must not turn off the saved preference",config.value.sync)
                 assertEquals(configBefore,context.getSharedPreferences("ambilight",0).all)
                 config.value=config.value.copy(sync=false)
@@ -78,12 +84,12 @@ class VideoReadbackSafetyTest {
                     !active
                 }
                 config.value=config.value.copy(sync=true)
-                waitFor("Explicit retry must allow one new read") {copies.get()==2}
+                waitFor("Explicit retry must allow one new read") {copies.get()==beforeRetry+1}
                 lights.note("closed playback")
                 input.runOnMainSync {sampler!!.stop();closed.set(true)}
-                waitFor("Outstanding completion must drain safely") {callbacks.get()==2}
+                waitFor("Outstanding completion must drain safely") {callbacks.get()==beforeRetry+1}
                 Thread.sleep(300)
-                assertEquals(2,copies.get())
+                assertEquals(beforeRetry+1,copies.get())
                 assertEquals("Old completion must not overwrite a new status","closed playback",lights.metrics.value)
             }
         } finally {

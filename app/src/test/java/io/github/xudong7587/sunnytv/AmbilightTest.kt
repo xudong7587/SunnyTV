@@ -32,6 +32,17 @@ class AmbilightTest {
             assertArrayEquals(IntArray(4){rgb},EdgeColors.sample(IntArray(160*90){rgb},160,90,true))
         }
     }
+    @Test fun paleAndDarkSectorColorsStayRecognizableWithVividEnabled() {
+        fun saturation(c:Int):Double {
+            val high=maxOf(c shr 16 and 255,c shr 8 and 255,c and 255)
+            val low=minOf(c shr 16 and 255,c shr 8 and 255,c and 255)
+            return (high-low).toDouble()/high
+        }
+        val pale=EdgeColors.sample(IntArray(160*90){0x9ab7ce},160,90,true)
+        pale.forEach {assertTrue("Pale blue should produce colored light",saturation(it)>=.69)}
+        val darkEdges=IntArray(160*90) {i->if(i/160 in 10..79 && i%160 in 10..149)0x9ab7ce else 0}
+        EdgeColors.sample(darkEdges,160,90,true).forEach {assertTrue("Sector fallback also needs vivid color",saturation(it)>=.69)}
+    }
     @Test fun playbackReturnHomeExitAndReentryHaveDifferentIdleColors() {
         val s=LightPresence();val home=Any();val player=Any();val owner=Any()
         val c=LightConfig(enabled=true,fixedColor=0xff4d05)
