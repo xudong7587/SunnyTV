@@ -1,0 +1,7 @@
+# SunnyTV 官网功能配图
+
+`cloud-native.webp` 为2026-10-24使用内置 `image_gen` 生成的云端播放概念图，1672×941。生成PNG保留于工具默认目录；项目使用同尺寸WebP导出（cwebp质量88），没有改动构图或画面内容。它不是真实应用截图，也不代表具体片源、传输速度或硬件型号。网页另用HTML/SVG绘制STRM读取示意和遥控焦点演示；原生截图继续单独标注。
+
+## 最终生成提示词
+
+Use case: stylized-concept. Asset type: wide feature illustration for SunnyTV, an elegant native Android personal-media client website. Create one premium, editorial 3D illustration on a very pale warm-white studio background: a sculptural translucent cloud built from several delicate layers of cinematic film frames, with a narrow luminous stream of translucent frames traveling directly into a slim, unbranded television display. The screen shows an original peaceful teal-blue mountain landscape with a tiny warm golden sun, no recognizable movie. The concept is cloud media flowing directly to a native player. Restrained white ceramic and frosted glass materials, subtle teal and soft warm amber details, believable soft shadows, exquisitely clean product rendering, calm refined art direction matching a monochrome website with cinematic imagery. Landscape composition approximately 16:9, objects centered with generous breathing room, substantial but not cluttered. No text, letters, numerals, labels, logos, watermark, progress bars, app controls, arrows, performance statistics or networking claims. This is conceptual artwork, not a screenshot. Render with careful perspective, beautifully finished surfaces, crisp silhouette and soft light.

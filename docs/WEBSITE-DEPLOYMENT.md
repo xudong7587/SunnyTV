@@ -1,3 +1,13 @@
+# 2026-10-24 官网功能特色版已上线
+
+用户认为上一版过度精简，明确要求补回精致设计、多主题/自定义字体、Emby与绿联、STRM大文件优化、MediaIndex原生云端清晰度和遥控优化。官网现按九个展示区组织，短文案配原生截图、主题配色示意、STRM按需读取示意及可键盘操作的遥控焦点演示；灯带与下载保留。没有恢复开发记录、兼容性长文或完整网页模拟器。
+
+使用内置image_gen新绘云端播放概念图，1672×941、WebP116,352字节，概念图与原生截图明确区分，提示词及来源见website/assets/features/README.md。功能描述已核对现有代码：七种主题色/自定义色盘、界面与字幕字体分别导入；STRM按需读取与设备内存缓冲预算；115已生成云端档位/直连优先/有效MediaIndex入口条件。没有宣称所有片源支持、NAS重新编码或虚构性能数字。
+
+仅向授权站点修改index.html并新增features.css、features.js、assets/features/cloud-native.webp四路径，原首页在.local-tests/website-features/before-live备份，历史资源保留。25项当前引用文件最终HTTP200且全文SHA256与现网一致；既有支持文件的仓库LF/现网CRLF差异已单独核对。资源索引刷新时初查曾404，最终整套复核与正式浏览器验收通过。320/390/768/1366宽度无横向溢出，配色、玻璃、遥控点击/左右键/首尾边界及焦点通过，页面无控制台错误或坏图。未改Android客户端、发行版本或唤醒电视。
+
+证据：.local-tests/website-features/layout-checks.json、http-verified.json、deploy-verified.json、live-remote.png。
+
 # 2026-10-24 官网精简已上线
 
 用户要求“主要功能和特色展示”，本轮保留首屏、媒体库、液态玻璃交互、原生播放、灯带与下载六区，合并媒体来源标签，移除兼容长文、FAQ、重复原生截图、素材展区和独立MediaIndex长篇介绍；相关项目保留页脚入口。可见正文2496→459字符，约减少82%；版本展示1.0.6，下载统一GitHub Latest。手机应用材质源码未动。

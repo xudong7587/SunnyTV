@@ -3,40 +3,107 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SunnyTV · 精致入眼，流畅入戏。</title>
-<meta name="description" content="SunnyTV，原生 Android 影音客户端。连接自己的媒体库，享受液态玻璃、原画播放和灯带氛围。支持电视、手机与平板。">
-<meta name="theme-color" content="#ffffff"><meta property="og:title" content="SunnyTV · 精致入眼，流畅入戏。"><meta property="og:description" content="连接自己的媒体库，让每块屏幕都好看。"><meta property="og:type" content="website"><meta property="og:url" content="https://sunnytv.dunn.fun:666/"><meta property="og:image" content="https://sunnytv.dunn.fun:666/assets/native-home-soft-symbols.webp">
-<link rel="canonical" href="https://sunnytv.dunn.fun:666/"><link rel="icon" href="assets/logo-mono.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css?v=20261024"><link rel="stylesheet" href="theme.css?v=20261024"><script src="appearance.js?v=20261024" defer></script>
-<link rel="stylesheet" href="assets/liquid-glass-2.1.0.css"><link rel="stylesheet" href="glass-demo.css?v=20261024"><script type="module" src="glass-demo.js?v=20261024"></script>
-<link rel="stylesheet" href="compact.css?v=20261024">
+<meta name="description" content="SunnyTV 原生 Android 影音客户端：精致的液态玻璃、多种主题与自定义字体，支持 Emby、绿联影视中心、STRM 大文件播放和 MediaIndex 原生云端清晰度，为遥控器认真设计。">
+<meta name="theme-color" content="#ffffff"><meta property="og:title" content="SunnyTV · 精致入眼，流畅入戏。"><meta property="og:description" content="精致外观、个性主题、原生播放。连接自己的媒体库，让每块屏幕都好看。"><meta property="og:type" content="website"><meta property="og:url" content="https://sunnytv.dunn.fun:666/"><meta property="og:image" content="https://sunnytv.dunn.fun:666/assets/native-home-soft-symbols.webp">
+<link rel="canonical" href="https://sunnytv.dunn.fun:666/"><link rel="icon" href="assets/logo-mono.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=20261024-features"><link rel="stylesheet" href="theme.css?v=20261024-features"><link rel="stylesheet" href="assets/liquid-glass-2.1.0.css"><link rel="stylesheet" href="glass-demo.css?v=20261024-features"><link rel="stylesheet" href="features.css?v=20261024-features">
+<script src="appearance.js?v=20261024-features" defer></script><script type="module" src="glass-demo.js?v=20261024-features"></script><script src="features.js?v=20261024-features" defer></script>
 </head>
-<body><a class="skip" href="#main">跳到正文</a><header class="site-header"><div class="nav wrap"><a class="brand" href="#main" aria-label="SunnyTV 首页"><img src="assets/logo-mono.svg" width="32" height="32" alt=""><span>SunnyTV</span></a><nav aria-label="主导航"><a href="#experience">媒体库</a><a href="#appearance">外观</a><a href="#playback">播放</a><a href="#ambilight">灯带</a></nav><div class="nav-actions"><button id="appearance-open" class="text-button" type="button" aria-label="切换黑色主题" aria-pressed="false">黑色模式</button><a class="button small primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载 <span aria-hidden="true">↗</span></a></div></div></header>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-header"><div class="nav wrap">
+  <a class="brand" href="#main" aria-label="SunnyTV 首页"><img src="assets/logo-mono.svg" width="32" height="32" alt=""><span>SunnyTV</span></a>
+  <nav aria-label="主导航"><a href="#experience">媒体库</a><a href="#appearance">外观</a><a href="#playback">播放</a><a href="#cloud">云端</a><a href="#remote">遥控</a></nav>
+  <div class="nav-actions"><button id="appearance-open" class="text-button" type="button" aria-label="切换黑色主题" aria-pressed="false">黑色模式</button><a class="button small primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载 <span aria-hidden="true">↗</span></a></div>
+</div></header>
 <main id="main">
 <section class="hero wrap">
-<a class="release-pill" href="https://github.com/xudong7587/SunnyTV/releases/latest">SunnyTV 1.0.6 <span aria-hidden="true">↗</span></a>
-<h1>精致入眼，<br>流畅入戏。</h1>
-<p class="hero-lead">连接自己的媒体库，让每块屏幕都好看。</p>
-<div class="actions"><a class="button primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载 Android 版 <span aria-hidden="true">↓</span></a><a class="text-link" href="#experience">向下探索 <span aria-hidden="true">↘</span></a></div>
-<p class="availability">Android TV · 手机 · 平板 <span>免费开源</span></p>
-<figure class="hero-product screen"><img src="assets/native-home-soft-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生首页，云上邮局场景与媒体轮播" fetchpriority="high"></figure>
+  <a class="release-pill" href="https://github.com/xudong7587/SunnyTV/releases/latest">SunnyTV 1.0.6 <span aria-hidden="true">↗</span></a>
+  <h1>精致入眼，<br>流畅入戏。</h1>
+  <p class="hero-lead">为自己的媒体库，留一块好屏幕。</p>
+  <div class="actions"><a class="button primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载 Android 版 <span aria-hidden="true">↓</span></a><a class="text-link" href="#experience">认识 SunnyTV <span aria-hidden="true">↘</span></a></div>
+  <p class="availability">Android TV · 手机 · 平板 <span>原生体验 · 免费开源</span></p>
+  <figure class="hero-product screen"><img src="assets/native-home-soft-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生首页，通透导航与媒体收藏融入原创电影场景" fetchpriority="high"></figure>
+  <div class="hero-highlights"><a href="#personalization">主题与字体</a><a href="#strm">STRM 大文件</a><a href="#cloud">原生云端清晰度</a><a href="#remote">遥控器优化</a></div>
 </section>
+
 <section class="chapter wrap" id="experience">
-<div class="chapter-heading"><p class="eyebrow">你的媒体库</p><h2>收藏，一眼就找到。</h2><p class="intro">海报、简介、观看进度，熟悉的收藏有序呈现。</p></div>
-<div class="source-pills" id="sources"><span>Emby</span><span>绿联影视中心</span><span>CloudDrive2</span><span>STRM</span></div><figure class="screen"><img src="assets/native-grid-soft-symbols.webp" width="1920" height="1080" alt="七张完整原创海报在原生媒体库中排列" loading="lazy"></figure>
+  <div class="chapter-heading"><p class="eyebrow">熟悉的收藏，原生呈现</p><h2>接上媒体库，<br>好内容就在眼前。</h2><p class="intro">连接 Emby 或绿联影视中心，海报、简介与媒体库直接呈现。<br class="desktop-break">从浏览、选片到继续观看，留在同一套原生界面。</p></div>
+  <figure class="screen"><img src="assets/native-grid-soft-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生海报墙，完整展示服务端已有的媒体图像" loading="lazy"></figure>
+  <div class="source-overview" id="sources">
+    <article><h3>Emby</h3><p>浏览媒体库、继续观看，沿用服务端的海报与影片信息。</p></article>
+    <article><h3>绿联影视中心</h3><p>独立服务入口，浏览电影与剧集，查看详情并原生播放。</p></article>
+    <article><h3>CloudDrive2 · STRM</h3><p>保留文件来源和播放链接入口，让不同收藏各有所归。</p></article>
+  </div>
 </section>
+
 <section class="chapter glass-chapter" id="appearance"><div class="wrap">
-<div class="chapter-heading"><p class="eyebrow">液态玻璃</p><h2>让背景的光，透进来。</h2><p class="intro">通透导航，柔和折射。深浅外观，自由切换。</p></div>
-<figure class="web-glass-preview"><div class="web-glass-scene"><img id="glass-scene" src="assets/cinema/animation-wide.webp" width="1536" height="1024" alt="动画背景中的 SunnyUI 网页玻璃演示" loading="lazy"><nav class="sunny-glass-toolbar" data-web-glass aria-label="网页玻璃导航"><a href="#main" aria-label="首页"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#home"/></svg><span>首页</span></a><a href="#experience" aria-label="媒体浏览"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#library"/></svg><span>媒体浏览</span></a><a href="#playback" aria-label="原生播放"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#play"/></svg><span>播放</span></a><a href="#appearance" aria-label="外观"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#settings"/></svg><span>外观</span></a></nav></div><figcaption>网页材质演示</figcaption></figure>
-<div class="web-glass-tools"><div class="web-glass-choices" role="group" aria-label="切换玻璃背景"><button type="button" data-glass-scene="animation" aria-pressed="true">动画</button><button type="button" data-glass-scene="scifi" aria-pressed="false">星空</button><button type="button" data-glass-scene="romance" aria-pressed="false">山海</button></div><button class="text-link theme-link" id="try-appearance" type="button">切换深浅外观 <span aria-hidden="true">↗</span></button></div>
+  <div class="chapter-heading"><p class="eyebrow">精致设计</p><h2>细节，值得<br class="mobile-break">多看一眼。</h2><p class="intro">通透的液态玻璃、柔和的层次与克制的动效。<br class="desktop-break">海报、背景与导航自然衔接，让内容留在视觉中心。</p></div>
+  <figure class="web-glass-preview"><div class="web-glass-scene"><img id="glass-scene" src="assets/cinema/animation-wide.webp" width="1536" height="1024" alt="动画背景中的网页液态玻璃材质演示" loading="lazy"><nav class="sunny-glass-toolbar" data-web-glass aria-label="网页玻璃导航"><a href="#main" aria-label="首页"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#home"/></svg><span>首页</span></a><a href="#experience" aria-label="媒体浏览"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#library"/></svg><span>媒体浏览</span></a><a href="#playback" aria-label="原生播放"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#play"/></svg><span>播放</span></a><a href="#personalization" aria-label="个性外观"><svg aria-hidden="true"><use href="assets/sunny-symbols.svg#settings"/></svg><span>外观</span></a></nav></div><figcaption>网页材质演示</figcaption></figure>
+  <div class="web-glass-tools"><div class="web-glass-choices" role="group" aria-label="切换玻璃背景"><button type="button" data-glass-scene="animation" aria-pressed="true">动画</button><button type="button" data-glass-scene="scifi" aria-pressed="false">星空</button><button type="button" data-glass-scene="romance" aria-pressed="false">山海</button></div><button class="text-link theme-link" id="try-appearance" type="button">切换深浅外观 <span aria-hidden="true">↗</span></button></div>
 </div></section>
-<section class="chapter playback-chapter" id="playback"><div class="wrap">
-<div class="chapter-heading"><p class="eyebrow">原生播放</p><h2>按下播放，就入戏。</h2><p class="intro">原画直放，字幕与音轨随心选。接着上次的进度，继续看。</p><div class="feature-tags"><span>原画播放</span><span>字幕与音轨</span><span>画面比例</span><span>云端清晰度</span></div></div>
-<figure class="screen"><img src="assets/native-player-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生播放器播放原创场景测试片，显示进度、倍速、比例与字幕控件" loading="lazy"></figure>
-</div></section>
-<section class="chapter ambient-chapter" id="ambilight"><div class="wrap">
-<div class="chapter-heading"><p class="eyebrow">SP658E 灯带</p><h2>让色彩，漫出屏幕。</h2><p class="intro">画面同步、固定色与亮度调节，为房间添一点光。</p></div>
-<figure class="ambient-illustration"><div class="ambient-wall"><div class="ambient-tv"><img src="assets/native-player-symbols.webp" width="1920" height="1080" alt="以原创播放画面说明屏幕周围的蓝色与暖色灯光氛围" loading="lazy"></div><div class="ambient-console"></div></div><figcaption>SP658E 灯带 · 氛围示意</figcaption></figure>
-</div></section>
-<section class="chapter wrap download-section" id="download"><div class="download-visual"><img src="assets/logo-mono.svg" width="92" height="92" alt="SunnyTV 太阳标志"></div><h2>今晚，看点喜欢的。</h2><p class="intro">安装 SunnyTV，连接自己的媒体服务。</p><div class="actions"><a class="button primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新正式版 <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/xudong7587/SunnyTV">GitHub 源码 <span aria-hidden="true">↗</span></a></div>
+
+<section class="chapter wrap" id="personalization">
+  <div class="chapter-heading"><p class="eyebrow">个性化</p><h2>颜色与字体，<br>随你喜欢。</h2><p class="intro">多种主题与材质，自定义配色，也能跟随系统动态色。<br class="desktop-break">界面和字幕分别选字，把熟悉的阅读感带到大屏。</p></div>
+  <div class="personal-grid">
+    <article class="personal-card">
+      <div class="palette-demo" id="palette-demo" style="--demo-accent:#376bd8;--demo-tint:#edf2fc">
+        <div class="palette-top"><img src="assets/logo-mono.svg" width="26" height="26" alt=""><span>SunnyTV</span><span class="palette-dot" aria-hidden="true"></span></div>
+        <p class="palette-title">今晚，看点喜欢的。</p>
+        <div class="palette-posters" aria-hidden="true"><img src="assets/cinema/animation-poster.webp" width="1024" height="1536" alt="" loading="lazy"><img src="assets/cinema/scifi-poster.webp" width="1024" height="1536" alt="" loading="lazy"><img src="assets/cinema/romance-poster.webp" width="1024" height="1536" alt="" loading="lazy"></div>
+        <div class="palette-options" role="group" aria-label="配色示意"><button type="button" data-palette="blue" aria-label="晴蓝配色" aria-pressed="true"><span style="--swatch:#376bd8"></span></button><button type="button" data-palette="celadon" aria-label="青瓷配色" aria-pressed="false"><span style="--swatch:#2f7f76"></span></button><button type="button" data-palette="violet" aria-label="鸢紫配色" aria-pressed="false"><span style="--swatch:#8855cc"></span></button><button type="button" data-palette="amber" aria-label="琥珀配色" aria-pressed="false"><span style="--swatch:#b27a16"></span></button></div>
+        <p class="visual-label">配色示意 · <span id="palette-name" aria-live="polite">晴蓝</span></p>
+      </div>
+      <div class="personal-copy"><h3>从主题色，到质感。</h3><p>七种主题色与自定义色盘，搭配不同材质和深浅外观，形成自己的整套色阶。</p></div>
+    </article>
+    <article class="personal-card">
+      <figure class="font-visual"><img src="assets/native-font-choice-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生字体设置，可选择系统字体或用户自定义上传" loading="lazy"><figcaption>原生字体设置</figcaption></figure>
+      <div class="personal-copy"><h3>界面、字幕，分别选字。</h3><p>支持从本机导入 TTF、OTF、TTC。界面字体与字幕字体分开设置，大小、描边和位置也能按习惯调整。</p></div>
+    </article>
+  </div>
 </section>
-</main><footer class="wrap footer"><div><a class="brand" href="#main"><img src="assets/logo-mono.svg" width="26" height="26" alt="">SunnyTV</a><p>© 2026 Sunny · GPL-3.0-only</p></div><div><a href="https://github.com/xudong7587/SunnyTV/issues">反馈</a><a href="https://github.com/xudong7587/sunny-ui-design-system/releases/tag/v2.1.0">SunnyUI</a><a class="related-project" href="https://github.com/xudong7587/media-index"><img src="assets/media-index.webp" width="20" height="20" alt="">MediaIndex</a><a href="assets/LICENSE-sunny-ui.txt">样式许可</a></div><p class="footnote">画面为原创演示内容。SunnyTV 不提供影视资源。</p></footer>
+
+<section class="chapter playback-chapter" id="playback"><div class="wrap">
+  <div class="chapter-heading"><p class="eyebrow">原生播放</p><h2>原画直放，<br>选择刚刚好。</h2><p class="intro">字幕、音轨、倍速与画面比例，集中在原生播放控件里。<br class="desktop-break">接着上次的进度看，也能为影片选择偏好的音轨。</p></div>
+  <figure class="screen"><img src="assets/native-player-symbols.webp" width="1920" height="1080" alt="SunnyTV 原生播放器中的进度、倍速、画面比例及字幕控件" loading="lazy"></figure>
+  <div class="feature-story strm-story" id="strm">
+    <div class="feature-copy"><p class="eyebrow">STRM 与大文件</p><h3>小小链接，<br>连接大体积原画。</h3><p>直达媒体地址，按需读取大文件。更深的预缓冲配合设备内存预算，照顾高码率播放与进度拖动。</p><div class="feature-tags"><span>按需读取</span><span>高码率缓冲</span><span>进度续播</span></div></div>
+    <figure class="strm-visual" aria-label="STRM 指向原画文件，播放器按需读取和预缓冲的示意图">
+      <div class="file-route"><span class="strm-file"><svg viewBox="0 0 48 56" aria-hidden="true"><path d="M10 2h19l13 13v37H10zM29 2v14h13"/></svg><b>STRM</b></span><span class="route-arrow" aria-hidden="true">→</span><span class="original-file"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="3" y="8" width="42" height="32" rx="5"/><path d="m20 17 13 7-13 7z"/></svg><b>原画文件</b></span></div>
+      <div class="read-track"><span class="played-part"></span><span class="buffered-part"></span><span class="read-head"></span></div>
+      <div class="track-labels"><span>已播放</span><span>预缓冲</span><span>按需继续读取</span></div>
+      <figcaption>按需读取示意</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<section class="chapter wrap" id="cloud">
+  <div class="feature-story cloud-story-new">
+    <div class="feature-copy"><a class="project-label" href="https://github.com/xudong7587/media-index"><img src="assets/media-index.webp" width="30" height="30" alt="">搭配 MediaIndex <span aria-hidden="true">↗</span></a><h2>云端的清晰度，<br>原生就能选。</h2><p>在 SunnyTV 播放器里，直接查询和切换 115 已生成的云端档位。视频优先直连云端 CDN，无需 NAS 重新编码。</p><div class="quality-options" aria-label="云端清晰度示意"><span>原画</span><span>4K</span><span>1080P</span><span>720P</span></div><p class="small-note">需有效的 MediaIndex 播放入口，实际档位由片源返回。</p></div>
+    <figure class="cloud-art"><img src="assets/features/cloud-native.webp" width="1672" height="941" alt="透明电影胶片组成的云朵，将画面直接送入电视的概念配图" loading="lazy"><figcaption>云端播放概念图</figcaption></figure>
+  </div>
+</section>
+
+<section class="chapter remote-chapter" id="remote"><div class="wrap feature-story">
+  <div class="feature-copy"><p class="eyebrow">为遥控器认真设计</p><h2>方向明确，<br>操作顺手。</h2><p>清晰焦点、方向键导航与返回位置记忆。海报墙和播放面板各有明确的移动路径，让大屏上的选择更从容。</p><div class="feature-tags"><span>方向键导航</span><span>焦点记忆</span><span>原生播放面板</span></div></div>
+  <div class="remote-demo" data-remote-demo>
+    <div class="remote-posters" role="group" aria-label="遥控焦点示意，可用左右方向键切换">
+      <button class="remote-poster is-selected" type="button" data-remote-item aria-pressed="true" tabindex="0" aria-label="云上邮局"><img src="assets/cinema/animation-poster.webp" width="1024" height="1536" alt="" loading="lazy"><span>云上邮局</span></button>
+      <button class="remote-poster" type="button" data-remote-item aria-pressed="false" tabindex="-1" aria-label="潮汐之外"><img src="assets/cinema/scifi-poster.webp" width="1024" height="1536" alt="" loading="lazy"><span>潮汐之外</span></button>
+      <button class="remote-poster" type="button" data-remote-item aria-pressed="false" tabindex="-1" aria-label="橘子海"><img src="assets/cinema/romance-poster.webp" width="1024" height="1536" alt="" loading="lazy"><span>橘子海</span></button>
+    </div>
+    <div class="remote-demo-controls"><button type="button" data-remote-prev aria-label="焦点向左">←</button><p>试试左右切换<br><span id="remote-selection" aria-live="polite">云上邮局</span></p><button type="button" data-remote-next aria-label="焦点向右">→</button></div>
+    <p class="visual-label">遥控焦点示意</p>
+  </div>
+</div></section>
+
+<section class="chapter wrap" id="ambilight">
+  <div class="feature-story lamp-story"><div class="feature-copy"><p class="eyebrow">SP658E 灯带氛围</p><h2>让色彩，<br>漫出屏幕。</h2><p>把屏幕四边的色彩，延伸成房间里的氛围。画面同步、固定色、亮度与灯珠定位，都能在应用内调整。</p></div><figure class="ambient-illustration"><div class="ambient-wall"><div class="ambient-tv"><img src="assets/native-player-symbols.webp" width="1920" height="1080" alt="屏幕四周蓝色与暖色灯光的氛围示意" loading="lazy"></div><div class="ambient-console"></div></div><figcaption>SP658E 灯带 · 氛围示意</figcaption></figure></div>
+</section>
+
+<section class="chapter download-section" id="download"><div class="wrap">
+  <div class="download-visual"><img src="assets/logo-mono.svg" width="72" height="72" alt=""></div><h2>今晚，<br class="mobile-break">看点喜欢的。</h2><p class="intro">安装 SunnyTV，连接自己的媒体服务。</p><div class="actions"><a class="button primary" href="https://github.com/xudong7587/SunnyTV/releases/latest">下载最新版 <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/xudong7587/SunnyTV">GitHub 源码 <span aria-hidden="true">↗</span></a></div>
+</div></section>
+</main>
+<footer class="wrap footer"><div><a class="brand" href="#main"><img src="assets/logo-mono.svg" width="26" height="26" alt="">SunnyTV</a><p>© 2026 Sunny · GPL-3.0-only</p></div><div><a href="https://github.com/xudong7587/SunnyTV/issues">反馈</a><a href="https://github.com/xudong7587/sunny-ui-design-system/releases/tag/v2.1.0">SunnyUI</a><a class="related-project" href="https://github.com/xudong7587/media-index"><img src="assets/media-index.webp" width="20" height="20" alt="">MediaIndex</a><a href="assets/LICENSE-sunny-ui.txt">样式许可</a></div><p class="footnote">界面截图使用原创演示媒体；示意图已单独标注。SunnyTV 不提供影视资源。</p></footer>
 </body></html>
