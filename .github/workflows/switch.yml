@@ -1,0 +1,75 @@
+name: Switch NRO
+on:
+  push:
+    branches: ['codex/switch-**']
+    paths: ['switch/**', '.github/workflows/switch.yml']
+  pull_request:
+    paths: ['switch/**', '.github/workflows/switch.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: switch-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libcurl4-openssl-dev
+      - run: bash switch/tests/run.sh
+        env:
+          SANITIZE: '1'
+          NETWORK_TESTS: '1'
+  nro:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install Switch libraries
+        run: dkp-pacman -S --noconfirm --needed switch-libmpv switch-sdl2_ttf switch-sdl2_image switch-curl switch-pkg-config
+      - name: Build NRO
+        run: |
+          . /opt/devkitpro/switchvars.sh
+          make -C switch -j2 package
+          git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD > switch/dist/SOURCE_COMMIT.txt
+          dkp-pacman -Q > switch/dist/TOOLCHAIN_PACKAGES.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: SunnyTV-Switch-0.2.10
+          path: switch/dist/
+          if-no-files-found: error
+  player-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libcurl4-openssl-dev libsdl2-dev libsdl2-image-dev libmpv-dev xvfb ffmpeg
+      - name: Build playback integration harness
+        run: |
+          mkdir -p switch/build/host
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 mpv libcurl) switch/source/json.cpp switch/source/network.cpp switch/source/gateway.cpp switch/source/player.cpp switch/tests/player.cpp -pthread -Wl,--wrap=mpv_set_option_string $(pkg-config --libs sdl2 mpv) -lcurl -o switch/build/host/player-tests
+      - name: Play synthetic video through the streaming gateway
+        run: xvfb-run -a python3 switch/tests/player.py
+        env:
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: '1'
+  ui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libcurl4-openssl-dev libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libmpv-dev fonts-noto-cjk python3-pil xvfb
+      - name: Build native screens with the desktop platform adapter
+        run: |
+          mkdir -p switch/build/host
+          g++ -std=c++20 -O1 -g -Wall -Wextra -Wno-deprecated-declarations -Iswitch/include $(pkg-config --cflags sdl2 SDL2_ttf SDL2_image mpv libcurl) switch/source/*.cpp -pthread $(pkg-config --libs sdl2 SDL2_ttf SDL2_image mpv) -lcurl -o switch/build/host/ui-tests
+      - name: Render screens and exercise SDL touch navigation
+        run: xvfb-run -a -s '-screen 0 1280x720x24' python3 switch/tests/ui.py
+        env:
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: SunnyTV-Switch-UI-previews
+          path: switch/build/ui-screens/
+          if-no-files-found: ignore
